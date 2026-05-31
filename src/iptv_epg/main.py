@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, PlainTextResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import __version__
@@ -31,6 +33,9 @@ from .settings import FILTERED_EPG, FILTERED_M3U, ensure_runtime_dirs
 
 app = FastAPI(title="iptv_epg", version=__version__)
 executor = ThreadPoolExecutor(max_workers=2)
+
+STATIC_DIR = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 class SettingsIn(BaseModel):
@@ -76,6 +81,11 @@ class EpgMappingsIn(BaseModel):
 def startup() -> None:
     ensure_runtime_dirs()
     init_db()
+
+
+@app.get("/", response_model=None)
+def index() -> Response:
+    return FileResponse(STATIC_DIR / "index.html", media_type="text/html")
 
 
 @app.get("/health")

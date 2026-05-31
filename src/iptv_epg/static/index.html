@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>iptv_epg</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <h1>iptv_epg</h1>
+      <div id="header-status" class="muted">Starting…</div>
+    </div>
+    <nav>
+      <button class="tab-button active" data-tab="settings">Settings</button>
+      <button class="tab-button" data-tab="channels">Channels</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="tab-settings" class="tab-panel active">
+      <div class="card">
+        <h2>Settings</h2>
+        <label for="m3u-url">M3U playlist URL</label>
+        <textarea id="m3u-url" rows="3" spellcheck="false" placeholder="Paste upstream M3U URL"></textarea>
+        <div class="button-row">
+          <button id="save-settings">Save settings</button>
+          <button id="fetch-m3u">Fetch M3U / rebuild index</button>
+        </div>
+        <div id="settings-message" class="info-bar">Ready.</div>
+      </div>
+
+      <div class="card">
+        <h2>Status</h2>
+        <pre id="status-json" class="json-box">{}</pre>
+      </div>
+    </section>
+
+    <section id="tab-channels" class="tab-panel">
+      <div class="channels-toolbar">
+        <div id="channels-info" class="info-bar">Open Channels to load groups.</div>
+        <button id="refresh-groups">Refresh groups</button>
+        <button id="generate-m3u">Generate filtered M3U</button>
+        <a id="filtered-m3u-link" href="/filtered.m3u" target="_blank">Open filtered.m3u</a>
+      </div>
+
+      <div class="channels-layout">
+        <aside class="groups-pane card">
+          <h2>Groups</h2>
+          <input id="group-search" type="search" placeholder="Search groups" />
+          <div id="groups-list" class="list"></div>
+        </aside>
+
+        <section class="channels-pane card">
+          <div class="channels-pane-header">
+            <div>
+              <h2 id="selected-group-title">Channels</h2>
+              <div id="selected-group-meta" class="muted">Select a group.</div>
+            </div>
+            <div class="button-row">
+              <button id="select-visible">Select visible</button>
+              <button id="unselect-visible">Unselect visible</button>
+              <button id="prev-page">Prev</button>
+              <button id="next-page">Next</button>
+            </div>
+          </div>
+          <div id="channels-list" class="list"></div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

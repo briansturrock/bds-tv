@@ -1,0 +1,258 @@
+:root {
+  --bg: #f6f7fb;
+  --card: #ffffff;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --border: #d1d5db;
+  --accent: #2563eb;
+  --success-bg: #e8f7ed;
+  --success-border: #b9e6c7;
+  --success-text: #166534;
+  --danger-bg: #fff1f2;
+  --danger-border: #fecdd3;
+  --danger-text: #9f1239;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+h1, h2 {
+  margin: 0;
+}
+
+h1 {
+  font-size: 22px;
+}
+
+h2 {
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+
+nav {
+  display: flex;
+  gap: 8px;
+}
+
+button, .tab-button, a.button {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  border-radius: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+button:hover, .tab-button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+main {
+  padding: 16px;
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+label {
+  display: block;
+  font-weight: 600;
+  margin: 8px 0 6px;
+}
+
+textarea, input[type="search"] {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  font: inherit;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+#save-settings,
+#fetch-m3u,
+#generate-m3u {
+  margin-top: 10px;
+}
+
+.info-bar {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--success-bg);
+  border: 1px solid var(--success-border);
+  color: var(--success-text);
+}
+
+.info-bar.error {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+  color: var(--danger-text);
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.json-box {
+  max-height: 240px;
+  overflow: auto;
+  background: #111827;
+  color: #d1fae5;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 12px;
+}
+
+.channels-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.channels-toolbar .info-bar {
+  margin-top: 0;
+  flex: 1;
+  min-width: 260px;
+}
+
+.channels-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) 1fr;
+  gap: 12px;
+  min-height: calc(100vh - 190px);
+}
+
+.groups-pane,
+.channels-pane {
+  margin-bottom: 0;
+  min-height: 500px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.list {
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-top: 10px;
+  background: #fff;
+}
+
+.groups-pane .list {
+  flex: 1;
+}
+
+.channels-pane .list {
+  flex: 1;
+}
+
+.group-row,
+.channel-row {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #eef0f4;
+  font-size: 13px;
+}
+
+.group-row {
+  grid-template-columns: 1fr auto;
+  cursor: pointer;
+}
+
+.group-row:hover,
+.group-row.active {
+  background: #eff6ff;
+}
+
+.group-row .counts {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.channel-row {
+  grid-template-columns: auto 36px 1fr auto;
+}
+
+.channel-row img {
+  width: 32px;
+  max-height: 22px;
+  object-fit: contain;
+}
+
+.channel-row .channel-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.channel-row .channel-meta {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.channels-pane-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+@media (max-width: 900px) {
+  .channels-layout {
+    grid-template-columns: 1fr;
+  }
+}
