@@ -13,10 +13,19 @@ SOURCE_DIR = DATA_DIR / "source"
 EPG_CACHE_DIR = DATA_DIR / "epg_cache"
 HLS_DIR = DATA_DIR / "hls"
 
+SOURCE_M3U = SOURCE_DIR / "source.m3u"
 FILTERED_M3U = DATA_DIR / "filtered.m3u"
 FILTERED_EPG = DATA_DIR / "filtered_epg.xml"
 
 
 def ensure_runtime_dirs() -> None:
-    for path in [CONFIG_DIR, DATA_DIR, DB_PATH.parent, LOG_DIR, SOURCE_DIR, EPG_CACHE_DIR, HLS_DIR]:
+    for path in [
+        CONFIG_DIR,
+        DATA_DIR,
+        DB_PATH.parent,
+        LOG_DIR,
+        SOURCE_DIR,
+        EPG_CACHE_DIR,
+        HLS_DIR,
+    ]:
         path.mkdir(parents=True, exist_ok=True)
