@@ -9,6 +9,7 @@ const state = {
   channelsTotal: 0,
   visibleChannelIds: [],
   visibleSelectedIds: [],
+  visibleChannels: [],
   activeJobTimer: null,
 };
 
@@ -144,6 +145,44 @@ function filterGroups() {
   renderGroups();
 }
 
+function selectedGroupsInCurrentOrder() {
+  return state.groups.filter((g) => (g.selected_count || 0) > 0);
+}
+
+async function saveSelectedGroupOrder() {
+  const groupIds = selectedGroupsInCurrentOrder().map((g) => g.id);
+  await api("/api/groups/order", {
+    method: "POST",
+    body: JSON.stringify({ group_ids: groupIds }),
+  });
+}
+
+async function moveSelectedGroup(groupId, direction) {
+  const selectedGroups = selectedGroupsInCurrentOrder();
+  const from = selectedGroups.findIndex((g) => g.id === groupId);
+  if (from < 0) return;
+
+  const to = from + direction;
+  if (to < 0 || to >= selectedGroups.length) return;
+
+  const selectedIds = new Set(selectedGroups.map((g) => g.id));
+  const globalFrom = state.groups.findIndex((g) => g.id === selectedGroups[from].id);
+  const globalTo = state.groups.findIndex((g) => g.id === selectedGroups[to].id);
+
+  const temp = state.groups[globalFrom];
+  state.groups[globalFrom] = state.groups[globalTo];
+  state.groups[globalTo] = temp;
+
+  try {
+    await saveSelectedGroupOrder();
+    setMessage("channels-info", "Saved group order.");
+    filterGroups();
+  } catch (err) {
+    setMessage("channels-info", `Could not save group order: ${err.message}`, true);
+    await loadGroups(false);
+  }
+}
+
 function renderGroups() {
   const list = $("groups-list");
   list.innerHTML = "";
@@ -153,6 +192,8 @@ function renderGroups() {
     return;
   }
 
+  const selectedGroups = selectedGroupsInCurrentOrder();
+  const selectedIndexById = new Map(selectedGroups.map((g, i) => [g.id, i]));
   const fragment = document.createDocumentFragment();
 
   for (const group of state.filteredGroups) {
@@ -162,18 +203,31 @@ function renderGroups() {
       row.classList.add("active");
     }
 
+    const selectedIndex = selectedIndexById.get(group.id);
+    const canOrder = selectedIndex !== undefined;
+    const upDisabled = !canOrder || selectedIndex === 0;
+    const downDisabled = !canOrder || selectedIndex === selectedGroups.length - 1;
+
     row.innerHTML = `
       <span title="${escapeHtml(group.name)}">${escapeHtml(group.name)}</span>
       <span class="counts">${group.selected_count || 0}/${group.channel_count || 0}</span>
+      <span class="order-buttons">
+        <button class="group-up" title="Move selected group up" ${upDisabled ? "disabled" : ""}>↑</button>
+        <button class="group-down" title="Move selected group down" ${downDisabled ? "disabled" : ""}>↓</button>
+      </span>
     `;
 
-    row.addEventListener("click", () => {
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("button")) return;
       state.selectedGroupId = group.id;
       state.selectedGroup = group;
       state.channelsOffset = 0;
       renderGroups();
       loadChannels();
     });
+
+    row.querySelector(".group-up").addEventListener("click", () => moveSelectedGroup(group.id, -1));
+    row.querySelector(".group-down").addEventListener("click", () => moveSelectedGroup(group.id, 1));
 
     fragment.appendChild(row);
   }
@@ -195,14 +249,55 @@ async function loadChannels() {
   );
 
   state.channelsTotal = result.total || 0;
-  state.visibleChannelIds = (result.channels || []).map((c) => c.id);
-  state.visibleSelectedIds = (result.channels || []).filter((c) => c.selected).map((c) => c.id);
+  state.visibleChannels = result.channels || [];
+  state.visibleChannelIds = state.visibleChannels.map((c) => c.id);
+  state.visibleSelectedIds = state.visibleChannels.filter((c) => c.selected).map((c) => c.id);
 
   $("selected-group-meta").textContent =
     `${state.channelsTotal} channels · showing ${state.channelsOffset + 1}-${Math.min(state.channelsOffset + state.channelsLimit, state.channelsTotal)}`;
 
-  renderChannels(result.channels || []);
+  renderChannels(state.visibleChannels);
   updateSelectShownCheckbox();
+}
+
+function selectedVisibleChannelsInOrder() {
+  return state.visibleChannels.filter((c) => c.selected);
+}
+
+async function saveSelectedChannelOrder() {
+  const channelIds = selectedVisibleChannelsInOrder().map((c) => c.id);
+  if (!state.selectedGroupId || !channelIds.length) return;
+
+  await api("/api/channels/order", {
+    method: "POST",
+    body: JSON.stringify({ group_id: state.selectedGroupId, channel_ids: channelIds }),
+  });
+}
+
+async function moveSelectedChannel(channelId, direction) {
+  const selectedChannels = selectedVisibleChannelsInOrder();
+  const from = selectedChannels.findIndex((c) => c.id === channelId);
+  if (from < 0) return;
+
+  const to = from + direction;
+  if (to < 0 || to >= selectedChannels.length) return;
+
+  const globalFrom = state.visibleChannels.findIndex((c) => c.id === selectedChannels[from].id);
+  const globalTo = state.visibleChannels.findIndex((c) => c.id === selectedChannels[to].id);
+
+  const temp = state.visibleChannels[globalFrom];
+  state.visibleChannels[globalFrom] = state.visibleChannels[globalTo];
+  state.visibleChannels[globalTo] = temp;
+
+  try {
+    await saveSelectedChannelOrder();
+    setMessage("channels-info", "Saved channel order.");
+    renderChannels(state.visibleChannels);
+    updateSelectShownCheckbox();
+  } catch (err) {
+    setMessage("channels-info", `Could not save channel order: ${err.message}`, true);
+    await loadChannels();
+  }
 }
 
 function renderChannels(channels) {
@@ -210,10 +305,12 @@ function renderChannels(channels) {
   list.innerHTML = "";
 
   if (!channels.length) {
-    list.innerHTML = `<div class="channel-row"><span></span><span></span><span>No channels.</span><span></span></div>`;
+    list.innerHTML = `<div class="channel-row"><span></span><span></span><span>No channels.</span><span></span><span></span></div>`;
     return;
   }
 
+  const selectedChannels = channels.filter((c) => c.selected);
+  const selectedIndexById = new Map(selectedChannels.map((c, i) => [c.id, i]));
   const fragment = document.createDocumentFragment();
 
   for (const channel of channels) {
@@ -225,6 +322,11 @@ function renderChannels(channels) {
       : `<span></span>`;
 
     const tvg = channel.tvg_id ? `tvg-id: ${escapeHtml(channel.tvg_id)}` : "";
+    const selectedIndex = selectedIndexById.get(channel.id);
+    const canOrder = selectedIndex !== undefined;
+    const upDisabled = !canOrder || selectedIndex === 0;
+    const downDisabled = !canOrder || selectedIndex === selectedChannels.length - 1;
+
     row.innerHTML = `
       <input type="checkbox" ${channel.selected ? "checked" : ""} />
       ${logo}
@@ -233,6 +335,10 @@ function renderChannels(channels) {
         <div class="channel-meta">${tvg}</div>
       </div>
       <span class="muted">#${channel.provider_order}</span>
+      <span class="order-buttons">
+        <button class="channel-up" title="Move selected channel up" ${upDisabled ? "disabled" : ""}>↑</button>
+        <button class="channel-down" title="Move selected channel down" ${downDisabled ? "disabled" : ""}>↓</button>
+      </span>
     `;
 
     const checkbox = row.querySelector("input");
@@ -246,12 +352,7 @@ function renderChannels(channels) {
         setMessage("channels-info", `Saved: ${channel.name} ${checkbox.checked ? "selected" : "unselected"}.`);
         await loadStatus();
         await loadGroups(false);
-        if (checkbox.checked) {
-          if (!state.visibleSelectedIds.includes(channel.id)) state.visibleSelectedIds.push(channel.id);
-        } else {
-          state.visibleSelectedIds = state.visibleSelectedIds.filter((id) => id !== channel.id);
-        }
-        updateSelectShownCheckbox();
+        await loadChannels();
       } catch (err) {
         checkbox.checked = !checkbox.checked;
         setMessage("channels-info", `Selection failed: ${err.message}`, true);
@@ -259,6 +360,9 @@ function renderChannels(channels) {
         checkbox.disabled = false;
       }
     });
+
+    row.querySelector(".channel-up").addEventListener("click", () => moveSelectedChannel(channel.id, -1));
+    row.querySelector(".channel-down").addEventListener("click", () => moveSelectedChannel(channel.id, 1));
 
     fragment.appendChild(row);
   }

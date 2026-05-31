@@ -37,23 +37,11 @@ body {
   z-index: 10;
 }
 
-h1, h2 {
-  margin: 0;
-}
+h1, h2 { margin: 0; }
+h1 { font-size: 22px; }
+h2 { font-size: 16px; margin-bottom: 10px; }
 
-h1 {
-  font-size: 22px;
-}
-
-h2 {
-  font-size: 16px;
-  margin-bottom: 10px;
-}
-
-nav {
-  display: flex;
-  gap: 8px;
-}
+nav { display: flex; gap: 8px; }
 
 button, .tab-button, a.button {
   border: 1px solid var(--border);
@@ -70,17 +58,15 @@ button:hover, .tab-button.active {
   color: var(--accent);
 }
 
-main {
-  padding: 16px;
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
-.tab-panel {
-  display: none;
-}
+main { padding: 16px; }
 
-.tab-panel.active {
-  display: block;
-}
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
 
 .card {
   background: var(--card);
@@ -111,11 +97,7 @@ textarea, input[type="search"] {
   align-items: center;
 }
 
-#save-settings,
-#fetch-m3u,
-#generate-m3u {
-  margin-top: 10px;
-}
+#save-settings, #fetch-m3u, #generate-m3u { margin-top: 10px; }
 
 .info-bar {
   margin-top: 10px;
@@ -140,6 +122,10 @@ textarea, input[type="search"] {
 .autosave-note {
   color: var(--success-text);
   font-size: 12px;
+  margin-top: 2px;
+}
+
+.order-help {
   margin-top: 2px;
 }
 
@@ -169,7 +155,7 @@ textarea, input[type="search"] {
 
 .channels-layout {
   display: grid;
-  grid-template-columns: minmax(220px, 320px) 1fr;
+  grid-template-columns: minmax(240px, 340px) 1fr;
   gap: 12px;
   min-height: calc(100vh - 190px);
 }
@@ -191,10 +177,7 @@ textarea, input[type="search"] {
   background: #fff;
 }
 
-.groups-pane .list {
-  flex: 1;
-}
-
+.groups-pane .list,
 .channels-pane .list {
   flex: 1;
 }
@@ -210,7 +193,7 @@ textarea, input[type="search"] {
 }
 
 .group-row {
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
   cursor: pointer;
 }
 
@@ -224,8 +207,19 @@ textarea, input[type="search"] {
   font-size: 12px;
 }
 
+.order-buttons {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.order-buttons button {
+  padding: 2px 6px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
 .channel-row {
-  grid-template-columns: auto 36px 1fr auto;
+  grid-template-columns: auto 36px 1fr auto auto;
 }
 
 .channel-row img {
@@ -273,9 +267,7 @@ textarea, input[type="search"] {
   cursor: pointer;
 }
 
-.select-all-label input {
-  margin: 0;
-}
+.select-all-label input { margin: 0; }
 
 a {
   color: var(--accent);

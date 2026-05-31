@@ -21,7 +21,9 @@ from .db import (
     get_status,
     init_db,
     row_to_dict,
+    set_channel_order,
     set_channels_selected,
+    set_group_order,
     set_group_selected,
     set_setting,
     update_job,
@@ -53,6 +55,15 @@ class ChannelSelectionIn(BaseModel):
 
 class GroupSelectionIn(BaseModel):
     selected: bool = True
+
+
+class GroupOrderIn(BaseModel):
+    group_ids: list[str] = Field(default_factory=list)
+
+
+class ChannelOrderIn(BaseModel):
+    group_id: str
+    channel_ids: list[str] = Field(default_factory=list)
 
 
 class EpgSourceIn(BaseModel):
@@ -158,6 +169,12 @@ def api_groups() -> dict:
     return {"ok": True, "groups": get_groups()}
 
 
+@app.post("/api/groups/order")
+def api_group_order(payload: GroupOrderIn) -> dict:
+    result = set_group_order(payload.group_ids)
+    return {"ok": True, **result}
+
+
 @app.get("/api/channels")
 def api_channels(
     group_id: str = Query(...),
@@ -175,6 +192,12 @@ def api_selected_channels() -> dict:
 @app.post("/api/channels/select")
 def api_select_channels(payload: ChannelSelectionIn) -> dict:
     result = set_channels_selected(payload.channel_ids, payload.selected)
+    return {"ok": True, **result}
+
+
+@app.post("/api/channels/order")
+def api_channel_order(payload: ChannelOrderIn) -> dict:
+    result = set_channel_order(payload.group_id, payload.channel_ids)
     return {"ok": True, **result}
 
 

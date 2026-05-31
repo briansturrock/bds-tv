@@ -415,6 +415,57 @@ def set_group_selected(group_id: str, selected: bool) -> dict[str, int]:
     return {"updated": int(updated)}
 
 
+def set_group_order(group_ids: list[str]) -> dict[str, int]:
+    cleaned = [gid for gid in group_ids if gid]
+    with connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            before = conn.total_changes
+            for order, group_id in enumerate(cleaned):
+                conn.execute(
+                    """
+                    UPDATE groups
+                    SET user_order = ?
+                    WHERE id = ?
+                      AND missing = 0
+                      AND selected_count > 0
+                    """,
+                    (order, group_id),
+                )
+            updated = conn.total_changes - before
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return {"updated": int(updated)}
+
+
+def set_channel_order(group_id: str, channel_ids: list[str]) -> dict[str, int]:
+    cleaned = [cid for cid in channel_ids if cid]
+    with connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            before = conn.total_changes
+            for order, channel_id in enumerate(cleaned):
+                conn.execute(
+                    """
+                    UPDATE channels
+                    SET user_order = ?
+                    WHERE id = ?
+                      AND group_id = ?
+                      AND selected = 1
+                      AND missing = 0
+                    """,
+                    (order, channel_id, group_id),
+                )
+            updated = conn.total_changes - before
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return {"updated": int(updated)}
+
+
 def get_selected_channels() -> list[dict[str, Any]]:
     with connect() as conn:
         rows = conn.execute(
