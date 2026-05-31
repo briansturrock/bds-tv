@@ -57,14 +57,22 @@
             <div>
               <h2 id="selected-group-title">Channels</h2>
               <div id="selected-group-meta" class="muted">Select a group.</div>
+              <div class="autosave-note">Selections save automatically.</div>
             </div>
             <div class="button-row">
-              <button id="select-visible">Select visible</button>
-              <button id="unselect-visible">Unselect visible</button>
               <button id="prev-page">Prev</button>
               <button id="next-page">Next</button>
             </div>
           </div>
+
+          <div class="channel-select-header">
+            <label class="select-all-label">
+              <input id="select-shown-checkbox" type="checkbox" />
+              <span>Select shown channels</span>
+            </label>
+            <span id="shown-selection-meta" class="muted">No channels shown.</span>
+          </div>
+
           <div id="channels-list" class="list"></div>
         </section>
       </div>

@@ -8,6 +8,7 @@ const state = {
   channelsLimit: 200,
   channelsTotal: 0,
   visibleChannelIds: [],
+  visibleSelectedIds: [],
   activeJobTimer: null,
 };
 
@@ -185,7 +186,9 @@ async function loadChannels() {
 
   $("selected-group-title").textContent = state.selectedGroup?.name || "Channels";
   $("selected-group-meta").textContent = "Loading channels…";
+  $("shown-selection-meta").textContent = "Loading…";
   $("channels-list").innerHTML = "";
+  resetSelectShownCheckbox();
 
   const result = await api(
     `/api/channels?group_id=${encodeURIComponent(state.selectedGroupId)}&offset=${state.channelsOffset}&limit=${state.channelsLimit}`
@@ -193,11 +196,13 @@ async function loadChannels() {
 
   state.channelsTotal = result.total || 0;
   state.visibleChannelIds = (result.channels || []).map((c) => c.id);
+  state.visibleSelectedIds = (result.channels || []).filter((c) => c.selected).map((c) => c.id);
 
   $("selected-group-meta").textContent =
     `${state.channelsTotal} channels · showing ${state.channelsOffset + 1}-${Math.min(state.channelsOffset + state.channelsLimit, state.channelsTotal)}`;
 
   renderChannels(result.channels || []);
+  updateSelectShownCheckbox();
 }
 
 function renderChannels(channels) {
@@ -238,8 +243,15 @@ function renderChannels(channels) {
           method: "POST",
           body: JSON.stringify({ channel_ids: [channel.id], selected: checkbox.checked }),
         });
+        setMessage("channels-info", `Saved: ${channel.name} ${checkbox.checked ? "selected" : "unselected"}.`);
         await loadStatus();
         await loadGroups(false);
+        if (checkbox.checked) {
+          if (!state.visibleSelectedIds.includes(channel.id)) state.visibleSelectedIds.push(channel.id);
+        } else {
+          state.visibleSelectedIds = state.visibleSelectedIds.filter((id) => id !== channel.id);
+        }
+        updateSelectShownCheckbox();
       } catch (err) {
         checkbox.checked = !checkbox.checked;
         setMessage("channels-info", `Selection failed: ${err.message}`, true);
@@ -254,19 +266,47 @@ function renderChannels(channels) {
   list.appendChild(fragment);
 }
 
-async function selectVisible(selected) {
+function resetSelectShownCheckbox() {
+  const checkbox = $("select-shown-checkbox");
+  checkbox.checked = false;
+  checkbox.indeterminate = false;
+  checkbox.disabled = true;
+}
+
+function updateSelectShownCheckbox() {
+  const checkbox = $("select-shown-checkbox");
+  const total = state.visibleChannelIds.length;
+  const selected = state.visibleSelectedIds.length;
+
+  checkbox.disabled = total === 0;
+  checkbox.checked = total > 0 && selected === total;
+  checkbox.indeterminate = selected > 0 && selected < total;
+
+  $("shown-selection-meta").textContent =
+    total === 0 ? "No channels shown." : `${selected}/${total} shown channels selected.`;
+}
+
+async function setShownChannelsSelected(selected) {
   if (!state.visibleChannelIds.length) return;
-  setMessage("channels-info", selected ? "Selecting visible channels…" : "Unselecting visible channels…");
 
-  await api("/api/channels/select", {
-    method: "POST",
-    body: JSON.stringify({ channel_ids: state.visibleChannelIds, selected }),
-  });
+  const checkbox = $("select-shown-checkbox");
+  checkbox.disabled = true;
+  setMessage("channels-info", selected ? "Selecting shown channels…" : "Unselecting shown channels…");
 
-  await loadStatus();
-  await loadGroups(false);
-  await loadChannels();
-  setMessage("channels-info", selected ? "Visible channels selected." : "Visible channels unselected.");
+  try {
+    await api("/api/channels/select", {
+      method: "POST",
+      body: JSON.stringify({ channel_ids: state.visibleChannelIds, selected }),
+    });
+
+    await loadStatus();
+    await loadGroups(false);
+    await loadChannels();
+    setMessage("channels-info", selected ? "Saved: shown channels selected." : "Saved: shown channels unselected.");
+  } catch (err) {
+    setMessage("channels-info", `Selection failed: ${err.message}`, true);
+    updateSelectShownCheckbox();
+  }
 }
 
 function nextPage() {
@@ -323,8 +363,7 @@ function wireEvents() {
   });
 
   $("group-search").addEventListener("input", filterGroups);
-  $("select-visible").addEventListener("click", () => selectVisible(true));
-  $("unselect-visible").addEventListener("click", () => selectVisible(false));
+  $("select-shown-checkbox").addEventListener("change", (event) => setShownChannelsSelected(event.target.checked));
   $("next-page").addEventListener("click", nextPage);
   $("prev-page").addEventListener("click", prevPage);
 }

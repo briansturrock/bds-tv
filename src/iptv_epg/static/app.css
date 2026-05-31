@@ -137,6 +137,12 @@ textarea, input[type="search"] {
   font-size: 12px;
 }
 
+.autosave-note {
+  color: var(--success-text);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
 .json-box {
   max-height: 240px;
   overflow: auto;
@@ -244,6 +250,31 @@ textarea, input[type="search"] {
   justify-content: space-between;
   gap: 12px;
   align-items: flex-start;
+}
+
+.channel-select-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.select-all-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.select-all-label input {
+  margin: 0;
 }
 
 a {
