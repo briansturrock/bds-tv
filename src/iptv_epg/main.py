@@ -4,7 +4,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, Response
 from pydantic import BaseModel, Field
 
 from . import __version__
@@ -24,8 +24,9 @@ from .db import (
     set_setting,
     update_job,
 )
+from .epg import detect_epg_urls, generate_filtered_epg, scan_epg_channels
 from .m3u import fetch_and_index_m3u, generate_filtered_m3u
-from .settings import FILTERED_M3U, ensure_runtime_dirs
+from .settings import FILTERED_EPG, FILTERED_M3U, ensure_runtime_dirs
 
 
 app = FastAPI(title="iptv_epg", version=__version__)
@@ -47,6 +48,28 @@ class ChannelSelectionIn(BaseModel):
 
 class GroupSelectionIn(BaseModel):
     selected: bool = True
+
+
+class EpgSourceIn(BaseModel):
+    name: str
+    url: str
+    enabled: bool = True
+    source_type: str = "manual"
+
+
+class EpgSourceEnableIn(BaseModel):
+    enabled: bool = True
+
+
+class EpgMappingIn(BaseModel):
+    channel_id: str
+    source_id: int | None = None
+    xmltv_id: str | None = None
+    mapping_type: str = "manual"
+
+
+class EpgMappingsIn(BaseModel):
+    mappings: list[EpgMappingIn] = Field(default_factory=list)
 
 
 @app.on_event("startup")
@@ -87,18 +110,9 @@ def run_m3u_fetch_job(job_id: str, url: str) -> None:
         fetch_and_index_m3u(url, job_id)
     except Exception as exc:
         with connect() as conn:
-            conn.execute(
-                "UPDATE m3u_sources SET last_error = ? WHERE id = 1",
-                (str(exc),),
-            )
+            conn.execute("UPDATE m3u_sources SET last_error = ? WHERE id = 1", (str(exc),))
             conn.commit()
-        update_job(
-            job_id,
-            status="failed",
-            message="M3U fetch/index failed",
-            error=str(exc),
-            finish=True,
-        )
+        update_job(job_id, status="failed", message="M3U fetch/index failed", error=str(exc), finish=True)
 
 
 @app.post("/api/m3u/fetch")
@@ -111,11 +125,7 @@ def api_fetch_m3u() -> dict:
     create_job(job_id, "m3u_fetch", "Queued M3U fetch/index")
     executor.submit(run_m3u_fetch_job, job_id, url)
 
-    return {
-        "ok": True,
-        "job_id": job_id,
-        "message": "M3U fetch/index job started",
-    }
+    return {"ok": True, "job_id": job_id, "message": "M3U fetch/index job started"}
 
 
 @app.get("/api/jobs/{job_id}")
@@ -129,18 +139,13 @@ def api_get_job(job_id: str) -> dict:
 @app.get("/api/source")
 def api_source() -> dict:
     with connect() as conn:
-        row = conn.execute(
-            "SELECT * FROM m3u_sources WHERE id = 1"
-        ).fetchone()
+        row = conn.execute("SELECT * FROM m3u_sources WHERE id = 1").fetchone()
     return {"ok": True, "source": row_to_dict(row)}
 
 
 @app.get("/api/groups")
 def api_groups() -> dict:
-    return {
-        "ok": True,
-        "groups": get_groups(),
-    }
+    return {"ok": True, "groups": get_groups()}
 
 
 @app.get("/api/channels")
@@ -149,37 +154,24 @@ def api_channels(
     offset: int = Query(0, ge=0),
     limit: int = Query(200, ge=1, le=1000),
 ) -> dict:
-    return {
-        "ok": True,
-        **get_channels(group_id=group_id, offset=offset, limit=limit),
-    }
+    return {"ok": True, **get_channels(group_id=group_id, offset=offset, limit=limit)}
 
 
 @app.get("/api/selected-channels")
 def api_selected_channels() -> dict:
-    return {
-        "ok": True,
-        "channels": get_selected_channels(),
-    }
+    return {"ok": True, "channels": get_selected_channels()}
 
 
 @app.post("/api/channels/select")
 def api_select_channels(payload: ChannelSelectionIn) -> dict:
     result = set_channels_selected(payload.channel_ids, payload.selected)
-    return {
-        "ok": True,
-        **result,
-    }
+    return {"ok": True, **result}
 
 
 @app.post("/api/groups/{group_id}/select")
 def api_select_group(group_id: str, payload: GroupSelectionIn) -> dict:
     result = set_group_selected(group_id, payload.selected)
-    return {
-        "ok": True,
-        "group_id": group_id,
-        **result,
-    }
+    return {"ok": True, "group_id": group_id, **result}
 
 
 def run_filtered_m3u_job(job_id: str) -> None:
@@ -194,13 +186,7 @@ def run_filtered_m3u_job(job_id: str) -> None:
             finish=True,
         )
     except Exception as exc:
-        update_job(
-            job_id,
-            status="failed",
-            message="Filtered M3U generation failed",
-            error=str(exc),
-            finish=True,
-        )
+        update_job(job_id, status="failed", message="Filtered M3U generation failed", error=str(exc), finish=True)
 
 
 @app.post("/api/m3u/generate-filtered")
@@ -208,20 +194,204 @@ def api_generate_filtered_m3u() -> dict:
     job_id = str(uuid.uuid4())
     create_job(job_id, "filtered_m3u", "Queued filtered M3U generation")
     executor.submit(run_filtered_m3u_job, job_id)
-
-    return {
-        "ok": True,
-        "job_id": job_id,
-        "message": "Filtered M3U generation job started",
-    }
+    return {"ok": True, "job_id": job_id, "message": "Filtered M3U generation job started"}
 
 
-@app.get("/filtered.m3u")
-def filtered_m3u() -> FileResponse | PlainTextResponse:
+@app.get("/filtered.m3u", response_model=None)
+def filtered_m3u() -> Response:
     if not FILTERED_M3U.exists():
         return PlainTextResponse("#EXTM3U\n", media_type="application/vnd.apple.mpegurl")
-    return FileResponse(
-        FILTERED_M3U,
-        media_type="application/vnd.apple.mpegurl",
-        filename="filtered.m3u",
-    )
+    return FileResponse(FILTERED_M3U, media_type="application/vnd.apple.mpegurl", filename="filtered.m3u")
+
+
+@app.get("/api/epg/sources")
+def api_epg_sources() -> dict:
+    with connect() as conn:
+        rows = conn.execute("SELECT * FROM epg_sources ORDER BY id").fetchall()
+    return {"ok": True, "sources": [dict(r) for r in rows]}
+
+
+@app.post("/api/epg/sources")
+def api_add_epg_source(payload: EpgSourceIn) -> dict:
+    with connect() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO epg_sources(name, url, enabled, source_type)
+            VALUES (?, ?, ?, ?)
+            """,
+            (payload.name.strip(), payload.url.strip(), 1 if payload.enabled else 0, payload.source_type),
+        )
+        conn.commit()
+        source_id = cur.lastrowid
+    return {"ok": True, "source_id": source_id}
+
+
+@app.post("/api/epg/sources/{source_id}/enable")
+def api_enable_epg_source(source_id: int, payload: EpgSourceEnableIn) -> dict:
+    with connect() as conn:
+        conn.execute("UPDATE epg_sources SET enabled = ? WHERE id = ?", (1 if payload.enabled else 0, source_id))
+        conn.commit()
+    return {"ok": True, "source_id": source_id, "enabled": payload.enabled}
+
+
+@app.post("/api/epg/detect")
+def api_detect_epg() -> dict:
+    m3u_url = get_setting("m3u_url")
+    detected = detect_epg_urls(m3u_url)
+
+    created = []
+    with connect() as conn:
+        for item in detected:
+            existing = conn.execute("SELECT id FROM epg_sources WHERE url = ?", (item["url"],)).fetchone()
+            if existing:
+                created.append({"source_id": existing["id"], **item, "existing": True})
+                continue
+            cur = conn.execute(
+                """
+                INSERT INTO epg_sources(name, url, enabled, source_type)
+                VALUES (?, ?, 1, ?)
+                """,
+                (item["name"], item["url"], item["source_type"]),
+            )
+            created.append({"source_id": cur.lastrowid, **item, "existing": False})
+        conn.commit()
+
+    return {"ok": True, "detected": created}
+
+
+def run_epg_test_job(job_id: str, source_id: int) -> None:
+    try:
+        with connect() as conn:
+            source = conn.execute("SELECT id, url FROM epg_sources WHERE id = ?", (source_id,)).fetchone()
+        if not source:
+            raise RuntimeError("EPG source not found")
+
+        result = scan_epg_channels(source_id, source["url"], job_id=job_id)
+        update_job(
+            job_id,
+            status="complete",
+            message=f"Scanned {result['epg_channel_count']:,} EPG channels; {result['match_count']:,} selected-channel matches",
+            progress_current=result["epg_channel_count"],
+            progress_total=result["epg_channel_count"],
+            finish=True,
+        )
+    except Exception as exc:
+        with connect() as conn:
+            conn.execute("UPDATE epg_sources SET last_error = ? WHERE id = ?", (str(exc), source_id))
+            conn.commit()
+        update_job(job_id, status="failed", message="EPG test failed", error=str(exc), finish=True)
+
+
+@app.post("/api/epg/test")
+def api_test_epg(source_id: int | None = None) -> dict:
+    if source_id is None:
+        with connect() as conn:
+            row = conn.execute("SELECT id FROM epg_sources WHERE enabled = 1 ORDER BY id LIMIT 1").fetchone()
+        if not row:
+            raise HTTPException(status_code=400, detail="No enabled EPG source")
+        source_id = int(row["id"])
+
+    job_id = str(uuid.uuid4())
+    create_job(job_id, "epg_test", "Queued EPG test")
+    executor.submit(run_epg_test_job, job_id, source_id)
+    return {"ok": True, "job_id": job_id, "source_id": source_id}
+
+
+@app.get("/api/epg/channels/search")
+def api_epg_channel_search(q: str = Query("", min_length=0), source_id: int | None = None, limit: int = Query(50, ge=1, le=200)) -> dict:
+    query = f"%{q.strip()}%"
+    sql = """
+        SELECT source_id, xmltv_id, display_name
+        FROM epg_channels
+        WHERE (? IS NULL OR source_id = ?)
+          AND (? = '' OR xmltv_id LIKE ? OR display_name LIKE ?)
+        ORDER BY display_name
+        LIMIT ?
+    """
+    with connect() as conn:
+        rows = conn.execute(sql, (source_id, source_id, q.strip(), query, query, limit)).fetchall()
+    return {"ok": True, "channels": [dict(r) for r in rows]}
+
+
+@app.get("/api/epg/mappings")
+def api_epg_mappings() -> dict:
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                channels.id AS channel_id,
+                channels.name,
+                groups.name AS group_name,
+                channels.tvg_id,
+                channels.epg_xmltv_id,
+                epg_mappings.source_id,
+                epg_mappings.xmltv_id,
+                epg_mappings.mapping_type
+            FROM channels
+            JOIN groups ON groups.id = channels.group_id
+            LEFT JOIN epg_mappings ON epg_mappings.channel_id = channels.id
+            WHERE channels.selected = 1
+              AND channels.missing = 0
+            ORDER BY
+                CASE WHEN groups.user_order IS NULL THEN 1 ELSE 0 END,
+                groups.user_order ASC,
+                groups.provider_order ASC,
+                CASE WHEN channels.user_order IS NULL THEN 1 ELSE 0 END,
+                channels.user_order ASC,
+                channels.provider_order ASC
+            """
+        ).fetchall()
+    return {"ok": True, "mappings": [dict(r) for r in rows]}
+
+
+@app.post("/api/epg/mappings")
+def api_save_epg_mappings(payload: EpgMappingsIn) -> dict:
+    with connect() as conn:
+        for item in payload.mappings:
+            if item.xmltv_id:
+                conn.execute(
+                    """
+                    INSERT INTO epg_mappings(channel_id, source_id, xmltv_id, mapping_type, updated_at)
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(channel_id) DO UPDATE SET
+                        source_id = excluded.source_id,
+                        xmltv_id = excluded.xmltv_id,
+                        mapping_type = excluded.mapping_type,
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (item.channel_id, item.source_id, item.xmltv_id, item.mapping_type),
+                )
+            else:
+                conn.execute("DELETE FROM epg_mappings WHERE channel_id = ?", (item.channel_id,))
+        conn.commit()
+    return {"ok": True, "updated": len(payload.mappings)}
+
+
+def run_filtered_epg_job(job_id: str, days: int, source_id: int | None) -> None:
+    try:
+        result = generate_filtered_epg(days=days, source_id=source_id, job_id=job_id)
+        update_job(
+            job_id,
+            status="complete",
+            message=f"Generated filtered_epg.xml: {result['channels']} channels, {result['programmes']} programmes, {result['days']} days",
+            progress_current=int(result["programmes"]),
+            progress_total=int(result["programmes"]),
+            finish=True,
+        )
+    except Exception as exc:
+        update_job(job_id, status="failed", message="Filtered EPG generation failed", error=str(exc), finish=True)
+
+
+@app.post("/api/epg/generate-filtered")
+def api_generate_filtered_epg(days: int = Query(3, ge=1, le=14), source_id: int | None = None) -> dict:
+    job_id = str(uuid.uuid4())
+    create_job(job_id, "filtered_epg", "Queued filtered EPG generation")
+    executor.submit(run_filtered_epg_job, job_id, days, source_id)
+    return {"ok": True, "job_id": job_id, "message": "Filtered EPG generation job started"}
+
+
+@app.get("/filtered_epg.xml", response_model=None)
+def filtered_epg() -> Response:
+    if not FILTERED_EPG.exists():
+        return PlainTextResponse('<?xml version="1.0" encoding="UTF-8"?><tv></tv>\n', media_type="application/xml")
+    return FileResponse(FILTERED_EPG, media_type="application/xml", filename="filtered_epg.xml")
