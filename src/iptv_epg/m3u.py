@@ -31,33 +31,21 @@ class M3UEntry:
 
 
 class JobProgressThrottle:
-    def __init__(self, job_id: str | None, seconds: float = 5.0, rows: int = 25000):
+    def __init__(self, job_id: str | None, seconds: float = 5.0):
         self.job_id = job_id
         self.seconds = seconds
-        self.rows = rows
         self.last_time = 0.0
-        self.last_rows = 0
 
-    def update(self, message: str, current: int | None = None, total: int | None = None, force: bool = False) -> None:
+    def update(self, message: str, force: bool = False) -> None:
         if not self.job_id:
             return
 
         now = time.monotonic()
-        row_delta_ok = current is not None and (current - self.last_rows) >= self.rows
-        time_delta_ok = (now - self.last_time) >= self.seconds
-
-        if not force and not row_delta_ok and not time_delta_ok:
+        if not force and (now - self.last_time) < self.seconds:
             return
 
-        update_job(
-            self.job_id,
-            message=message,
-            progress_current=current,
-            progress_total=total,
-        )
+        update_job(self.job_id, message=message)
         self.last_time = now
-        if current is not None:
-            self.last_rows = current
 
 
 def parse_attrs(line: str) -> dict[str, str]:
@@ -159,13 +147,18 @@ def download_m3u(url: str, destination: Path, job_id: str | None = None) -> dict
 
 
 def index_m3u(source_path: Path = SOURCE_M3U, job_id: str | None = None) -> dict[str, int]:
+    # Important:
+    # Do not call update_job() while the big indexing write transaction is open.
+    # SQLite allows one writer. Calling update_job() from a second connection while
+    # this transaction is active causes self-inflicted "database is locked" errors.
+    if job_id:
+        update_job(job_id, message="Indexing channels")
+
     group_order: dict[str, int] = {}
     group_channel_counts: dict[str, int] = {}
     group_selected_counts: dict[str, int] = {}
 
     channel_count = 0
-    progress = JobProgressThrottle(job_id, seconds=5.0, rows=25000)
-    progress.update("Preparing channel index", force=True)
 
     with connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -261,8 +254,6 @@ def index_m3u(source_path: Path = SOURCE_M3U, job_id: str | None = None) -> dict
                 group_selected_counts[group_id] = group_selected_counts.get(group_id, 0) + selected
                 channel_count += 1
 
-                progress.update(f"Indexing channels ({channel_count:,})", current=channel_count)
-
             for group_id, count in group_channel_counts.items():
                 conn.execute(
                     """
@@ -292,7 +283,8 @@ def index_m3u(source_path: Path = SOURCE_M3U, job_id: str | None = None) -> dict
             conn.rollback()
             raise
 
-    progress.update(f"Indexed {channel_count:,} channels", current=channel_count, force=True)
+    if job_id:
+        update_job(job_id, message=f"Indexed {channel_count:,} channels")
 
     return {
         "channel_count": channel_count,

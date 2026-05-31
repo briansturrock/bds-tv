@@ -1,27 +1,37 @@
-# Patch: Fix SQLite locking during M3U indexing
+# Patch: Fix SQLite locking inside M3U index transaction
 
-This patch fixes the failed M3U fetch/index job:
+This patch fixes the remaining `database is locked` failure during `POST /api/m3u/fetch`.
+
+## Root cause
+
+The M3U indexer held a large SQLite write transaction while also trying to update job progress from a separate SQLite connection.
+
+That creates a self-inflicted lock:
 
 ```text
-database is locked
+index transaction holds write lock
+→ progress update opens another connection
+→ second connection tries to write jobs table
+→ database is locked
 ```
 
-## What changed
+## Fix
 
-- SQLite connections now use a longer timeout.
-- `PRAGMA busy_timeout` is set on every connection.
-- Job progress updates are throttled so the indexer does not constantly open competing write connections while indexing.
-- M3U indexing uses fewer job-status writes.
+- Do not update job progress from inside the long channel indexing transaction.
+- Update status before indexing starts.
+- Index everything in one transaction.
+- Update final job status after the transaction commits.
+- Keep download progress updates, because those occur before the index write transaction.
 
 ## Apply
 
 From the repo root:
 
 ```bash
-unzip iptv_epg_patch_sqlite_locking.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_sqlite_locking_index_transaction.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
 git add .
-git commit -m "Fix SQLite locking during M3U indexing"
+git commit -m "Avoid job progress writes during M3U index transaction"
 git push
 ```
 
@@ -36,22 +46,10 @@ curl http://127.0.0.1:8088/health
 curl http://127.0.0.1:8088/api/status
 ```
 
-## Test M3U fetch
-
-Start the job:
+## Test
 
 ```text
 POST /api/m3u/fetch
-```
-
-Poll:
-
-```text
-GET /api/jobs/<job_id>
-```
-
-Then:
-
-```text
-GET /api/groups
+GET  /api/jobs/<job_id>
+GET  /api/groups
 ```
