@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Local runtime state
+config/
+data/
+db/
+logs/
+*.db
+*.sqlite
+*.m3u
+*.xml
+*.xml.gz
+
+# Secrets
+.env
+*.secret
