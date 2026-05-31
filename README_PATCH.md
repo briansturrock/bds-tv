@@ -1,28 +1,15 @@
-# Patch: Fix FastAPI response annotations
+# Patch: Add missing EPG module
 
-This patch fixes the startup crash caused by FastAPI trying to treat response union type annotations as Pydantic response models.
-
-The issue looked like:
+This patch fixes the container startup crash:
 
 ```text
-FastAPIError: Invalid args for response field!
-FileResponse | PlainTextResponse is not a valid Pydantic field type
+ModuleNotFoundError: No module named 'iptv_epg.epg'
 ```
 
-## Fix
+It adds:
 
-Generated file endpoints now use:
-
-```python
-@app.get("/filtered.m3u", response_model=None)
-def filtered_m3u() -> Response:
-```
-
-and:
-
-```python
-@app.get("/filtered_epg.xml", response_model=None)
-def filtered_epg() -> Response:
+```text
+src/iptv_epg/epg.py
 ```
 
 ## Apply
@@ -30,17 +17,20 @@ def filtered_epg() -> Response:
 From the repo root:
 
 ```bash
-unzip iptv_epg_patch_fastapi_response_annotations.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_missing_epg_module.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
 git add .
-git commit -m "Fix FastAPI response annotations"
+git commit -m "Add missing EPG module"
 git push
 ```
 
-## Test
+## Pull/build on Ubuntu
 
 ```bash
+cd /docker/iptv_epg/repo
+sudo git pull
 sudo docker compose up --build -d
+sudo docker logs --tail=80 iptv_epg
 curl http://127.0.0.1:8088/health
 curl http://127.0.0.1:8088/api/status
 ```
