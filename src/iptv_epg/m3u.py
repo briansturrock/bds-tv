@@ -4,6 +4,7 @@ import hashlib
 import re
 import shutil
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
@@ -27,6 +28,36 @@ class M3UEntry:
     stream_url: str
     extinf: str
     provider_order: int
+
+
+class JobProgressThrottle:
+    def __init__(self, job_id: str | None, seconds: float = 5.0, rows: int = 25000):
+        self.job_id = job_id
+        self.seconds = seconds
+        self.rows = rows
+        self.last_time = 0.0
+        self.last_rows = 0
+
+    def update(self, message: str, current: int | None = None, total: int | None = None, force: bool = False) -> None:
+        if not self.job_id:
+            return
+
+        now = time.monotonic()
+        row_delta_ok = current is not None and (current - self.last_rows) >= self.rows
+        time_delta_ok = (now - self.last_time) >= self.seconds
+
+        if not force and not row_delta_ok and not time_delta_ok:
+            return
+
+        update_job(
+            self.job_id,
+            message=message,
+            progress_current=current,
+            progress_total=total,
+        )
+        self.last_time = now
+        if current is not None:
+            self.last_rows = current
 
 
 def parse_attrs(line: str) -> dict[str, str]:
@@ -100,6 +131,7 @@ def download_m3u(url: str, destination: Path, job_id: str | None = None) -> dict
     md5 = hashlib.md5()
     sha256 = hashlib.sha256()
     size = 0
+    progress = JobProgressThrottle(job_id, seconds=5.0)
 
     with tempfile.NamedTemporaryFile("wb", delete=False, dir=str(destination.parent)) as tmp:
         tmp_path = Path(tmp.name)
@@ -112,10 +144,11 @@ def download_m3u(url: str, destination: Path, job_id: str | None = None) -> dict
                 md5.update(chunk)
                 sha256.update(chunk)
                 size += len(chunk)
-                if job_id:
-                    update_job(job_id, message=f"Downloading source M3U ({size // (1024 * 1024)} MB)")
+                progress.update(f"Downloading source M3U ({size // (1024 * 1024)} MB)")
 
     shutil.move(str(tmp_path), str(destination))
+
+    progress.update(f"Downloaded source M3U ({size // (1024 * 1024)} MB)", force=True)
 
     return {
         "local_path": str(destination),
@@ -131,127 +164,135 @@ def index_m3u(source_path: Path = SOURCE_M3U, job_id: str | None = None) -> dict
     group_selected_counts: dict[str, int] = {}
 
     channel_count = 0
+    progress = JobProgressThrottle(job_id, seconds=5.0, rows=25000)
+    progress.update("Preparing channel index", force=True)
 
     with connect() as conn:
-        conn.execute("UPDATE groups SET missing = 1")
-        conn.execute("UPDATE channels SET missing = 1")
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute("UPDATE groups SET missing = 1")
+            conn.execute("UPDATE channels SET missing = 1")
 
-        for entry in parse_m3u_file(source_path):
-            group_name = entry.group_name
-            group_id = group_id_for_name(group_name)
+            for entry in parse_m3u_file(source_path):
+                group_name = entry.group_name
+                group_id = group_id_for_name(group_name)
 
-            if group_id not in group_order:
-                group_order[group_id] = len(group_order)
+                if group_id not in group_order:
+                    group_order[group_id] = len(group_order)
 
-            stable_key = stable_key_for_channel(entry)
-            channel_id = channel_id_for_stable_key(stable_key)
+                stable_key = stable_key_for_channel(entry)
+                channel_id = channel_id_for_stable_key(stable_key)
 
-            existing = conn.execute(
-                "SELECT selected, user_order, epg_xmltv_id FROM channels WHERE stable_key = ?",
-                (stable_key,),
-            ).fetchone()
+                existing = conn.execute(
+                    "SELECT selected, user_order, epg_xmltv_id FROM channels WHERE stable_key = ?",
+                    (stable_key,),
+                ).fetchone()
 
-            selected = int(existing["selected"]) if existing else 0
-            user_order = existing["user_order"] if existing else None
-            epg_xmltv_id = existing["epg_xmltv_id"] if existing else None
+                selected = int(existing["selected"]) if existing else 0
+                user_order = existing["user_order"] if existing else None
+                epg_xmltv_id = existing["epg_xmltv_id"] if existing else None
 
-            conn.execute(
-                """
-                INSERT INTO groups(id, name, provider_order, channel_count, selected_count, missing, last_seen_at)
-                VALUES (?, ?, ?, 0, 0, 0, CURRENT_TIMESTAMP)
-                ON CONFLICT(id) DO UPDATE SET
-                    name = excluded.name,
-                    provider_order = excluded.provider_order,
-                    missing = 0,
-                    last_seen_at = CURRENT_TIMESTAMP
-                """,
-                (group_id, group_name, group_order[group_id]),
-            )
-
-            conn.execute(
-                """
-                INSERT INTO channels(
-                    id,
-                    stable_key,
-                    group_id,
-                    name,
-                    tvg_name,
-                    tvg_id,
-                    logo_url,
-                    stream_url,
-                    extinf,
-                    provider_order,
-                    user_order,
-                    selected,
-                    epg_xmltv_id,
-                    missing,
-                    last_seen_at
+                conn.execute(
+                    """
+                    INSERT INTO groups(id, name, provider_order, channel_count, selected_count, missing, last_seen_at)
+                    VALUES (?, ?, ?, 0, 0, 0, CURRENT_TIMESTAMP)
+                    ON CONFLICT(id) DO UPDATE SET
+                        name = excluded.name,
+                        provider_order = excluded.provider_order,
+                        missing = 0,
+                        last_seen_at = CURRENT_TIMESTAMP
+                    """,
+                    (group_id, group_name, group_order[group_id]),
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
-                ON CONFLICT(stable_key) DO UPDATE SET
-                    group_id = excluded.group_id,
-                    name = excluded.name,
-                    tvg_name = excluded.tvg_name,
-                    tvg_id = excluded.tvg_id,
-                    logo_url = excluded.logo_url,
-                    stream_url = excluded.stream_url,
-                    extinf = excluded.extinf,
-                    provider_order = excluded.provider_order,
-                    user_order = COALESCE(channels.user_order, excluded.user_order),
-                    selected = channels.selected,
-                    epg_xmltv_id = COALESCE(channels.epg_xmltv_id, excluded.epg_xmltv_id),
-                    missing = 0,
-                    last_seen_at = CURRENT_TIMESTAMP
-                """,
-                (
-                    channel_id,
-                    stable_key,
-                    group_id,
-                    entry.name,
-                    entry.tvg_name,
-                    entry.tvg_id,
-                    entry.logo_url,
-                    entry.stream_url,
-                    entry.extinf,
-                    entry.provider_order,
-                    user_order,
-                    selected,
-                    epg_xmltv_id,
-                ),
-            )
 
-            group_channel_counts[group_id] = group_channel_counts.get(group_id, 0) + 1
-            group_selected_counts[group_id] = group_selected_counts.get(group_id, 0) + selected
-            channel_count += 1
+                conn.execute(
+                    """
+                    INSERT INTO channels(
+                        id,
+                        stable_key,
+                        group_id,
+                        name,
+                        tvg_name,
+                        tvg_id,
+                        logo_url,
+                        stream_url,
+                        extinf,
+                        provider_order,
+                        user_order,
+                        selected,
+                        epg_xmltv_id,
+                        missing,
+                        last_seen_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+                    ON CONFLICT(stable_key) DO UPDATE SET
+                        group_id = excluded.group_id,
+                        name = excluded.name,
+                        tvg_name = excluded.tvg_name,
+                        tvg_id = excluded.tvg_id,
+                        logo_url = excluded.logo_url,
+                        stream_url = excluded.stream_url,
+                        extinf = excluded.extinf,
+                        provider_order = excluded.provider_order,
+                        user_order = COALESCE(channels.user_order, excluded.user_order),
+                        selected = channels.selected,
+                        epg_xmltv_id = COALESCE(channels.epg_xmltv_id, excluded.epg_xmltv_id),
+                        missing = 0,
+                        last_seen_at = CURRENT_TIMESTAMP
+                    """,
+                    (
+                        channel_id,
+                        stable_key,
+                        group_id,
+                        entry.name,
+                        entry.tvg_name,
+                        entry.tvg_id,
+                        entry.logo_url,
+                        entry.stream_url,
+                        entry.extinf,
+                        entry.provider_order,
+                        user_order,
+                        selected,
+                        epg_xmltv_id,
+                    ),
+                )
 
-            if job_id and channel_count % 5000 == 0:
-                update_job(job_id, message=f"Indexing channels ({channel_count:,})", progress_current=channel_count)
+                group_channel_counts[group_id] = group_channel_counts.get(group_id, 0) + 1
+                group_selected_counts[group_id] = group_selected_counts.get(group_id, 0) + selected
+                channel_count += 1
 
-        for group_id, count in group_channel_counts.items():
+                progress.update(f"Indexing channels ({channel_count:,})", current=channel_count)
+
+            for group_id, count in group_channel_counts.items():
+                conn.execute(
+                    """
+                    UPDATE groups
+                    SET channel_count = ?, selected_count = ?
+                    WHERE id = ?
+                    """,
+                    (count, group_selected_counts.get(group_id, 0), group_id),
+                )
+
+            refresh_group_selected_counts(conn)
+
             conn.execute(
                 """
-                UPDATE groups
-                SET channel_count = ?, selected_count = ?
-                WHERE id = ?
+                UPDATE m3u_sources
+                SET indexed_at = CURRENT_TIMESTAMP,
+                    channel_count = ?,
+                    group_count = ?,
+                    last_error = NULL
+                WHERE id = 1
                 """,
-                (count, group_selected_counts.get(group_id, 0), group_id),
+                (channel_count, len(group_channel_counts)),
             )
 
-        refresh_group_selected_counts(conn)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
-        conn.execute(
-            """
-            UPDATE m3u_sources
-            SET indexed_at = CURRENT_TIMESTAMP,
-                channel_count = ?,
-                group_count = ?,
-                last_error = NULL
-            WHERE id = 1
-            """,
-            (channel_count, len(group_channel_counts)),
-        )
-
-        conn.commit()
+    progress.update(f"Indexed {channel_count:,} channels", current=channel_count, force=True)
 
     return {
         "channel_count": channel_count,
@@ -267,31 +308,35 @@ def fetch_and_index_m3u(url: str, job_id: str) -> dict[str, int | bool | str]:
     with connect() as conn:
         previous = conn.execute("SELECT sha256 FROM m3u_sources WHERE id = 1").fetchone()
         previous_sha = previous["sha256"] if previous else None
-
         unchanged = previous_sha == metadata["sha256"]
 
-        conn.execute(
-            """
-            INSERT INTO m3u_sources(id, url, local_path, size_bytes, md5, sha256, fetched_at, last_error)
-            VALUES (1, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, NULL)
-            ON CONFLICT(id) DO UPDATE SET
-                url = excluded.url,
-                local_path = excluded.local_path,
-                size_bytes = excluded.size_bytes,
-                md5 = excluded.md5,
-                sha256 = excluded.sha256,
-                fetched_at = CURRENT_TIMESTAMP,
-                last_error = NULL
-            """,
-            (
-                url,
-                metadata["local_path"],
-                metadata["size_bytes"],
-                metadata["md5"],
-                metadata["sha256"],
-            ),
-        )
-        conn.commit()
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute(
+                """
+                INSERT INTO m3u_sources(id, url, local_path, size_bytes, md5, sha256, fetched_at, last_error)
+                VALUES (1, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, NULL)
+                ON CONFLICT(id) DO UPDATE SET
+                    url = excluded.url,
+                    local_path = excluded.local_path,
+                    size_bytes = excluded.size_bytes,
+                    md5 = excluded.md5,
+                    sha256 = excluded.sha256,
+                    fetched_at = CURRENT_TIMESTAMP,
+                    last_error = NULL
+                """,
+                (
+                    url,
+                    metadata["local_path"],
+                    metadata["size_bytes"],
+                    metadata["md5"],
+                    metadata["sha256"],
+                ),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
     if unchanged:
         update_job(job_id, status="complete", message="Source M3U unchanged; existing index kept", finish=True)
@@ -342,10 +387,10 @@ def generate_filtered_m3u(job_id: str | None = None) -> dict[str, int | str]:
 
     tmp = FILTERED_M3U.with_suffix(".m3u.tmp")
     with tmp.open("w", encoding="utf-8") as f:
-        f.write("#EXTM3U\\n")
+        f.write("#EXTM3U\n")
         for row in rows:
-            f.write(row["extinf"].rstrip() + "\\n")
-            f.write(row["stream_url"].rstrip() + "\\n")
+            f.write(row["extinf"].rstrip() + "\n")
+            f.write(row["stream_url"].rstrip() + "\n")
 
     shutil.move(str(tmp), str(FILTERED_M3U))
 

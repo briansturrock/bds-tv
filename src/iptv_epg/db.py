@@ -7,6 +7,10 @@ from typing import Any
 from .settings import DB_PATH, ensure_runtime_dirs
 
 
+SQLITE_TIMEOUT_SECONDS = 60.0
+SQLITE_BUSY_TIMEOUT_MS = 60000
+
+
 SCHEMA: tuple[str, ...] = (
     """
     CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -132,20 +136,32 @@ SCHEMA: tuple[str, ...] = (
 
 def connect(path: Path = DB_PATH) -> sqlite3.Connection:
     ensure_runtime_dirs()
-    conn = sqlite3.connect(path, check_same_thread=False)
+    conn = sqlite3.connect(
+        path,
+        timeout=SQLITE_TIMEOUT_SECONDS,
+        check_same_thread=False,
+        isolation_level=None,
+    )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
+    conn.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
     return conn
 
 
 def init_db(path: Path = DB_PATH) -> None:
     with connect(path) as conn:
-        for statement in SCHEMA:
-            conn.execute(statement)
-        conn.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (?)", (1,))
-        conn.execute("INSERT OR IGNORE INTO m3u_sources(id) VALUES (1)")
-        conn.commit()
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            for statement in SCHEMA:
+                conn.execute(statement)
+            conn.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (?)", (1,))
+            conn.execute("INSERT OR IGNORE INTO m3u_sources(id) VALUES (1)")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
 
 def row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
@@ -160,17 +176,22 @@ def get_setting(key: str, default: str | None = None) -> str | None:
 
 def set_setting(key: str, value: str) -> None:
     with connect() as conn:
-        conn.execute(
-            """
-            INSERT INTO settings(key, value, updated_at)
-            VALUES (?, ?, CURRENT_TIMESTAMP)
-            ON CONFLICT(key) DO UPDATE SET
-                value = excluded.value,
-                updated_at = CURRENT_TIMESTAMP
-            """,
-            (key, value),
-        )
-        conn.commit()
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute(
+                """
+                INSERT INTO settings(key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (key, value),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
 
 def refresh_group_selected_counts(conn: sqlite3.Connection) -> None:
@@ -217,14 +238,19 @@ def get_status(app_version: str) -> dict[str, Any]:
 
 def create_job(job_id: str, job_type: str, message: str) -> None:
     with connect() as conn:
-        conn.execute(
-            """
-            INSERT INTO jobs(id, job_type, status, message, progress_current, progress_total)
-            VALUES (?, ?, 'running', ?, 0, NULL)
-            """,
-            (job_id, job_type, message),
-        )
-        conn.commit()
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute(
+                """
+                INSERT INTO jobs(id, job_type, status, message, progress_current, progress_total)
+                VALUES (?, ?, 'running', ?, 0, NULL)
+                """,
+                (job_id, job_type, message),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
 
 def update_job(
@@ -261,8 +287,13 @@ def update_job(
     values.append(job_id)
 
     with connect() as conn:
-        conn.execute(f"UPDATE jobs SET {', '.join(fields)} WHERE id = ?", values)
-        conn.commit()
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute(f"UPDATE jobs SET {', '.join(fields)} WHERE id = ?", values)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
 
 def get_job(job_id: str) -> dict[str, Any] | None:
@@ -346,13 +377,19 @@ def set_channels_selected(channel_ids: list[str], selected: bool) -> dict[str, i
     value = 1 if selected else 0
 
     with connect() as conn:
-        conn.executemany(
-            "UPDATE channels SET selected = ? WHERE id = ? AND missing = 0",
-            [(value, channel_id) for channel_id in channel_ids],
-        )
-        updated = conn.total_changes
-        refresh_group_selected_counts(conn)
-        conn.commit()
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            before = conn.total_changes
+            conn.executemany(
+                "UPDATE channels SET selected = ? WHERE id = ? AND missing = 0",
+                [(value, channel_id) for channel_id in channel_ids],
+            )
+            refresh_group_selected_counts(conn)
+            updated = conn.total_changes - before
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
     return {"updated": int(updated)}
 
@@ -361,13 +398,19 @@ def set_group_selected(group_id: str, selected: bool) -> dict[str, int]:
     value = 1 if selected else 0
 
     with connect() as conn:
-        conn.execute(
-            "UPDATE channels SET selected = ? WHERE group_id = ? AND missing = 0",
-            (value, group_id),
-        )
-        updated = conn.total_changes
-        refresh_group_selected_counts(conn)
-        conn.commit()
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            before = conn.total_changes
+            conn.execute(
+                "UPDATE channels SET selected = ? WHERE group_id = ? AND missing = 0",
+                (value, group_id),
+            )
+            refresh_group_selected_counts(conn)
+            updated = conn.total_changes - before
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
     return {"updated": int(updated)}
 
