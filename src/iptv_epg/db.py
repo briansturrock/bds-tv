@@ -173,6 +173,21 @@ def set_setting(key: str, value: str) -> None:
         conn.commit()
 
 
+def refresh_group_selected_counts(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        UPDATE groups
+        SET selected_count = (
+            SELECT COUNT(*)
+            FROM channels
+            WHERE channels.group_id = groups.id
+              AND channels.selected = 1
+              AND channels.missing = 0
+        )
+        """
+    )
+
+
 def get_status(app_version: str) -> dict[str, Any]:
     with connect() as conn:
         source = conn.execute(
@@ -322,3 +337,74 @@ def get_channels(group_id: str, offset: int = 0, limit: int = 200) -> dict[str, 
         "total": int(total),
         "channels": [dict(r) for r in rows],
     }
+
+
+def set_channels_selected(channel_ids: list[str], selected: bool) -> dict[str, int]:
+    if not channel_ids:
+        return {"updated": 0}
+
+    value = 1 if selected else 0
+
+    with connect() as conn:
+        conn.executemany(
+            "UPDATE channels SET selected = ? WHERE id = ? AND missing = 0",
+            [(value, channel_id) for channel_id in channel_ids],
+        )
+        updated = conn.total_changes
+        refresh_group_selected_counts(conn)
+        conn.commit()
+
+    return {"updated": int(updated)}
+
+
+def set_group_selected(group_id: str, selected: bool) -> dict[str, int]:
+    value = 1 if selected else 0
+
+    with connect() as conn:
+        conn.execute(
+            "UPDATE channels SET selected = ? WHERE group_id = ? AND missing = 0",
+            (value, group_id),
+        )
+        updated = conn.total_changes
+        refresh_group_selected_counts(conn)
+        conn.commit()
+
+    return {"updated": int(updated)}
+
+
+def get_selected_channels() -> list[dict[str, Any]]:
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                channels.id,
+                channels.stable_key,
+                channels.group_id,
+                groups.name AS group_name,
+                channels.name,
+                channels.tvg_name,
+                channels.tvg_id,
+                channels.logo_url,
+                channels.stream_url,
+                channels.extinf,
+                groups.provider_order AS group_provider_order,
+                groups.user_order AS group_user_order,
+                channels.provider_order,
+                channels.user_order,
+                channels.epg_xmltv_id
+            FROM channels
+            JOIN groups ON groups.id = channels.group_id
+            WHERE channels.selected = 1
+              AND channels.missing = 0
+              AND groups.missing = 0
+            ORDER BY
+                CASE WHEN groups.user_order IS NULL THEN 1 ELSE 0 END,
+                groups.user_order ASC,
+                groups.provider_order ASC,
+                CASE WHEN channels.user_order IS NULL THEN 1 ELSE 0 END,
+                channels.user_order ASC,
+                channels.provider_order ASC
+            """
+        ).fetchall()
+
+    return [dict(r) for r in rows]

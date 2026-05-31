@@ -10,8 +10,8 @@ from typing import Iterator
 
 import requests
 
-from .db import connect, update_job
-from .settings import SOURCE_M3U
+from .db import connect, refresh_group_selected_counts, update_job
+from .settings import FILTERED_M3U, SOURCE_M3U
 
 
 ATTR_RE = re.compile(r'([\w-]+)="([^"]*)"')
@@ -129,6 +129,7 @@ def index_m3u(source_path: Path = SOURCE_M3U, job_id: str | None = None) -> dict
     group_order: dict[str, int] = {}
     group_channel_counts: dict[str, int] = {}
     group_selected_counts: dict[str, int] = {}
+
     channel_count = 0
 
     with connect() as conn:
@@ -136,7 +137,9 @@ def index_m3u(source_path: Path = SOURCE_M3U, job_id: str | None = None) -> dict
         conn.execute("UPDATE channels SET missing = 1")
 
         for entry in parse_m3u_file(source_path):
-            group_id = group_id_for_name(entry.group_name)
+            group_name = entry.group_name
+            group_id = group_id_for_name(group_name)
+
             if group_id not in group_order:
                 group_order[group_id] = len(group_order)
 
@@ -162,15 +165,27 @@ def index_m3u(source_path: Path = SOURCE_M3U, job_id: str | None = None) -> dict
                     missing = 0,
                     last_seen_at = CURRENT_TIMESTAMP
                 """,
-                (group_id, entry.group_name, group_order[group_id]),
+                (group_id, group_name, group_order[group_id]),
             )
 
             conn.execute(
                 """
                 INSERT INTO channels(
-                    id, stable_key, group_id, name, tvg_name, tvg_id, logo_url,
-                    stream_url, extinf, provider_order, user_order, selected,
-                    epg_xmltv_id, missing, last_seen_at
+                    id,
+                    stable_key,
+                    group_id,
+                    name,
+                    tvg_name,
+                    tvg_id,
+                    logo_url,
+                    stream_url,
+                    extinf,
+                    provider_order,
+                    user_order,
+                    selected,
+                    epg_xmltv_id,
+                    missing,
+                    last_seen_at
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
                 ON CONFLICT(stable_key) DO UPDATE SET
@@ -189,9 +204,19 @@ def index_m3u(source_path: Path = SOURCE_M3U, job_id: str | None = None) -> dict
                     last_seen_at = CURRENT_TIMESTAMP
                 """,
                 (
-                    channel_id, stable_key, group_id, entry.name, entry.tvg_name,
-                    entry.tvg_id, entry.logo_url, entry.stream_url, entry.extinf,
-                    entry.provider_order, user_order, selected, epg_xmltv_id,
+                    channel_id,
+                    stable_key,
+                    group_id,
+                    entry.name,
+                    entry.tvg_name,
+                    entry.tvg_id,
+                    entry.logo_url,
+                    entry.stream_url,
+                    entry.extinf,
+                    entry.provider_order,
+                    user_order,
+                    selected,
+                    epg_xmltv_id,
                 ),
             )
 
@@ -204,9 +229,15 @@ def index_m3u(source_path: Path = SOURCE_M3U, job_id: str | None = None) -> dict
 
         for group_id, count in group_channel_counts.items():
             conn.execute(
-                "UPDATE groups SET channel_count = ?, selected_count = ? WHERE id = ?",
+                """
+                UPDATE groups
+                SET channel_count = ?, selected_count = ?
+                WHERE id = ?
+                """,
                 (count, group_selected_counts.get(group_id, 0), group_id),
             )
+
+        refresh_group_selected_counts(conn)
 
         conn.execute(
             """
@@ -219,18 +250,24 @@ def index_m3u(source_path: Path = SOURCE_M3U, job_id: str | None = None) -> dict
             """,
             (channel_count, len(group_channel_counts)),
         )
+
         conn.commit()
 
-    return {"channel_count": channel_count, "group_count": len(group_channel_counts)}
+    return {
+        "channel_count": channel_count,
+        "group_count": len(group_channel_counts),
+    }
 
 
 def fetch_and_index_m3u(url: str, job_id: str) -> dict[str, int | bool | str]:
     update_job(job_id, message="Downloading source M3U")
+
     metadata = download_m3u(url, SOURCE_M3U, job_id=job_id)
 
     with connect() as conn:
         previous = conn.execute("SELECT sha256 FROM m3u_sources WHERE id = 1").fetchone()
         previous_sha = previous["sha256"] if previous else None
+
         unchanged = previous_sha == metadata["sha256"]
 
         conn.execute(
@@ -246,7 +283,13 @@ def fetch_and_index_m3u(url: str, job_id: str) -> dict[str, int | bool | str]:
                 fetched_at = CURRENT_TIMESTAMP,
                 last_error = NULL
             """,
-            (url, metadata["local_path"], metadata["size_bytes"], metadata["md5"], metadata["sha256"]),
+            (
+                url,
+                metadata["local_path"],
+                metadata["size_bytes"],
+                metadata["md5"],
+                metadata["sha256"],
+            ),
         )
         conn.commit()
 
@@ -256,6 +299,7 @@ def fetch_and_index_m3u(url: str, job_id: str) -> dict[str, int | bool | str]:
 
     update_job(job_id, message="Source M3U changed; indexing channels")
     counts = index_m3u(SOURCE_M3U, job_id=job_id)
+
     update_job(
         job_id,
         status="complete",
@@ -264,4 +308,48 @@ def fetch_and_index_m3u(url: str, job_id: str) -> dict[str, int | bool | str]:
         progress_total=counts["channel_count"],
         finish=True,
     )
+
     return {"unchanged": False, **counts}
+
+
+def generate_filtered_m3u(job_id: str | None = None) -> dict[str, int | str]:
+    FILTERED_M3U.parent.mkdir(parents=True, exist_ok=True)
+
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                groups.name AS group_name,
+                channels.extinf,
+                channels.stream_url
+            FROM channels
+            JOIN groups ON groups.id = channels.group_id
+            WHERE channels.selected = 1
+              AND channels.missing = 0
+              AND groups.missing = 0
+            ORDER BY
+                CASE WHEN groups.user_order IS NULL THEN 1 ELSE 0 END,
+                groups.user_order ASC,
+                groups.provider_order ASC,
+                CASE WHEN channels.user_order IS NULL THEN 1 ELSE 0 END,
+                channels.user_order ASC,
+                channels.provider_order ASC
+            """
+        ).fetchall()
+
+    if job_id:
+        update_job(job_id, message=f"Writing filtered M3U ({len(rows):,} channels)")
+
+    tmp = FILTERED_M3U.with_suffix(".m3u.tmp")
+    with tmp.open("w", encoding="utf-8") as f:
+        f.write("#EXTM3U\\n")
+        for row in rows:
+            f.write(row["extinf"].rstrip() + "\\n")
+            f.write(row["stream_url"].rstrip() + "\\n")
+
+    shutil.move(str(tmp), str(FILTERED_M3U))
+
+    return {
+        "path": str(FILTERED_M3U),
+        "selected_count": len(rows),
+    }
