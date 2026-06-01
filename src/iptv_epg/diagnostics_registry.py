@@ -77,8 +77,6 @@ DIAGNOSTIC_ENDPOINTS: list[dict[str, Any]] = [
 
     endpoint(category="EPGShare", name="Generate EPGShare filtered EPG", method="POST", path="/api/epgshare/generate-filtered", sample_path="/api/epgshare/generate-filtered?days=3", description="Generates filtered_epg.xml from saved EPGShare mappings only."),
 
-    endpoint(category="EPGShare", name="EPG Management UI", method="GET", path="/epg", description="Product-style UI for reviewing EPGShare mappings and generating filtered EPG.", safe_auto_run=False),
-
     endpoint(category="Diagnostics", name="Diagnostics console", method="GET", path="/dev/diagnostics", description="Serves this diagnostics console."),
     endpoint(category="Diagnostics", name="Diagnostics endpoint registry", method="GET", path="/dev/diagnostics/endpoints", description="Returns registered diagnostics endpoint definitions.", safe_auto_run=True),
     endpoint(category="Diagnostics", name="Diagnostics coverage", method="GET", path="/dev/diagnostics/coverage", description="Compares actual FastAPI routes with registered diagnostics entries.", safe_auto_run=True),

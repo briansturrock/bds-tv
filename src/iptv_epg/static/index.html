@@ -12,10 +12,11 @@
       <h1>iptv_epg</h1>
       <div id="header-status" class="muted">Starting…</div>
     </div>
-    <nav>
+    <nav class="app-nav">
       <button class="tab-button active" data-tab="settings">Settings</button>
       <button class="tab-button" data-tab="channels">Channels</button>
-      <a class="tab-link" href="/epg">EPG</a>
+      <button class="tab-button" data-tab="epg">EPG</button>
+      <a class="tab-link" href="/dev/diagnostics" target="_blank" rel="noopener">Diagnostics</a>
     </nav>
   </header>
 
@@ -78,6 +79,77 @@
         </section>
       </div>
     </section>
+
+    <section id="tab-epg" class="tab-panel">
+      <div class="epg-shell">
+        <div class="epg-toolbar">
+          <div class="button-row">
+            <button id="epg-refresh">Refresh</button>
+            <button id="epg-import-index">Import/update EPGShare index</button>
+            <button id="epg-generate">Generate filtered EPG</button>
+          </div>
+          <div class="button-row">
+            <a class="button" href="/filtered.m3u" target="_blank" rel="noopener">Open filtered.m3u</a>
+            <a class="button" href="/filtered_epg.xml" target="_blank" rel="noopener">Open filtered_epg.xml</a>
+          </div>
+        </div>
+
+        <div id="epg-summary" class="epg-summary"></div>
+        <div id="epg-job-status" class="epg-job-status">No EPGShare jobs loaded yet.</div>
+
+        <div class="epg-layout">
+          <aside class="epg-channel-panel card">
+            <div class="epg-panel-head">
+              <h2>Selected channels</h2>
+              <input id="epg-channel-filter" type="search" placeholder="Filter EPG channels" />
+            </div>
+            <div id="epg-channel-list" class="epg-channel-list"></div>
+          </aside>
+
+          <section class="epg-detail-panel card">
+            <div id="epg-detail-empty" class="epg-empty">
+              Select a channel to review its EPG mapping.
+            </div>
+
+            <div id="epg-detail" class="epg-detail hidden">
+              <div class="epg-detail-header">
+                <div>
+                  <h2 id="epg-detail-title"></h2>
+                  <p id="epg-detail-meta" class="muted"></p>
+                </div>
+                <span id="epg-detail-status" class="epg-status"></span>
+              </div>
+
+              <section>
+                <h2>Current saved mapping</h2>
+                <div id="epg-current-mapping"></div>
+              </section>
+
+              <section>
+                <h2>Suggestions</h2>
+                <div id="epg-suggestions"></div>
+              </section>
+
+              <section>
+                <h2>Manual search</h2>
+                <div class="epg-search-row">
+                  <input id="epg-manual-query" />
+                  <button id="epg-manual-search">Search</button>
+                </div>
+                <div id="epg-manual-results"></div>
+              </section>
+
+              <section class="epg-save-bar">
+                <button id="epg-save-current">Save mapping</button>
+                <button id="epg-ignore-current">Mark as no EPG</button>
+                <span id="epg-save-state" class="muted"></span>
+              </section>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <script src="/static/app.js"></script>

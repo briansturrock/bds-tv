@@ -9,7 +9,6 @@ const state = {
   channelsTotal: 0,
   visibleChannelIds: [],
   visibleSelectedIds: [],
-  visibleChannels: [],
   activeJobTimer: null,
 };
 
@@ -145,44 +144,6 @@ function filterGroups() {
   renderGroups();
 }
 
-function selectedGroupsInCurrentOrder() {
-  return state.groups.filter((g) => (g.selected_count || 0) > 0);
-}
-
-async function saveSelectedGroupOrder() {
-  const groupIds = selectedGroupsInCurrentOrder().map((g) => g.id);
-  await api("/api/groups/order", {
-    method: "POST",
-    body: JSON.stringify({ group_ids: groupIds }),
-  });
-}
-
-async function moveSelectedGroup(groupId, direction) {
-  const selectedGroups = selectedGroupsInCurrentOrder();
-  const from = selectedGroups.findIndex((g) => g.id === groupId);
-  if (from < 0) return;
-
-  const to = from + direction;
-  if (to < 0 || to >= selectedGroups.length) return;
-
-  const selectedIds = new Set(selectedGroups.map((g) => g.id));
-  const globalFrom = state.groups.findIndex((g) => g.id === selectedGroups[from].id);
-  const globalTo = state.groups.findIndex((g) => g.id === selectedGroups[to].id);
-
-  const temp = state.groups[globalFrom];
-  state.groups[globalFrom] = state.groups[globalTo];
-  state.groups[globalTo] = temp;
-
-  try {
-    await saveSelectedGroupOrder();
-    setMessage("channels-info", "Saved group order.");
-    filterGroups();
-  } catch (err) {
-    setMessage("channels-info", `Could not save group order: ${err.message}`, true);
-    await loadGroups(false);
-  }
-}
-
 function renderGroups() {
   const list = $("groups-list");
   list.innerHTML = "";
@@ -192,8 +153,6 @@ function renderGroups() {
     return;
   }
 
-  const selectedGroups = selectedGroupsInCurrentOrder();
-  const selectedIndexById = new Map(selectedGroups.map((g, i) => [g.id, i]));
   const fragment = document.createDocumentFragment();
 
   for (const group of state.filteredGroups) {
@@ -203,31 +162,18 @@ function renderGroups() {
       row.classList.add("active");
     }
 
-    const selectedIndex = selectedIndexById.get(group.id);
-    const canOrder = selectedIndex !== undefined;
-    const upDisabled = !canOrder || selectedIndex === 0;
-    const downDisabled = !canOrder || selectedIndex === selectedGroups.length - 1;
-
     row.innerHTML = `
       <span title="${escapeHtml(group.name)}">${escapeHtml(group.name)}</span>
       <span class="counts">${group.selected_count || 0}/${group.channel_count || 0}</span>
-      <span class="order-buttons">
-        <button class="group-up" title="Move selected group up" ${upDisabled ? "disabled" : ""}>↑</button>
-        <button class="group-down" title="Move selected group down" ${downDisabled ? "disabled" : ""}>↓</button>
-      </span>
     `;
 
-    row.addEventListener("click", (event) => {
-      if (event.target.closest("button")) return;
+    row.addEventListener("click", () => {
       state.selectedGroupId = group.id;
       state.selectedGroup = group;
       state.channelsOffset = 0;
       renderGroups();
       loadChannels();
     });
-
-    row.querySelector(".group-up").addEventListener("click", () => moveSelectedGroup(group.id, -1));
-    row.querySelector(".group-down").addEventListener("click", () => moveSelectedGroup(group.id, 1));
 
     fragment.appendChild(row);
   }
@@ -249,55 +195,14 @@ async function loadChannels() {
   );
 
   state.channelsTotal = result.total || 0;
-  state.visibleChannels = result.channels || [];
-  state.visibleChannelIds = state.visibleChannels.map((c) => c.id);
-  state.visibleSelectedIds = state.visibleChannels.filter((c) => c.selected).map((c) => c.id);
+  state.visibleChannelIds = (result.channels || []).map((c) => c.id);
+  state.visibleSelectedIds = (result.channels || []).filter((c) => c.selected).map((c) => c.id);
 
   $("selected-group-meta").textContent =
     `${state.channelsTotal} channels · showing ${state.channelsOffset + 1}-${Math.min(state.channelsOffset + state.channelsLimit, state.channelsTotal)}`;
 
-  renderChannels(state.visibleChannels);
+  renderChannels(result.channels || []);
   updateSelectShownCheckbox();
-}
-
-function selectedVisibleChannelsInOrder() {
-  return state.visibleChannels.filter((c) => c.selected);
-}
-
-async function saveSelectedChannelOrder() {
-  const channelIds = selectedVisibleChannelsInOrder().map((c) => c.id);
-  if (!state.selectedGroupId || !channelIds.length) return;
-
-  await api("/api/channels/order", {
-    method: "POST",
-    body: JSON.stringify({ group_id: state.selectedGroupId, channel_ids: channelIds }),
-  });
-}
-
-async function moveSelectedChannel(channelId, direction) {
-  const selectedChannels = selectedVisibleChannelsInOrder();
-  const from = selectedChannels.findIndex((c) => c.id === channelId);
-  if (from < 0) return;
-
-  const to = from + direction;
-  if (to < 0 || to >= selectedChannels.length) return;
-
-  const globalFrom = state.visibleChannels.findIndex((c) => c.id === selectedChannels[from].id);
-  const globalTo = state.visibleChannels.findIndex((c) => c.id === selectedChannels[to].id);
-
-  const temp = state.visibleChannels[globalFrom];
-  state.visibleChannels[globalFrom] = state.visibleChannels[globalTo];
-  state.visibleChannels[globalTo] = temp;
-
-  try {
-    await saveSelectedChannelOrder();
-    setMessage("channels-info", "Saved channel order.");
-    renderChannels(state.visibleChannels);
-    updateSelectShownCheckbox();
-  } catch (err) {
-    setMessage("channels-info", `Could not save channel order: ${err.message}`, true);
-    await loadChannels();
-  }
 }
 
 function renderChannels(channels) {
@@ -305,12 +210,10 @@ function renderChannels(channels) {
   list.innerHTML = "";
 
   if (!channels.length) {
-    list.innerHTML = `<div class="channel-row"><span></span><span></span><span>No channels.</span><span></span><span></span></div>`;
+    list.innerHTML = `<div class="channel-row"><span></span><span></span><span>No channels.</span><span></span></div>`;
     return;
   }
 
-  const selectedChannels = channels.filter((c) => c.selected);
-  const selectedIndexById = new Map(selectedChannels.map((c, i) => [c.id, i]));
   const fragment = document.createDocumentFragment();
 
   for (const channel of channels) {
@@ -322,11 +225,6 @@ function renderChannels(channels) {
       : `<span></span>`;
 
     const tvg = channel.tvg_id ? `tvg-id: ${escapeHtml(channel.tvg_id)}` : "";
-    const selectedIndex = selectedIndexById.get(channel.id);
-    const canOrder = selectedIndex !== undefined;
-    const upDisabled = !canOrder || selectedIndex === 0;
-    const downDisabled = !canOrder || selectedIndex === selectedChannels.length - 1;
-
     row.innerHTML = `
       <input type="checkbox" ${channel.selected ? "checked" : ""} />
       ${logo}
@@ -335,10 +233,6 @@ function renderChannels(channels) {
         <div class="channel-meta">${tvg}</div>
       </div>
       <span class="muted">#${channel.provider_order}</span>
-      <span class="order-buttons">
-        <button class="channel-up" title="Move selected channel up" ${upDisabled ? "disabled" : ""}>↑</button>
-        <button class="channel-down" title="Move selected channel down" ${downDisabled ? "disabled" : ""}>↓</button>
-      </span>
     `;
 
     const checkbox = row.querySelector("input");
@@ -352,7 +246,12 @@ function renderChannels(channels) {
         setMessage("channels-info", `Saved: ${channel.name} ${checkbox.checked ? "selected" : "unselected"}.`);
         await loadStatus();
         await loadGroups(false);
-        await loadChannels();
+        if (checkbox.checked) {
+          if (!state.visibleSelectedIds.includes(channel.id)) state.visibleSelectedIds.push(channel.id);
+        } else {
+          state.visibleSelectedIds = state.visibleSelectedIds.filter((id) => id !== channel.id);
+        }
+        updateSelectShownCheckbox();
       } catch (err) {
         checkbox.checked = !checkbox.checked;
         setMessage("channels-info", `Selection failed: ${err.message}`, true);
@@ -360,9 +259,6 @@ function renderChannels(channels) {
         checkbox.disabled = false;
       }
     });
-
-    row.querySelector(".channel-up").addEventListener("click", () => moveSelectedChannel(channel.id, -1));
-    row.querySelector(".channel-down").addEventListener("click", () => moveSelectedChannel(channel.id, 1));
 
     fragment.appendChild(row);
   }
@@ -431,6 +327,16 @@ function switchTab(tab) {
   if (tab === "channels" && !state.groups.length) {
     loadGroups(true).catch((err) => setMessage("channels-info", `Could not load groups: ${err.message}`, true));
   }
+
+  if (tab === "epg" && !epgState.loaded) {
+    loadEpgReview().catch((err) => {
+      $("epg-job-status").textContent = `Could not load EPG review: ${err.message}`;
+    });
+  }
+
+  if (["settings", "channels", "epg"].includes(tab)) {
+    history.replaceState(null, "", `#${tab}`);
+  }
 }
 
 function escapeHtml(value) {
@@ -474,6 +380,13 @@ function wireEvents() {
 
 async function init() {
   wireEvents();
+  wireEpgEvents();
+
+  const initialTab = window.location.hash.replace("#", "");
+  if (["settings", "channels", "epg"].includes(initialTab)) {
+    switchTab(initialTab);
+  }
+
   try {
     await loadSettings();
     await loadStatus();
@@ -485,3 +398,300 @@ async function init() {
 }
 
 init();
+
+
+/* EPG tab integration */
+const epgState = {
+  review: null,
+  rows: [],
+  activeChannelId: null,
+  pending: null,
+  loaded: false,
+};
+
+function epgStatusFor(row) {
+  if (row.saved_mapping?.ignored) return "ignored";
+  if (row.saved_mapping) return "saved";
+  return row.status || "unmatched";
+}
+
+function epgMappingFromSaved(row) {
+  if (!row.saved_mapping || row.saved_mapping.ignored) return null;
+  return {
+    channel_id: row.channel_id,
+    xmltv_id: row.saved_mapping.xmltv_id,
+    source_key: row.saved_mapping.source_key,
+    mapping_type: row.saved_mapping.mapping_type || "manual",
+    confidence: row.saved_mapping.confidence ?? null,
+  };
+}
+
+function epgMappingFromOption(row, opt, mappingType = "manual") {
+  return {
+    channel_id: row.channel_id,
+    xmltv_id: opt.xmltv_id,
+    source_key: opt.source_key,
+    mapping_type: mappingType,
+    confidence: opt.confidence ?? 1,
+  };
+}
+
+async function loadEpgReview() {
+  const body = await api("/api/epgshare/mapping-review");
+  epgState.review = body;
+  epgState.rows = body.rows || [];
+  epgState.loaded = true;
+
+  if (!epgState.activeChannelId && epgState.rows.length) {
+    epgState.activeChannelId = epgState.rows[0].channel_id;
+  }
+
+  if (!epgState.rows.some((row) => row.channel_id === epgState.activeChannelId)) {
+    epgState.activeChannelId = epgState.rows[0]?.channel_id || null;
+  }
+
+  epgState.pending = null;
+  renderEpg();
+  await loadEpgJobs();
+}
+
+async function refreshEpg() {
+  await loadEpgReview();
+}
+
+function renderEpg() {
+  renderEpgSummary();
+  renderEpgChannelList();
+  renderEpgDetail();
+}
+
+function renderEpgSummary() {
+  if (!epgState.review) return;
+  const s = epgState.review.summary;
+  $("epg-summary").innerHTML = `
+    <span class="epg-pill">Selected <strong>${s.selected_channel_count}</strong></span>
+    <span class="epg-pill">Exact <strong>${s.exact_match_count}</strong></span>
+    <span class="epg-pill">Suggested <strong>${s.suggested_match_count}</strong></span>
+    <span class="epg-pill">Unmatched <strong>${s.unmatched_count}</strong></span>
+    <span class="epg-pill">Saved <strong>${s.saved_mapping_count}</strong></span>
+    <span class="epg-pill">Required XML <strong>${s.required_source_count}</strong></span>
+  `;
+}
+
+function renderEpgChannelList() {
+  if (!epgState.review) return;
+
+  const filter = $("epg-channel-filter").value.trim().toLowerCase();
+  const rows = epgState.rows.filter((row) => {
+    const haystack = `${row.name} ${row.tvg_id} ${row.group_name} ${epgStatusFor(row)}`.toLowerCase();
+    return !filter || haystack.includes(filter);
+  });
+
+  $("epg-channel-list").innerHTML = rows.map((row) => `
+    <div class="epg-channel-card ${row.channel_id === epgState.activeChannelId ? "active" : ""}" data-channel-id="${escapeAttr(row.channel_id)}">
+      <strong>${escapeHtml(row.name)}</strong>
+      <div class="meta">${escapeHtml(row.group_name)} · ${escapeHtml(row.tvg_id)}</div>
+      <div class="epg-badges">
+        <span class="epg-status ${escapeAttr(epgStatusFor(row))}">${escapeHtml(epgStatusFor(row))}</span>
+        ${row.recommended ? `<span class="epg-status">${escapeHtml(row.recommended.source_key)}</span>` : ""}
+      </div>
+    </div>
+  `).join("");
+
+  document.querySelectorAll(".epg-channel-card").forEach((el) => {
+    el.addEventListener("click", () => {
+      epgState.activeChannelId = el.dataset.channelId;
+      epgState.pending = null;
+      renderEpg();
+    });
+  });
+}
+
+function activeEpgRow() {
+  return epgState.rows.find((row) => row.channel_id === epgState.activeChannelId) || null;
+}
+
+function renderEpgDetail() {
+  const row = activeEpgRow();
+
+  if (!row) {
+    $("epg-detail").classList.add("hidden");
+    $("epg-detail-empty").classList.remove("hidden");
+    return;
+  }
+
+  $("epg-detail-empty").classList.add("hidden");
+  $("epg-detail").classList.remove("hidden");
+
+  $("epg-detail-title").textContent = row.name || "";
+  $("epg-detail-meta").textContent = `${row.group_name || ""} · tvg-id: ${row.tvg_id || ""}`;
+  $("epg-detail-status").textContent = epgStatusFor(row);
+  $("epg-detail-status").className = `epg-status ${epgStatusFor(row)}`;
+
+  renderEpgCurrent(row);
+  renderEpgSuggestions(row);
+  $("epg-manual-query").value = row.tvg_id || row.name || "";
+  $("epg-manual-results").innerHTML = "";
+  $("epg-save-state").textContent = "";
+}
+
+function renderEpgCurrent(row) {
+  const saved = row.saved_mapping;
+
+  if (!saved) {
+    $("epg-current-mapping").innerHTML = `<p>No saved mapping yet.</p>`;
+    return;
+  }
+
+  if (saved.ignored) {
+    $("epg-current-mapping").innerHTML = `<div class="epg-option selected"><strong>No EPG / ignored</strong><div class="meta">Saved ${escapeHtml(saved.updated_at)}</div></div>`;
+    return;
+  }
+
+  $("epg-current-mapping").innerHTML = `
+    <div class="epg-option selected">
+      <strong>${escapeHtml(saved.xmltv_id)}</strong>
+      <div class="meta">${escapeHtml(saved.source_key)} · ${escapeHtml(saved.mapping_type)} · saved ${escapeHtml(saved.updated_at)}</div>
+    </div>
+  `;
+}
+
+function renderEpgSuggestions(row) {
+  const suggestions = row.suggestions || [];
+
+  if (!suggestions.length) {
+    $("epg-suggestions").innerHTML = `<p>No suggestions. Use manual search.</p>`;
+    return;
+  }
+
+  $("epg-suggestions").innerHTML = suggestions
+    .map((opt, idx) => renderEpgOption(opt, idx === 0 ? "recommended" : "manual"))
+    .join("");
+  wireEpgOptions();
+}
+
+function renderEpgOption(opt, type) {
+  const pending = epgState.pending;
+  const selected = pending?.xmltv_id === opt.xmltv_id && pending?.source_key === opt.source_key;
+
+  return `
+    <div class="epg-option ${selected ? "selected" : ""}"
+      data-xmltv-id="${escapeAttr(opt.xmltv_id)}"
+      data-source-key="${escapeAttr(opt.source_key)}"
+      data-confidence="${escapeAttr(opt.confidence ?? 1)}"
+      data-type="${escapeAttr(type)}">
+      <strong>${escapeHtml(opt.xmltv_id)}</strong>
+      <div class="meta">${escapeHtml(opt.source_key)} · confidence ${escapeHtml(opt.confidence ?? "exact")}</div>
+      <div class="reason">${escapeHtml(opt.reason || "exact/manual")} ${opt.country_match ? "· country match" : ""}</div>
+    </div>
+  `;
+}
+
+function wireEpgOptions() {
+  document.querySelectorAll("#epg-suggestions .epg-option, #epg-manual-results .epg-option").forEach((el) => {
+    el.addEventListener("click", () => {
+      const row = activeEpgRow();
+      epgState.pending = {
+        channel_id: row.channel_id,
+        xmltv_id: el.dataset.xmltvId,
+        source_key: el.dataset.sourceKey,
+        mapping_type: el.dataset.type || "manual",
+        confidence: Number(el.dataset.confidence || 1),
+      };
+      renderEpgDetail();
+      $("epg-save-state").textContent = "Unsaved selection";
+    });
+  });
+}
+
+async function saveCurrentEpgMapping() {
+  const row = activeEpgRow();
+  const mapping =
+    epgState.pending ||
+    epgMappingFromSaved(row) ||
+    (row.recommended ? epgMappingFromOption(row, row.recommended, row.status === "exact" ? "exact" : "suggested") : null);
+
+  if (!mapping) {
+    alert("Choose a mapping first.");
+    return;
+  }
+
+  await saveEpgMappings([mapping]);
+}
+
+async function ignoreCurrentEpgMapping() {
+  const row = activeEpgRow();
+  await saveEpgMappings([{ channel_id: row.channel_id, ignored: true, mapping_type: "ignored" }]);
+}
+
+async function saveEpgMappings(mappings) {
+  $("epg-save-state").textContent = "Saving...";
+  const body = await api("/api/epgshare/mappings", {
+    method: "POST",
+    body: JSON.stringify({ mappings }),
+  });
+
+  if (!body.ok) {
+    $("epg-save-state").textContent = "Save failed";
+    alert(JSON.stringify(body));
+    return;
+  }
+
+  $("epg-save-state").textContent = "Saved";
+  await loadEpgReview();
+}
+
+async function manualEpgSearch() {
+  const q = $("epg-manual-query").value.trim();
+  $("epg-manual-results").innerHTML = `<p>Searching...</p>`;
+
+  const body = await api(`/api/epgshare/search?q=${encodeURIComponent(q)}&limit=30`);
+  $("epg-manual-results").innerHTML = (body.results || [])
+    .map((result) => renderEpgOption({
+      xmltv_id: result.xmltv_id,
+      source_key: result.source_key,
+      confidence: 1,
+      reason: "manual search result",
+    }, "manual"))
+    .join("") || `<p>No results.</p>`;
+
+  wireEpgOptions();
+}
+
+async function importEpgIndex() {
+  if (!confirm("Start EPGShare index import/update?")) return;
+  const body = await api("/api/epgshare/index", { method: "POST" });
+  alert(`Index job started: ${body.job_id}`);
+  await loadEpgJobs();
+}
+
+async function generateEpgFromMappings() {
+  if (!confirm("Generate filtered_epg.xml from saved mappings only?")) return;
+  const body = await api("/api/epgshare/generate-filtered?days=3", { method: "POST" });
+  alert(`Generation job started: ${body.job_id}`);
+  await loadEpgJobs();
+}
+
+async function loadEpgJobs() {
+  try {
+    const body = await api("/api/jobs");
+    const jobs = (body.jobs || []).filter((job) => String(job.job_type || "").startsWith("epgshare"));
+    const latest = jobs[0];
+
+    $("epg-job-status").innerHTML = latest
+      ? `Latest EPGShare job: <strong>${escapeHtml(latest.status)}</strong> — ${escapeHtml(latest.message || latest.job_type || "")}`
+      : "No EPGShare jobs yet.";
+  } catch (err) {
+    $("epg-job-status").textContent = `Could not load EPG jobs: ${err.message}`;
+  }
+}
+
+function wireEpgEvents() {
+  $("epg-refresh").addEventListener("click", () => refreshEpg().catch((err) => alert(err.message)));
+  $("epg-channel-filter").addEventListener("input", renderEpgChannelList);
+  $("epg-save-current").addEventListener("click", () => saveCurrentEpgMapping().catch((err) => alert(err.message)));
+  $("epg-ignore-current").addEventListener("click", () => ignoreCurrentEpgMapping().catch((err) => alert(err.message)));
+  $("epg-manual-search").addEventListener("click", () => manualEpgSearch().catch((err) => alert(err.message)));
+  $("epg-import-index").addEventListener("click", () => importEpgIndex().catch((err) => alert(err.message)));
+  $("epg-generate").addEventListener("click", () => generateEpgFromMappings().catch((err) => alert(err.message)));
+}

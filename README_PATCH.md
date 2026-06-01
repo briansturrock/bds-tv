@@ -1,4 +1,4 @@
-# Patch: Tighten EPG product UI layout
+# Patch: Integrate EPG into the main app shell
 
 Apply this on branch:
 
@@ -6,24 +6,56 @@ Apply this on branch:
 epg-product-ui
 ```
 
-This fixes the first-pass EPG Management UI issues:
+This is not a cosmetic navigation patch. It moves the EPG UI into the same root app shell as Settings and Channels.
 
-- Adds an EPG link to the main app header.
-- Makes `/epg` feel like part of the app, not a separate tool.
-- Removes the "App" external-style link from the EPG page.
-- Shrinks the top header/summary/job area.
-- Shows only the latest EPGShare job line instead of a large job history block.
-- Makes the channel rows much more compact.
-- Gives the left channel list enough usable height and its own scrollbar.
-- Keeps the right detail pane scrollable only when it has real content.
+## Result
+
+The root app now has equal top-level sections:
+
+```text
+Settings | Channels | EPG | Diagnostics
+```
+
+Core pages live in the root app:
+
+```text
+/          Settings, Channels, EPG
+/dev/...   Developer tools only
+```
+
+## What this patch does
+
+- Adds an `EPG` tab inside `src/iptv_epg/static/index.html`.
+- Moves the EPG Management UI into that root tab.
+- Adds EPG styles to `app.css`.
+- Adds EPG behaviour to `app.js`.
+- Removes the `/epg` product route wiring from `main.py`.
+- Removes the `/epg` diagnostics row.
+- Keeps `/dev/epgshare-matching` as a dev page for now.
+
+## Cleanup required
+
+After applying the patch, remove the obsolete standalone EPG product page files:
+
+```bash
+git rm -f src/iptv_epg/epg_product_routes.py
+git rm -f src/iptv_epg/static/epg.html
+git rm -f src/iptv_epg/static/epg.css
+git rm -f src/iptv_epg/static/epg.js
+```
 
 ## Apply
 
 ```bash
-unzip iptv_epg_patch_epg_product_ui_layout_fix.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_integrate_epg_into_app_shell.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
+git rm -f src/iptv_epg/epg_product_routes.py
+git rm -f src/iptv_epg/static/epg.html
+git rm -f src/iptv_epg/static/epg.css
+git rm -f src/iptv_epg/static/epg.js
+git status --short
 git add .
-git commit -m "Tighten EPG product UI layout"
+git commit -m "Integrate EPG into main app shell"
 git push
 ```
 
@@ -36,9 +68,14 @@ sudo docker compose up --build -d
 curl http://127.0.0.1:8088/health
 ```
 
-Open:
+Test:
 
 ```text
 http://192.168.0.156:8088/
-http://192.168.0.156:8088/epg
+http://192.168.0.156:8088/#settings
+http://192.168.0.156:8088/#channels
+http://192.168.0.156:8088/#epg
+http://192.168.0.156:8088/dev/diagnostics
 ```
+
+`/epg` should no longer be the product route. The product EPG UI is now the EPG tab inside `/`.

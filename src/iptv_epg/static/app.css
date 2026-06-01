@@ -287,3 +287,249 @@ a {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Unified top-level navigation */
+.app-nav {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.app-nav .tab-button,
+.app-nav .tab-link {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  border-radius: 10px;
+  padding: 8px 18px;
+  text-decoration: none;
+  cursor: pointer;
+  font: inherit;
+}
+
+.app-nav .tab-button:hover,
+.app-nav .tab-button.active,
+.app-nav .tab-link:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* EPG tab */
+.epg-shell {
+  display: grid;
+  gap: 10px;
+}
+
+.epg-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.epg-summary {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.epg-pill {
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.epg-job-status {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  background: #fbfcff;
+  border-radius: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.epg-layout {
+  height: calc(100vh - 235px);
+  min-height: 520px;
+  display: grid;
+  grid-template-columns: minmax(280px, 31%) 1fr;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.epg-channel-panel,
+.epg-detail-panel {
+  margin-bottom: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.epg-panel-head {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.epg-channel-list {
+  height: calc(100% - 72px);
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.epg-channel-card {
+  padding: 7px 10px;
+  border-bottom: 1px solid #eef0f4;
+  cursor: pointer;
+  display: grid;
+  gap: 3px;
+}
+
+.epg-channel-card:hover,
+.epg-channel-card.active {
+  background: #eff6ff;
+}
+
+.epg-channel-card strong {
+  display: block;
+  line-height: 1.2;
+  font-size: 13px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.epg-channel-card .meta {
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.epg-badges {
+  display: flex;
+  gap: 5px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.epg-status {
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 11px;
+  background: #f3f4f6;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 160px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.epg-status.saved { background: #eff6ff; color: var(--accent); }
+.epg-status.exact { background: var(--success-bg); color: var(--success-text); }
+.epg-status.suggested { background: #fff7ed; color: #92400e; }
+.epg-status.unmatched { background: var(--danger-bg); color: var(--danger-text); }
+.epg-status.ignored { background: #f3f4f6; color: var(--muted); }
+
+.epg-detail-panel {
+  overflow-y: auto;
+}
+
+.epg-empty {
+  min-height: 320px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.hidden { display: none !important; }
+
+.epg-detail {
+  display: grid;
+  gap: 12px;
+}
+
+.epg-detail-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+
+.epg-option {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px;
+  margin-bottom: 7px;
+  display: grid;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.epg-option:hover,
+.epg-option.selected {
+  background: #eff6ff;
+  border-color: var(--accent);
+}
+
+.epg-option strong {
+  font-size: 13px;
+}
+
+.epg-option .meta,
+.epg-option .reason {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.epg-search-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.epg-save-bar {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  position: sticky;
+  bottom: 0;
+  background: var(--card);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 850px) {
+  .epg-layout {
+    height: auto;
+    min-height: 0;
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+
+  .epg-channel-list {
+    max-height: 340px;
+  }
+}
