@@ -1,29 +1,27 @@
-# Patch: Add EPGShare endpoints to Diagnostics registry
+# Fixed patch: EPGShare Diagnostics registry entries
 
-Apply this on branch:
+The previous registry-only patch was a no-op due to a marker mismatch. This fixed patch overwrites `src/iptv_epg/diagnostics_registry.py` with EPGShare entries included.
 
-```text
-epgshare-index
+Apply on branch `epgshare-index`.
+
+## Expected change after unzip
+
+```bash
+git status --short
 ```
 
-This fixes the issue where EPGShare backend routes exist but do not appear in `/dev/diagnostics`.
-
-## Adds Diagnostics rows for
+should show:
 
 ```text
-GET  /api/epgshare/status
-POST /api/epgshare/index
-GET  /api/epgshare/search?q=BBC&limit=50
-GET  /api/epgshare/matches
+ M src/iptv_epg/diagnostics_registry.py
 ```
 
 ## Apply
 
-From the repo root:
-
 ```bash
-unzip iptv_epg_patch_epgshare_diagnostics_registry.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_epgshare_diagnostics_registry_fixed.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
+git status --short
 git add .
 git commit -m "Add EPGShare diagnostics entries"
 git push
@@ -34,12 +32,7 @@ git push
 ```bash
 cd /docker/iptv_epg/repo
 sudo git pull
+sudo grep -n "EPGShare" src/iptv_epg/diagnostics_registry.py
 sudo docker compose up --build -d
 curl http://127.0.0.1:8088/health
-```
-
-Then reopen:
-
-```text
-http://192.168.0.156:8088/dev/diagnostics
 ```

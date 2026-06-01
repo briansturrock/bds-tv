@@ -65,6 +65,11 @@ DIAGNOSTIC_ENDPOINTS: list[dict[str, Any]] = [
     endpoint(category="EPG", name="Generate filtered EPG", method="POST", path="/api/epg/generate-filtered", sample_path="/api/epg/generate-filtered?days=3", description="Starts a backend job to generate filtered_epg.xml."),
     endpoint(category="EPG", name="Open filtered EPG", method="GET", path="/filtered_epg.xml", description="Returns generated filtered_epg.xml."),
 
+    endpoint(category="EPGShare", name="EPGShare status", method="GET", path="/api/epgshare/status", description="Shows EPGShare index status and indexed channel/source counts.", safe_auto_run=True),
+    endpoint(category="EPGShare", name="Import EPGShare index", method="POST", path="/api/epgshare/index", description="Starts a backend job to import epg_ripper_ALL_SOURCES1.txt into SQLite."),
+    endpoint(category="EPGShare", name="Search EPGShare index", method="GET", path="/api/epgshare/search", sample_path="/api/epgshare/search?q=BBC&limit=50", description="Searches the imported EPGShare channel index."),
+    endpoint(category="EPGShare", name="Match selected channels against EPGShare", method="GET", path="/api/epgshare/matches", description="Matches selected IPTV channels by tvg-id against the imported EPGShare index and reports required XML.GZ files.", safe_auto_run=True),
+
     endpoint(category="Diagnostics", name="Diagnostics console", method="GET", path="/dev/diagnostics", description="Serves this diagnostics console."),
     endpoint(category="Diagnostics", name="Diagnostics endpoint registry", method="GET", path="/dev/diagnostics/endpoints", description="Returns registered diagnostics endpoint definitions.", safe_auto_run=True),
     endpoint(category="Diagnostics", name="Diagnostics coverage", method="GET", path="/dev/diagnostics/coverage", description="Compares actual FastAPI routes with registered diagnostics entries.", safe_auto_run=True),
