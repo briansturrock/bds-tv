@@ -1,4 +1,4 @@
-# Patch: Fix EPGShare country_match boolean
+# Patch: Fix EPGShare required source merge mutation
 
 Apply this on branch:
 
@@ -6,43 +6,32 @@ Apply this on branch:
 epgshare-index
 ```
 
-This fixes `country_match: false` for clearly country-scoped EPGShare matches.
+## Bug
 
-## Why
+`exact_required_sources` was being contaminated by suggested matches.
 
-The previous source-key country parser used a regex capture for:
-
-```text
-epg_ripper_<letters><optional digits>
-```
-
-This patch makes the parsing explicit:
+Example symptom:
 
 ```text
-strip "epg_ripper_"
-strip trailing digits
-strip non-letters
-apply generic country aliases
+matches only contains BLAZE.uk as exact
+exact_required_sources also contains CBBC.HD.uk and BBC.One.CI.HD.uk
 ```
 
-So source keys like these are parsed generically:
+## Cause
 
-```text
-epg_ripper_CA2 -> CA
-epg_ripper_US2 -> US
-epg_ripper_UK1 -> UK
-epg_ripper_FR1 -> FR
-```
+`all_required_sources = dict(exact_required_sources)` made a shallow copy. The nested source dictionaries were shared, so merging suggestions into `required_sources` mutated `exact_required_sources`.
 
-These are examples only; there is no hardcoded country list.
+## Fix
+
+Build `required_sources` using copied nested dictionaries/lists.
 
 ## Apply
 
 ```bash
-unzip iptv_epg_patch_epgshare_country_match_bool.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_epgshare_required_sources_copy.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
 git add .
-git commit -m "Fix EPGShare country match detection"
+git commit -m "Fix EPGShare required source summary mutation"
 git push
 ```
 
@@ -61,4 +50,10 @@ Then rerun:
 GET /api/epgshare/matches
 ```
 
-Expected: country_match should now be true for suggestions whose selected-channel group country matches the EPGShare source key.
+Expected:
+
+```text
+exact_required_sources should contain only exact matches.
+suggested_required_sources should contain only suggested matches.
+required_sources should contain the merged view.
+```

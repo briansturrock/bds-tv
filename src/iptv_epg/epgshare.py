@@ -663,10 +663,29 @@ def epgshare_matches() -> dict[str, Any]:
 
             unmatched.append({**channel, "reason": "no exact or suggested EPGShare match found"})
 
-    all_required_sources = dict(exact_required_sources)
+    # Build merged required_sources without mutating exact_required_sources or
+    # suggested_required_sources.  A shallow dict copy reuses nested dictionaries,
+    # which made exact_required_sources appear to contain suggested matches.
+    all_required_sources = {
+        source_key: {
+            "source_key": source["source_key"],
+            "txt_url": source["txt_url"],
+            "xml_url": source["xml_url"],
+            "matched_channel_count": source["matched_channel_count"],
+            "matched_xmltv_ids": list(source["matched_xmltv_ids"]),
+        }
+        for source_key, source in exact_required_sources.items()
+    }
+
     for source_key, source in suggested_required_sources.items():
         if source_key not in all_required_sources:
-            all_required_sources[source_key] = source
+            all_required_sources[source_key] = {
+                "source_key": source["source_key"],
+                "txt_url": source["txt_url"],
+                "xml_url": source["xml_url"],
+                "matched_channel_count": source["matched_channel_count"],
+                "matched_xmltv_ids": list(source["matched_xmltv_ids"]),
+            }
             continue
 
         all_required_sources[source_key]["matched_channel_count"] += source["matched_channel_count"]
