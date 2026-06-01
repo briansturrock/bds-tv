@@ -765,6 +765,11 @@ body:has(#tab-channels.active) {
   overflow: auto;
 }
 
+.guide-scroll {
+  min-width: max-content;
+  overflow: visible;
+}
+
 .guide-empty {
   height: 100%;
   display: grid;
@@ -774,18 +779,24 @@ body:has(#tab-channels.active) {
 
 .guide-channel-row {
   display: grid;
-  grid-template-columns: 190px minmax(0, 1fr);
+  grid-template-columns: 190px minmax(900px, max-content);
   gap: 10px;
   border-bottom: 1px solid #eef0f4;
   padding: 8px 0;
+  align-items: stretch;
 }
 
 .guide-channel-info {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--card);
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);
   gap: 8px;
   align-items: center;
   min-width: 0;
+  padding-left: 2px;
 }
 
 .guide-channel-info img {
@@ -804,13 +815,13 @@ body:has(#tab-channels.active) {
 .guide-programmes {
   display: flex;
   gap: 6px;
-  overflow-x: auto;
+  overflow: visible;
   padding-bottom: 4px;
 }
 
 .guide-programme {
-  min-width: 170px;
-  max-width: 260px;
+  width: 190px;
+  min-width: 190px;
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 7px 8px;
@@ -860,4 +871,15 @@ body:has(#tab-channels.active) {
   .guide-channel-row {
     grid-template-columns: 1fr;
   }
+}
+
+
+.guide-date-label {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+#guide-date {
+  width: auto;
+  min-height: 40px;
 }

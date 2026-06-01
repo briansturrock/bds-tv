@@ -101,24 +101,57 @@ def selected_channels_for_group(group_id: str) -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
-def programmes_for_tvg_ids(tvg_ids: set[str], hours_back: int, hours_forward: int) -> dict[str, list[dict[str, Any]]]:
+def guide_window_for_date(date_value: str | None) -> tuple[datetime, datetime, str]:
+    """Return the guide window for a YYYY-MM-DD date.
+
+    The window is UTC for now. The UI sends the browser's selected date. The key
+    rule is overlap, not start-time-only: a long programme that started before
+    the date/window but is still airing inside it is included.
+    """
+    if date_value:
+        try:
+            day = datetime.strptime(date_value, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    return day, day + timedelta(days=1), day.date().isoformat()
+
+
+def programme_overlaps_window(start: datetime | None, stop: datetime | None, window_start: datetime, window_end: datetime) -> bool:
+    if start is None and stop is None:
+        return True
+
+    start_utc = start.astimezone(timezone.utc) if start else None
+    stop_utc = stop.astimezone(timezone.utc) if stop else None
+
+    if stop_utc is not None and stop_utc <= window_start:
+        return False
+
+    if start_utc is not None and start_utc >= window_end:
+        return False
+
+    return True
+
+
+def programmes_for_tvg_ids(tvg_ids: set[str], date_value: str | None) -> tuple[dict[str, list[dict[str, Any]]], str]:
     epg_path = filtered_epg_path()
     programmes: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
+    window_start, window_end, selected_date = guide_window_for_date(date_value)
+
     if not epg_path.exists() or not tvg_ids:
-        return programmes
+        return programmes, selected_date
 
     now = datetime.now(timezone.utc)
-    window_start = now - timedelta(hours=max(0, min(hours_back, 24)))
-    window_end = now + timedelta(hours=max(1, min(hours_forward, 72)))
 
     try:
         context = ET.iterparse(epg_path, events=("end",))
         for _event, elem in context:
             # Do not clear child elements such as <title>, <desc>, <category>,
             # etc. before the parent <programme> has been processed. Clearing
-            # non-programme elements here strips useful guide metadata and makes
-            # every programme appear as Untitled/no description.
+            # non-programme elements here strips useful guide metadata.
             if elem.tag != "programme":
                 continue
 
@@ -130,11 +163,7 @@ def programmes_for_tvg_ids(tvg_ids: set[str], hours_back: int, hours_forward: in
             start = parse_xmltv_time(elem.attrib.get("start"))
             stop = parse_xmltv_time(elem.attrib.get("stop"))
 
-            if start and start.astimezone(timezone.utc) > window_end:
-                elem.clear()
-                continue
-
-            if stop and stop.astimezone(timezone.utc) < window_start:
+            if not programme_overlaps_window(start, stop, window_start, window_end):
                 elem.clear()
                 continue
 
@@ -155,12 +184,12 @@ def programmes_for_tvg_ids(tvg_ids: set[str], hours_back: int, hours_forward: in
             )
             elem.clear()
     except ET.ParseError:
-        return programmes
+        return programmes, selected_date
 
     for items in programmes.values():
         items.sort(key=lambda p: p.get("start") or "")
 
-    return programmes
+    return programmes, selected_date
 
 
 @router.get("/groups")
@@ -176,8 +205,7 @@ def api_guide_groups() -> dict[str, Any]:
 @router.get("")
 def api_guide(
     group_id: str = Query(...),
-    hours_back: int = Query(2, ge=0, le=24),
-    hours_forward: int = Query(10, ge=1, le=72),
+    date: str | None = Query(None, description="Guide date in YYYY-MM-DD format"),
 ) -> dict[str, Any]:
     groups = selected_guide_groups()
     group = next((item for item in groups if item["id"] == group_id), None)
@@ -195,7 +223,7 @@ def api_guide(
 
     channels = selected_channels_for_group(group_id)
     tvg_ids = {channel["tvg_id"] for channel in channels if channel.get("tvg_id")}
-    programmes_by_channel = programmes_for_tvg_ids(tvg_ids, hours_back, hours_forward)
+    programmes_by_channel, selected_date = programmes_for_tvg_ids(tvg_ids, date)
 
     programme_count = 0
     for channel in channels:
@@ -210,6 +238,5 @@ def api_guide(
         "channel_count": len(channels),
         "programme_count": programme_count,
         "epg_path": str(filtered_epg_path()),
-        "hours_back": hours_back,
-        "hours_forward": hours_forward,
+        "date": selected_date,
     }

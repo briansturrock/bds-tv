@@ -877,13 +877,25 @@ function renderGuideGroups() {
   });
 }
 
+function selectedGuideDate() {
+  return $("guide-date")?.value || new Date().toISOString().slice(0, 10);
+}
+
+function initialiseGuideDate() {
+  const input = $("guide-date");
+  if (input && !input.value) {
+    input.value = new Date().toISOString().slice(0, 10);
+  }
+}
+
 async function loadGuideForGroup(groupId) {
+  initialiseGuideDate();
   $("guide-status").textContent = "Loading guide…";
   $("guide-content").classList.add("hidden");
   $("guide-empty").classList.remove("hidden");
   $("guide-empty").textContent = "Loading guide…";
 
-  const body = await api(`/api/guide?group_id=${encodeURIComponent(groupId)}`);
+  const body = await api(`/api/guide?group_id=${encodeURIComponent(groupId)}&date=${encodeURIComponent(selectedGuideDate())}`);
 
   if (!body.group) {
     $("guide-status").textContent = body.message || "No guide data.";
@@ -903,13 +915,13 @@ function formatGuideTime(value) {
 
 function renderGuide(body) {
   $("guide-status").textContent =
-    `${body.group.name}: ${body.channel_count} selected channels · ${body.programme_count} programmes`;
+    `${body.group.name}: ${body.channel_count} selected channels · ${body.programme_count} programmes · ${body.date}`;
 
   const content = $("guide-content");
   content.classList.remove("hidden");
   $("guide-empty").classList.add("hidden");
 
-  content.innerHTML = (body.channels || []).map((channel) => {
+  const rowsHtml = (body.channels || []).map((channel) => {
     const logo = channel.logo_url
       ? `<img src="${escapeAttr(channel.logo_url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'" />`
       : `<span></span>`;
@@ -931,6 +943,9 @@ function renderGuide(body) {
       </div>
     `;
   }).join("");
+
+  content.innerHTML = `<div class="guide-scroll">${rowsHtml}</div>`;
+  content.scrollLeft = 0;
 }
 
 function renderGuideProgramme(programme) {
@@ -949,9 +964,19 @@ function renderGuideProgramme(programme) {
 }
 
 function wireGuideEvents() {
+  initialiseGuideDate();
+
   $("guide-refresh").addEventListener("click", () => loadGuideGroups().catch((err) => {
     $("guide-status").textContent = `Could not refresh guide: ${err.message}`;
   }));
+
+  $("guide-date").addEventListener("change", () => {
+    if (guideState.activeGroupId) {
+      loadGuideForGroup(guideState.activeGroupId).catch((err) => {
+        $("guide-status").textContent = `Could not load guide date: ${err.message}`;
+      });
+    }
+  });
 
   $("guide-group-filter").addEventListener("input", filterGuideGroups);
 }

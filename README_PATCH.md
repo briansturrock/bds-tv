@@ -1,4 +1,4 @@
-# Patch: Preserve Guide programme titles/descriptions
+# Patch: Guide date window and shared horizontal scroll
 
 Apply this on branch:
 
@@ -6,39 +6,61 @@ Apply this on branch:
 guide-page
 ```
 
-## Problem
+## Fixes
 
-The Guide tab showed every airing as:
+### 1. Date/window logic
+
+The Guide now uses a selected date window:
 
 ```text
-Untitled
+selected date 00:00 -> next day 00:00
 ```
 
-with no description, even though `filtered_epg.xml` contains programme metadata.
+and includes programmes that overlap that date window.
 
-## Cause
+That means:
 
-The Guide backend uses `ElementTree.iterparse()`. It was clearing child nodes like:
+- programmes already ended before the selected date are excluded
+- programmes starting after the selected date are excluded
+- long programmes that started before the window but are still airing inside it are included
+- current airing still gets highlighted
 
-```xml
-<title>
-<desc>
-<category>
+### 2. Shared horizontal scrolling
+
+The guide no longer gives each channel its own horizontal scrollbar.
+
+Instead:
+
+- the whole guide window scrolls horizontally
+- channel rows stay aligned
+- channel names/logos stay sticky on the left
+- programme cards share one horizontal timeline area
+
+## UI
+
+Adds a date picker to the Guide tab.
+
+## Endpoint change
+
+```text
+GET /api/guide?group_id=<id>&date=YYYY-MM-DD
 ```
 
-before the parent `<programme>` element was processed.
+## Backlog noted
 
-## Fix
+EPG generation should allow choosing:
 
-Only clear elements once the parent `<programme>` has been processed/skipped.
+```text
+3, 5, 7, 14 days
+```
 
 ## Apply
 
 ```bash
-unzip iptv_epg_patch_guide_preserve_programme_metadata.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_guide_date_window_shared_scroll.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
 git add .
-git commit -m "Preserve guide programme metadata"
+git commit -m "Add guide date window and shared scroll"
 git push
 ```
 
@@ -56,5 +78,3 @@ Test:
 ```text
 http://192.168.0.156:8088/#guide
 ```
-
-You should now see real programme titles and hover descriptions where they exist in the XML.
