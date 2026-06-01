@@ -232,6 +232,12 @@ function renderGroups() {
       state.selectedGroup = group;
       state.channelsOffset = 0;
       renderGroups();
+
+      const channelsPane = document.querySelector(".channels-pane");
+      const channelsList = $("channels-list");
+      if (channelsPane) channelsPane.scrollTop = 0;
+      if (channelsList) channelsList.scrollTop = 0;
+
       loadChannels().catch((err) => {
         $("selected-group-meta").textContent = "Could not load channels.";
         $("channels-list").innerHTML = `<div class="channel-row"><span></span><span></span><span>Could not load channels: ${escapeHtml(err.message)}</span><span></span><span></span><span></span></div>`;
@@ -306,6 +312,8 @@ async function loadChannels() {
 
   try {
     renderChannels(result.channels || []);
+    const channelsList = $("channels-list");
+    if (channelsList) channelsList.scrollTop = 0;
     updateSelectShownCheckbox();
   } catch (err) {
     $("selected-group-meta").textContent = "Could not render channels.";

@@ -1,4 +1,4 @@
-# Patch: Restore select-shown checkbox helpers
+# Patch: Channels toolbar button styling and independent scrolling
 
 Apply this on branch:
 
@@ -6,34 +6,25 @@ Apply this on branch:
 epg-product-ui
 ```
 
-## Problem
+## Fixes
 
-After restoring ordering controls, clicking a group failed with:
+### 1. Channels toolbar button/link mismatch
 
-```text
-resetSelectShownCheckbox is not defined
-```
+The "Open filtered.m3u" control was a plain link while the other controls were buttons. This patch makes it use the same button styling and aligns all toolbar controls.
 
-That prevented the Channels page from loading channel rows.
+### 2. Channels page scrolling
 
-## Fix
+The Channels page was scrolling as one full page. This patch makes the Groups pane and Channels pane independently scrollable while the overall Channels tab stays fixed-height.
 
-Adds back the missing helper functions:
-
-```text
-resetSelectShownCheckbox()
-updateSelectShownCheckbox()
-```
-
-These keep the "Select shown channels" checkbox state in sync.
+When you select a group, the channels list resets to the top.
 
 ## Apply
 
 ```bash
-unzip iptv_epg_patch_restore_select_shown_helpers.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_channels_toolbar_and_independent_scroll.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
 git add .
-git commit -m "Restore select shown checkbox helpers"
+git commit -m "Fix channels toolbar and independent scrolling"
 git push
 ```
 
@@ -52,4 +43,9 @@ Test:
 http://192.168.0.156:8088/#channels
 ```
 
-Click groups and confirm channels load.
+Confirm:
+
+- `Open filtered.m3u` looks like a button.
+- The Groups list scrolls independently.
+- The Channels list scrolls independently.
+- Selecting a new group resets the channel list to the top.
