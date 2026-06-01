@@ -1,4 +1,4 @@
-# Patch: Fix EPG tab load and compact Channels rows
+# Patch: Restore ordering UI and keep compact rows
 
 Apply this on branch:
 
@@ -6,23 +6,30 @@ Apply this on branch:
 epg-product-ui
 ```
 
-## Fix 1: EPG tab did not load selected channels
+## What this fixes
 
-The previous app-shell integration called `init()` before the EPG tab state/functions were fully declared. Depending on load/click timing, the EPG tab could render the shell but not load `/api/epgshare/mapping-review`.
+The backend ordering endpoints still existed, but the frontend ordering controls had been lost from `static/app.js`.
 
-This patch moves app startup to the end of `app.js`, after the EPG tab module is declared, and adds a fallback to load the EPG review when the EPG tab is active.
+This patch restores:
 
-## Fix 2: compact Channels tab rows
+- group up/down buttons
+- channel up/down buttons
+- save calls to:
+  - `POST /api/groups/order`
+  - `POST /api/channels/order`
+- compact single-line group rows
+- compact single-line channel rows
+- button/link alignment CSS for the Channels toolbar
 
-The Channels tab still wastes vertical space when reorder arrow buttons are present. This patch makes group/channel rows single-line, compact entries where the name, count, checkbox/logo and ordering controls sit on one line.
+It also keeps the EPG app-shell load-order fix by starting the app after the EPG tab code is declared.
 
 ## Apply
 
 ```bash
-unzip iptv_epg_patch_epg_tab_load_and_compact_channels.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_restore_ordering_ui.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
 git add .
-git commit -m "Fix EPG tab loading and compact channel rows"
+git commit -m "Restore ordering UI controls"
 git push
 ```
 
@@ -38,8 +45,6 @@ curl http://127.0.0.1:8088/health
 Test:
 
 ```text
-http://192.168.0.156:8088/#epg
 http://192.168.0.156:8088/#channels
+http://192.168.0.156:8088/#epg
 ```
-
-The EPG tab should now populate the selected channel list, and the Channels tab should use more compact single-line rows.

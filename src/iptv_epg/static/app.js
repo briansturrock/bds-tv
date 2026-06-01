@@ -144,6 +144,65 @@ function filterGroups() {
   renderGroups();
 }
 
+
+function moveItemInArray(items, index, direction) {
+  const nextIndex = index + direction;
+  if (index < 0 || nextIndex < 0 || nextIndex >= items.length) {
+    return items;
+  }
+
+  const copy = [...items];
+  const [item] = copy.splice(index, 1);
+  copy.splice(nextIndex, 0, item);
+  return copy;
+}
+
+async function saveGroupOrderFromVisibleGroups() {
+  const groupIds = state.filteredGroups.map((group) => group.id);
+  await api("/api/groups/order", {
+    method: "POST",
+    body: JSON.stringify({ group_ids: groupIds }),
+  });
+  setMessage("channels-info", "Saved group order.");
+  await loadGroups(false);
+}
+
+async function moveGroup(groupId, direction) {
+  const index = state.filteredGroups.findIndex((group) => group.id === groupId);
+  if (index < 0) return;
+
+  state.filteredGroups = moveItemInArray(state.filteredGroups, index, direction);
+  renderGroups();
+  await saveGroupOrderFromVisibleGroups();
+}
+
+async function saveChannelOrderFromVisibleChannels() {
+  if (!state.selectedGroupId || !state.currentChannels) return;
+
+  const channelIds = state.currentChannels.map((channel) => channel.id);
+  await api("/api/channels/order", {
+    method: "POST",
+    body: JSON.stringify({
+      group_id: state.selectedGroupId,
+      channel_ids: channelIds,
+    }),
+  });
+  setMessage("channels-info", "Saved channel order.");
+  await loadChannels();
+}
+
+async function moveChannel(channelId, direction) {
+  if (!state.currentChannels) return;
+
+  const index = state.currentChannels.findIndex((channel) => channel.id === channelId);
+  if (index < 0) return;
+
+  state.currentChannels = moveItemInArray(state.currentChannels, index, direction);
+  renderChannels(state.currentChannels);
+  await saveChannelOrderFromVisibleChannels();
+}
+
+
 function renderGroups() {
   const list = $("groups-list");
   list.innerHTML = "";
@@ -155,7 +214,7 @@ function renderGroups() {
 
   const fragment = document.createDocumentFragment();
 
-  for (const group of state.filteredGroups) {
+  for (const [index, group] of state.filteredGroups.entries()) {
     const row = document.createElement("div");
     row.className = "group-row";
     if (group.id === state.selectedGroupId) {
@@ -163,8 +222,10 @@ function renderGroups() {
     }
 
     row.innerHTML = `
-      <span title="${escapeHtml(group.name)}">${escapeHtml(group.name)}</span>
+      <span class="group-name" title="${escapeHtml(group.name)}">${escapeHtml(group.name)}</span>
       <span class="counts">${group.selected_count || 0}/${group.channel_count || 0}</span>
+      <button class="order-button group-up" title="Move group up" ${index === 0 ? "disabled" : ""}>↑</button>
+      <button class="order-button group-down" title="Move group down" ${index === state.filteredGroups.length - 1 ? "disabled" : ""}>↓</button>
     `;
 
     row.addEventListener("click", () => {
@@ -173,6 +234,16 @@ function renderGroups() {
       state.channelsOffset = 0;
       renderGroups();
       loadChannels();
+    });
+
+    row.querySelector(".group-up").addEventListener("click", (event) => {
+      event.stopPropagation();
+      moveGroup(group.id, -1).catch((err) => setMessage("channels-info", `Could not move group: ${err.message}`, true));
+    });
+
+    row.querySelector(".group-down").addEventListener("click", (event) => {
+      event.stopPropagation();
+      moveGroup(group.id, 1).catch((err) => setMessage("channels-info", `Could not move group: ${err.message}`, true));
     });
 
     fragment.appendChild(row);
@@ -197,6 +268,7 @@ async function loadChannels() {
   state.channelsTotal = result.total || 0;
   state.visibleChannelIds = (result.channels || []).map((c) => c.id);
   state.visibleSelectedIds = (result.channels || []).filter((c) => c.selected).map((c) => c.id);
+  state.currentChannels = result.channels || [];
 
   $("selected-group-meta").textContent =
     `${state.channelsTotal} channels · showing ${state.channelsOffset + 1}-${Math.min(state.channelsOffset + state.channelsLimit, state.channelsTotal)}`;
@@ -206,17 +278,18 @@ async function loadChannels() {
 }
 
 function renderChannels(channels) {
+  state.currentChannels = channels || [];
   const list = $("channels-list");
   list.innerHTML = "";
 
-  if (!channels.length) {
-    list.innerHTML = `<div class="channel-row"><span></span><span></span><span>No channels.</span><span></span></div>`;
+  if (!state.currentChannels.length) {
+    list.innerHTML = `<div class="channel-row"><span></span><span></span><span>No channels.</span><span></span><span></span><span></span></div>`;
     return;
   }
 
   const fragment = document.createDocumentFragment();
 
-  for (const channel of channels) {
+  for (const [index, channel] of state.currentChannels.entries()) {
     const row = document.createElement("div");
     row.className = "channel-row";
 
@@ -233,6 +306,8 @@ function renderChannels(channels) {
         <div class="channel-meta">${tvg}</div>
       </div>
       <span class="muted">#${channel.provider_order}</span>
+      <button class="order-button channel-up" title="Move channel up" ${index === 0 ? "disabled" : ""}>↑</button>
+      <button class="order-button channel-down" title="Move channel down" ${index === state.currentChannels.length - 1 ? "disabled" : ""}>↓</button>
     `;
 
     const checkbox = row.querySelector("input");
@@ -254,36 +329,26 @@ function renderChannels(channels) {
         updateSelectShownCheckbox();
       } catch (err) {
         checkbox.checked = !checkbox.checked;
-        setMessage("channels-info", `Selection failed: ${err.message}`, true);
+        setMessage("channels-info", `Save failed: ${err.message}`, true);
       } finally {
         checkbox.disabled = false;
       }
+    });
+
+    row.querySelector(".channel-up").addEventListener("click", (event) => {
+      event.stopPropagation();
+      moveChannel(channel.id, -1).catch((err) => setMessage("channels-info", `Could not move channel: ${err.message}`, true));
+    });
+
+    row.querySelector(".channel-down").addEventListener("click", (event) => {
+      event.stopPropagation();
+      moveChannel(channel.id, 1).catch((err) => setMessage("channels-info", `Could not move channel: ${err.message}`, true));
     });
 
     fragment.appendChild(row);
   }
 
   list.appendChild(fragment);
-}
-
-function resetSelectShownCheckbox() {
-  const checkbox = $("select-shown-checkbox");
-  checkbox.checked = false;
-  checkbox.indeterminate = false;
-  checkbox.disabled = true;
-}
-
-function updateSelectShownCheckbox() {
-  const checkbox = $("select-shown-checkbox");
-  const total = state.visibleChannelIds.length;
-  const selected = state.visibleSelectedIds.length;
-
-  checkbox.disabled = total === 0;
-  checkbox.checked = total > 0 && selected === total;
-  checkbox.indeterminate = selected > 0 && selected < total;
-
-  $("shown-selection-meta").textContent =
-    total === 0 ? "No channels shown." : `${selected}/${total} shown channels selected.`;
 }
 
 async function setShownChannelsSelected(selected) {
@@ -397,7 +462,6 @@ async function init() {
   }
 }
 
-init();
 
 
 /* EPG tab integration */
@@ -695,3 +759,10 @@ function wireEpgEvents() {
   $("epg-import-index").addEventListener("click", () => importEpgIndex().catch((err) => alert(err.message)));
   $("epg-generate").addEventListener("click", () => generateEpgFromMappings().catch((err) => alert(err.message)));
 }
+
+// Start the app after every tab module has been declared.
+init().catch((err) => {
+  console.error(err);
+  const status = document.getElementById("header-status") || document.getElementById("epg-job-status");
+  if (status) status.textContent = `Startup failed: ${err.message || err}`;
+});
