@@ -84,6 +84,7 @@ def ensure_epgshare_tables() -> None:
 
 def parse_all_sources_text(text: str) -> list[EpgshareEntry]:
     entries: list[EpgshareEntry] = []
+    seen: set[tuple[str, str]] = set()
     current_source: str | None = None
 
     for raw_line in text.splitlines():
@@ -103,9 +104,18 @@ def parse_all_sources_text(text: str) -> list[EpgshareEntry]:
             continue
 
         # Lines are XMLTV IDs. Keep punctuation/case as supplied, only trim whitespace.
+        # The upstream index can contain duplicates within the same section, so dedupe
+        # before inserting into the table whose primary key is (xmltv_id, source_key).
         xmltv_id = line.strip()
-        if xmltv_id:
-            entries.append(EpgshareEntry(source_key=current_source, xmltv_id=xmltv_id))
+        if not xmltv_id:
+            continue
+
+        key = (current_source, xmltv_id)
+        if key in seen:
+            continue
+
+        seen.add(key)
+        entries.append(EpgshareEntry(source_key=current_source, xmltv_id=xmltv_id))
 
     return entries
 
@@ -156,7 +166,7 @@ def import_epgshare_index(job_id: str | None = None) -> dict[str, Any]:
 
             conn.executemany(
                 """
-                INSERT INTO epgshare_channel_index(xmltv_id, normalized_xmltv_id, source_key, last_seen_at)
+                INSERT OR IGNORE INTO epgshare_channel_index(xmltv_id, normalized_xmltv_id, source_key, last_seen_at)
                 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
                 """,
                 [
