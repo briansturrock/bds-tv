@@ -14,7 +14,7 @@ services:
       - DB_PATH=/db/iptv_epg.db
       - LOG_DIR=/logs
     volumes:
-      - ./config:/config
-      - ./data:/data
-      - ./db:/db
-      - ./logs:/logs
+      - ../config:/config
+      - ../data:/data
+      - ../db:/db
+      - ../logs:/logs
