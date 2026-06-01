@@ -151,6 +151,22 @@ def api_fetch_m3u() -> dict:
     return {"ok": True, "job_id": job_id, "message": "M3U fetch/index job started"}
 
 
+
+@app.get("/api/jobs")
+def api_list_jobs(limit: int = Query(25, ge=1, le=200)) -> dict:
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM jobs
+            ORDER BY started_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return {"ok": True, "jobs": [dict(r) for r in rows]}
+
+
 @app.get("/api/jobs/{job_id}")
 def api_get_job(job_id: str) -> dict:
     job = get_job(job_id)
