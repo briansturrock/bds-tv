@@ -1,4 +1,4 @@
-# Patch: EPGShare generic country normalisation and positive ranking
+# Patch: Fix EPGShare country_match boolean
 
 Apply this on branch:
 
@@ -6,52 +6,43 @@ Apply this on branch:
 epgshare-index
 ```
 
-This replaces the earlier radio-penalty idea. Do **not** hardcode R1/radio behaviour.
+This fixes `country_match: false` for clearly country-scoped EPGShare matches.
 
-## What this does
+## Why
 
-- Parses EPGShare source country generically:
+The previous source-key country parser used a regex capture for:
 
 ```text
 epg_ripper_<letters><optional digits>
 ```
 
-Examples only:
+This patch makes the parsing explicit:
+
+```text
+strip "epg_ripper_"
+strip trailing digits
+strip non-letters
+apply generic country aliases
+```
+
+So source keys like these are parsed generically:
 
 ```text
 epg_ripper_CA2 -> CA
 epg_ripper_US2 -> US
+epg_ripper_UK1 -> UK
 epg_ripper_FR1 -> FR
-epg_ripper_AE1 -> AE
 ```
 
-- Normalises country suffix tokens generically using the selected channel group country:
-
-```text
-.ca, .ca2, .us2, .fr
-```
-
-- Normalises number words:
-
-```text
-one -> 1
-two -> 2
-three -> 3
-```
-
-- Uses positive ranking only:
-  - compact exact
-  - compact prefix
-  - compact containment
-  - fuzzy fallback
+These are examples only; there is no hardcoded country list.
 
 ## Apply
 
 ```bash
-unzip iptv_epg_patch_epgshare_positive_ranking.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_epgshare_country_match_bool.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
 git add .
-git commit -m "Improve EPGShare positive match ranking"
+git commit -m "Fix EPGShare country match detection"
 git push
 ```
 
@@ -70,4 +61,4 @@ Then rerun:
 GET /api/epgshare/matches
 ```
 
-Expected: country_match should be true for correctly scoped source files, and BBC1-style matches should prefer positive number-word/prefix matches over weaker fuzzy lookalikes.
+Expected: country_match should now be true for suggestions whose selected-channel group country matches the EPGShare source key.

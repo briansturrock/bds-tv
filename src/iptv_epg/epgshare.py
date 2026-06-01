@@ -122,18 +122,24 @@ def source_key_country(source_key: str | None) -> str | None:
         return None
 
     # Generic EPGShare convention:
-    # epg_ripper_ + country letters + optional trailing source number
+    # epg_ripper_ + country/source letters + optional trailing source number.
     #
-    # Examples are deliberately illustrative, not hardcoded:
-    # epg_ripper_CA2 -> CA
-    # epg_ripper_US2 -> US
-    # epg_ripper_FR1 -> FR
-    # epg_ripper_AE1 -> AE
-    match = re.match(r"^epg_ripper_([A-Z]+?)(?:\d+)?$", source_key.upper())
-    if not match:
+    # Do this in two explicit steps rather than relying on a regex capture,
+    # because non-greedy regexes can be easy to misread and this must be
+    # globally reliable for any country/source code.
+    prefix = "EPG_RIPPER_"
+    value = source_key.strip().upper()
+
+    if not value.startswith(prefix):
         return None
 
-    raw = match.group(1)
+    raw = value[len(prefix):]
+    raw = re.sub(r"\d+$", "", raw)
+    raw = re.sub(r"[^A-Z]", "", raw)
+
+    if not raw:
+        return None
+
     return COUNTRY_ALIASES.get(raw, raw)
 
 
