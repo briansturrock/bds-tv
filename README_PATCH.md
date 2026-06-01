@@ -1,4 +1,4 @@
-# Patch: EPGShare country-aware match suggestions
+# Patch: EPGShare generic country normalisation and positive ranking
 
 Apply this on branch:
 
@@ -6,55 +6,52 @@ Apply this on branch:
 epgshare-index
 ```
 
-This improves:
+This replaces the earlier radio-penalty idea. Do **not** hardcode R1/radio behaviour.
+
+## What this does
+
+- Parses EPGShare source country generically:
 
 ```text
-GET /api/epgshare/matches
+epg_ripper_<letters><optional digits>
 ```
 
-## Why
-
-Exact matching works, but real IDs differ, for example:
+Examples only:
 
 ```text
-IPTV tvg-id: AandE.ca
-EPGShare:    A.and.E.Canada.HD.ca2
+epg_ripper_CA2 -> CA
+epg_ripper_US2 -> US
+epg_ripper_FR1 -> FR
+epg_ripper_AE1 -> AE
 ```
 
-## What changes
-
-The endpoint now returns:
+- Normalises country suffix tokens generically using the selected channel group country:
 
 ```text
-matches                  exact normalized tvg-id matches
-suggestions              country-aware suggested matches
-unmatched                no useful exact/suggested match
-required_sources         XML.GZ files needed from exact + top suggestions
-exact_required_sources
-suggested_required_sources
+.ca, .ca2, .us2, .fr
 ```
 
-It uses:
+- Normalises number words:
 
 ```text
-- selected channel group prefix, e.g. CA|, US|, UK|, FR|
-- EPGShare source key country, e.g. epg_ripper_CA2
-- compact ID comparison
-- noise stripping: HD, FHD, UHD, Canada, US, UK, France, etc.
-- number-word handling: BBC One -> BBC1
+one -> 1
+two -> 2
+three -> 3
 ```
 
-No fuzzy matches are auto-accepted yet. They are suggestions only.
+- Uses positive ranking only:
+  - compact exact
+  - compact prefix
+  - compact containment
+  - fuzzy fallback
 
 ## Apply
 
-From the repo root:
-
 ```bash
-unzip iptv_epg_patch_epgshare_country_suggestions.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_epgshare_positive_ranking.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
 git add .
-git commit -m "Add EPGShare country-aware match suggestions"
+git commit -m "Improve EPGShare positive match ranking"
 git push
 ```
 
@@ -72,3 +69,5 @@ Then rerun:
 ```text
 GET /api/epgshare/matches
 ```
+
+Expected: country_match should be true for correctly scoped source files, and BBC1-style matches should prefer positive number-word/prefix matches over weaker fuzzy lookalikes.

@@ -17,7 +17,8 @@ EPGSHARE_ALL_SOURCES_URL = f"{EPGSHARE_BASE_URL}/epg_ripper_ALL_SOURCES1.txt"
 SECTION_RE = re.compile(r"^\s*--\s*(epg_ripper_[A-Za-z0-9_]+)\s*--\s*$")
 
 COUNTRY_ALIASES = {
-    "UK": "UK",
+    # Small generic alias layer only. This is country normalisation, not
+    # source-specific matching logic.
     "GB": "UK",
     "GBR": "UK",
     "USA": "US",
@@ -25,7 +26,9 @@ COUNTRY_ALIASES = {
     "FRA": "FR",
 }
 
-COUNTRY_WORDS = {
+COUNTRY_DISPLAY_WORDS = {
+    # Optional display-word noise. These are not source-specific mappings.
+    # The important country handling is generic code/suffix parsing below.
     "UK": {"uk", "gb", "britain", "unitedkingdom"},
     "US": {"us", "usa", "america", "unitedstates"},
     "CA": {"ca", "canada", "canadian"},
@@ -71,12 +74,65 @@ def canonical_group_country(group_name: str | None) -> str | None:
     return COUNTRY_ALIASES.get(raw, raw) if raw else None
 
 
+def country_token_variants(country: str | None) -> set[str]:
+    """Return generic country code token variants for suffix stripping.
+
+    This handles cases like .ca, .ca2, .us2, .fr without hardcoding source names.
+    """
+    if not country:
+        return set()
+
+    country = COUNTRY_ALIASES.get(country.upper(), country.upper())
+    variants = {country.lower()}
+
+    # Alias variants are still generic country normalisation.
+    for raw, canonical in COUNTRY_ALIASES.items():
+        if canonical == country:
+            variants.add(raw.lower())
+
+    variants.update(COUNTRY_DISPLAY_WORDS.get(country, set()))
+    return variants
+
+
+def strip_country_suffix_token(token: str, country: str | None) -> str:
+    """Remove a country suffix from a token when it matches the selected country.
+
+    Examples:
+    ca2 -> ''
+    us2 -> ''
+    fr  -> ''
+
+    This is driven by the channel's selected group country, not by hardcoded
+    source-specific country lists.
+    """
+    token = token.lower()
+    variants = country_token_variants(country)
+
+    for variant in variants:
+        if token == variant:
+            return ""
+        if re.fullmatch(rf"{re.escape(variant)}\d+", token):
+            return ""
+
+    return token
+
+
 def source_key_country(source_key: str | None) -> str | None:
     if not source_key:
         return None
-    match = re.match(r"^epg_ripper_([A-Z]{2,3})\d*", source_key.upper())
+
+    # Generic EPGShare convention:
+    # epg_ripper_ + country letters + optional trailing source number
+    #
+    # Examples are deliberately illustrative, not hardcoded:
+    # epg_ripper_CA2 -> CA
+    # epg_ripper_US2 -> US
+    # epg_ripper_FR1 -> FR
+    # epg_ripper_AE1 -> AE
+    match = re.match(r"^epg_ripper_([A-Z]+?)(?:\d+)?$", source_key.upper())
     if not match:
         return None
+
     raw = match.group(1)
     return COUNTRY_ALIASES.get(raw, raw)
 
@@ -344,25 +400,55 @@ def tokenize_epg_id(value: str | None) -> list[str]:
 
 
 def compact_core(value: str | None, country: str | None = None) -> str:
-    country = country or ""
-    country_noise = COUNTRY_WORDS.get(country, set())
     tokens = tokenize_epg_id(value)
 
     kept: list[str] = []
     for token in tokens:
-        # Treat country suffixes like ca2/us2/fr2 as country noise for matching.
+        token = strip_country_suffix_token(token, country)
+        if not token:
+            continue
+
         token_without_digits = re.sub(r"\d+$", "", token)
 
         if token in NOISE_TOKENS or token_without_digits in NOISE_TOKENS:
             continue
-        if token in country_noise or token_without_digits in country_noise:
-            continue
-        if token in {"uk", "gb", "us", "usa", "ca", "fr"} or token_without_digits in {"uk", "gb", "us", "usa", "ca", "fr"}:
-            continue
 
+        # Number words are already normalised by tokenize_epg_id.
         kept.append(token)
 
     return "".join(kept)
+
+
+def positive_match_score(channel_core: str, epg_core: str, country_match: bool) -> tuple[float, str]:
+    """Score by positive evidence only.
+
+    No negative assumptions are made about tokens like R1/R2. Better matches
+    simply receive stronger positive scores.
+    """
+    if not channel_core or not epg_core:
+        return 0.0, "no useful similarity"
+
+    boost = 0.04 if country_match else 0.0
+
+    if channel_core == epg_core:
+        return min(0.97, 0.93 + boost), "compact id match"
+
+    # Strong directional evidence. This should let BBC1 rank BBC.One... above
+    # weaker fuzzy lookalikes after number-word normalisation.
+    if epg_core.startswith(channel_core):
+        return min(0.95, 0.91 + boost), "compact prefix match"
+
+    if channel_core.startswith(epg_core) and len(epg_core) >= 3:
+        return min(0.90, 0.86 + boost), "reverse compact prefix match"
+
+    if len(channel_core) >= 3 and channel_core in epg_core:
+        return min(0.90, 0.86 + boost), "compact containment"
+
+    if len(epg_core) >= 3 and epg_core in channel_core:
+        return min(0.84, 0.80 + boost), "reverse compact containment"
+
+    ratio = SequenceMatcher(None, channel_core, epg_core).ratio()
+    return min(0.89, ratio + boost), "fuzzy compact id"
 
 
 def country_source_patterns(country: str | None) -> list[str]:
@@ -464,29 +550,10 @@ def score_epgshare_candidate(channel: dict[str, Any], candidate: dict[str, Any])
     reason = "no useful similarity"
 
     for channel_core in channel_cores:
-        if not channel_core or not epg_core:
-            continue
-
-        if channel_core == epg_core:
-            score = 0.93 if country_match else 0.88
-            if score > best:
-                best = score
-                reason = "country-scoped compact id match" if country_match else "compact id match"
-
-        # This catches examples like AandE.ca -> A.and.E.Canada.HD.ca2 once
-        # country/noise terms are stripped, and other provider-vs-EPGShare variants.
-        if len(channel_core) >= 3 and len(epg_core) >= 3 and (channel_core in epg_core or epg_core in channel_core):
-            score = 0.88 if country_match else 0.80
-            if score > best:
-                best = score
-                reason = "country-scoped compact containment" if country_match else "compact containment"
-
-        ratio = SequenceMatcher(None, channel_core, epg_core).ratio()
-        score = ratio + (0.05 if country_match else 0.0)
-        score = min(score, 0.89)
+        score, score_reason = positive_match_score(channel_core, epg_core, country_match)
         if score > best:
             best = score
-            reason = "country-scoped fuzzy compact id" if country_match else "fuzzy compact id"
+            reason = ("country-scoped " if country_match else "") + score_reason
 
     return {
         "confidence": round(best, 3),
