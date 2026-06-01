@@ -30,6 +30,7 @@ from .db import (
 )
 from .epg import detect_epg_urls, generate_filtered_epg, scan_epg_channels
 from .diagnostics_routes import router as diagnostics_router
+from .epgshare_routes import router as epgshare_router
 from .m3u import fetch_and_index_m3u, generate_filtered_m3u
 from .settings import FILTERED_EPG, FILTERED_M3U, ensure_runtime_dirs
 
@@ -40,6 +41,7 @@ executor = ThreadPoolExecutor(max_workers=2)
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.include_router(diagnostics_router)
+app.include_router(epgshare_router)
 
 
 class SettingsIn(BaseModel):
