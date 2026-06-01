@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from typing import Any
 
 import requests
@@ -15,6 +16,40 @@ EPGSHARE_ALL_SOURCES_URL = f"{EPGSHARE_BASE_URL}/epg_ripper_ALL_SOURCES1.txt"
 
 SECTION_RE = re.compile(r"^\s*--\s*(epg_ripper_[A-Za-z0-9_]+)\s*--\s*$")
 
+COUNTRY_ALIASES = {
+    "UK": "UK",
+    "GB": "UK",
+    "GBR": "UK",
+    "USA": "US",
+    "CAN": "CA",
+    "FRA": "FR",
+}
+
+COUNTRY_WORDS = {
+    "UK": {"uk", "gb", "britain", "unitedkingdom"},
+    "US": {"us", "usa", "america", "unitedstates"},
+    "CA": {"ca", "canada", "canadian"},
+    "FR": {"fr", "france", "french"},
+}
+
+NOISE_TOKENS = {
+    "hd", "fhd", "uhd", "sd", "hevc", "4k", "raw", "60fps", "vip",
+    "channel", "tv", "live", "backup", "plus", "fhdhd",
+}
+
+NUMBER_WORDS = {
+    "one": "1",
+    "two": "2",
+    "three": "3",
+    "four": "4",
+    "five": "5",
+    "six": "6",
+    "seven": "7",
+    "eight": "8",
+    "nine": "9",
+    "ten": "10",
+}
+
 
 @dataclass(frozen=True)
 class EpgshareEntry:
@@ -26,6 +61,24 @@ def normalize_xmltv_id(value: str | None) -> str:
     value = (value or "").strip().lower()
     value = re.sub(r"\s+", "", value)
     return value
+
+
+def canonical_group_country(group_name: str | None) -> str | None:
+    if not group_name or "|" not in group_name:
+        return None
+    raw = group_name.split("|", 1)[0].strip().upper()
+    raw = re.sub(r"[^A-Z]", "", raw)
+    return COUNTRY_ALIASES.get(raw, raw) if raw else None
+
+
+def source_key_country(source_key: str | None) -> str | None:
+    if not source_key:
+        return None
+    match = re.match(r"^epg_ripper_([A-Z]{2,3})\d*", source_key.upper())
+    if not match:
+        return None
+    raw = match.group(1)
+    return COUNTRY_ALIASES.get(raw, raw)
 
 
 def source_txt_url(source_key: str) -> str:
@@ -276,13 +329,219 @@ def selected_channels_for_epgshare() -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+def tokenize_epg_id(value: str | None) -> list[str]:
+    value = (value or "").lower()
+    value = value.replace("&", " and ")
+    value = re.sub(r"[^a-z0-9]+", " ", value)
+    raw_tokens = [t for t in value.split() if t]
+
+    tokens: list[str] = []
+    for token in raw_tokens:
+        token = NUMBER_WORDS.get(token, token)
+        tokens.append(token)
+
+    return tokens
+
+
+def compact_core(value: str | None, country: str | None = None) -> str:
+    country = country or ""
+    country_noise = COUNTRY_WORDS.get(country, set())
+    tokens = tokenize_epg_id(value)
+
+    kept: list[str] = []
+    for token in tokens:
+        # Treat country suffixes like ca2/us2/fr2 as country noise for matching.
+        token_without_digits = re.sub(r"\d+$", "", token)
+
+        if token in NOISE_TOKENS or token_without_digits in NOISE_TOKENS:
+            continue
+        if token in country_noise or token_without_digits in country_noise:
+            continue
+        if token in {"uk", "gb", "us", "usa", "ca", "fr"} or token_without_digits in {"uk", "gb", "us", "usa", "ca", "fr"}:
+            continue
+
+        kept.append(token)
+
+    return "".join(kept)
+
+
+def country_source_patterns(country: str | None) -> list[str]:
+    if not country:
+        return []
+    country = COUNTRY_ALIASES.get(country.upper(), country.upper())
+    candidates = [country]
+    if country == "UK":
+        candidates.append("GB")
+    return [f"epg_ripper_{c}%" for c in candidates]
+
+
+def candidate_rows_for_channel(conn, channel: dict[str, Any], limit: int = 500) -> list[dict[str, Any]]:
+    country = canonical_group_country(channel.get("group_name"))
+    tvg_id = channel.get("tvg_id") or ""
+    name = channel.get("name") or ""
+    tvg_name = channel.get("tvg_name") or ""
+
+    core_values = {
+        compact_core(tvg_id, country),
+        compact_core(name, country),
+        compact_core(tvg_name, country),
+    }
+    core_values = {v for v in core_values if len(v) >= 2}
+
+    source_patterns = country_source_patterns(country)
+    source_clause = ""
+    params: list[Any] = []
+
+    if source_patterns:
+        source_clause = "AND (" + " OR ".join(["epgshare_channel_index.source_key LIKE ?" for _ in source_patterns]) + ")"
+        params.extend(source_patterns)
+
+    # Start country-scoped. This keeps suggestions sane and avoids comparing every
+    # selected channel against the entire global EPGShare index.
+    rows = conn.execute(
+        f"""
+        SELECT
+            epgshare_channel_index.xmltv_id,
+            epgshare_channel_index.source_key,
+            epgshare_sources.txt_url,
+            epgshare_sources.xml_url
+        FROM epgshare_channel_index
+        JOIN epgshare_sources ON epgshare_sources.source_key = epgshare_channel_index.source_key
+        WHERE 1 = 1
+        {source_clause}
+        ORDER BY epgshare_channel_index.source_key, epgshare_channel_index.xmltv_id
+        LIMIT ?
+        """,
+        (*params, limit),
+    ).fetchall()
+
+    # If a group prefix is unusual or unmapped, fall back to exact normalized lookup.
+    if not rows and tvg_id:
+        rows = conn.execute(
+            """
+            SELECT
+                epgshare_channel_index.xmltv_id,
+                epgshare_channel_index.source_key,
+                epgshare_sources.txt_url,
+                epgshare_sources.xml_url
+            FROM epgshare_channel_index
+            JOIN epgshare_sources ON epgshare_sources.source_key = epgshare_channel_index.source_key
+            WHERE epgshare_channel_index.normalized_xmltv_id = ?
+            ORDER BY epgshare_channel_index.source_key
+            LIMIT ?
+            """,
+            (normalize_xmltv_id(tvg_id), limit),
+        ).fetchall()
+
+    return [dict(r) for r in rows]
+
+
+def score_epgshare_candidate(channel: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
+    country = canonical_group_country(channel.get("group_name"))
+    source_country = source_key_country(candidate.get("source_key"))
+    country_match = bool(country and source_country and country == source_country)
+
+    tvg_id = channel.get("tvg_id") or ""
+    xmltv_id = candidate.get("xmltv_id") or ""
+
+    if normalize_xmltv_id(tvg_id) and normalize_xmltv_id(tvg_id) == normalize_xmltv_id(xmltv_id):
+        return {
+            "confidence": 1.0,
+            "reason": "exact normalized tvg-id",
+            "country_match": country_match,
+        }
+
+    channel_cores = [
+        compact_core(tvg_id, country),
+        compact_core(channel.get("name"), country),
+        compact_core(channel.get("tvg_name"), country),
+    ]
+    channel_cores = [v for v in channel_cores if len(v) >= 2]
+
+    epg_core = compact_core(xmltv_id, country)
+
+    best = 0.0
+    reason = "no useful similarity"
+
+    for channel_core in channel_cores:
+        if not channel_core or not epg_core:
+            continue
+
+        if channel_core == epg_core:
+            score = 0.93 if country_match else 0.88
+            if score > best:
+                best = score
+                reason = "country-scoped compact id match" if country_match else "compact id match"
+
+        # This catches examples like AandE.ca -> A.and.E.Canada.HD.ca2 once
+        # country/noise terms are stripped, and other provider-vs-EPGShare variants.
+        if len(channel_core) >= 3 and len(epg_core) >= 3 and (channel_core in epg_core or epg_core in channel_core):
+            score = 0.88 if country_match else 0.80
+            if score > best:
+                best = score
+                reason = "country-scoped compact containment" if country_match else "compact containment"
+
+        ratio = SequenceMatcher(None, channel_core, epg_core).ratio()
+        score = ratio + (0.05 if country_match else 0.0)
+        score = min(score, 0.89)
+        if score > best:
+            best = score
+            reason = "country-scoped fuzzy compact id" if country_match else "fuzzy compact id"
+
+    return {
+        "confidence": round(best, 3),
+        "reason": reason,
+        "country_match": country_match,
+    }
+
+
+def best_epgshare_suggestions(conn, channel: dict[str, Any], limit: int = 5) -> list[dict[str, Any]]:
+    candidates = candidate_rows_for_channel(conn, channel)
+    scored = []
+
+    for candidate in candidates:
+        score = score_epgshare_candidate(channel, candidate)
+        confidence = score["confidence"]
+        if confidence < 0.65:
+            continue
+
+        scored.append({
+            **candidate,
+            "confidence": confidence,
+            "reason": score["reason"],
+            "country_match": score["country_match"],
+        })
+
+    scored.sort(key=lambda r: (-r["confidence"], r["source_key"], r["xmltv_id"]))
+    return scored[:limit]
+
+
+def add_required_source(required_sources: dict[str, dict[str, Any]], row: dict[str, Any]) -> None:
+    source_key = row["source_key"]
+    if source_key not in required_sources:
+        required_sources[source_key] = {
+            "source_key": source_key,
+            "txt_url": row["txt_url"],
+            "xml_url": row["xml_url"],
+            "matched_channel_count": 0,
+            "matched_xmltv_ids": [],
+        }
+
+    required_sources[source_key]["matched_channel_count"] += 1
+    if row["xmltv_id"] not in required_sources[source_key]["matched_xmltv_ids"]:
+        required_sources[source_key]["matched_xmltv_ids"].append(row["xmltv_id"])
+
+
 def epgshare_matches() -> dict[str, Any]:
     ensure_epgshare_tables()
     selected = selected_channels_for_epgshare()
 
-    matches = []
+    exact_matches = []
+    suggested_matches = []
     unmatched = []
-    required_sources: dict[str, dict[str, Any]] = {}
+
+    exact_required_sources: dict[str, dict[str, Any]] = {}
+    suggested_required_sources: dict[str, dict[str, Any]] = {}
 
     with connect() as conn:
         for channel in selected:
@@ -291,7 +550,7 @@ def epgshare_matches() -> dict[str, Any]:
                 unmatched.append({**channel, "reason": "missing tvg_id"})
                 continue
 
-            rows = conn.execute(
+            exact_rows = conn.execute(
                 """
                 SELECT
                     epgshare_channel_index.xmltv_id,
@@ -306,38 +565,53 @@ def epgshare_matches() -> dict[str, Any]:
                 (normalize_xmltv_id(tvg_id),),
             ).fetchall()
 
-            if not rows:
-                unmatched.append({**channel, "reason": "tvg_id not found in epgshare index"})
+            if exact_rows:
+                row_dicts = [dict(r) for r in exact_rows]
+                exact_matches.append({
+                    **channel,
+                    "match_type": "exact_normalized_tvg_id",
+                    "epgshare_matches": row_dicts,
+                })
+
+                for row in row_dicts:
+                    add_required_source(exact_required_sources, row)
                 continue
 
-            row_dicts = [dict(r) for r in rows]
-            matches.append({
-                **channel,
-                "match_type": "exact_normalized_tvg_id",
-                "epgshare_matches": row_dicts,
-            })
+            suggestions = best_epgshare_suggestions(conn, channel)
+            if suggestions:
+                suggested_matches.append({
+                    **channel,
+                    "match_type": "suggested_country_aware",
+                    "suggestions": suggestions,
+                })
+                for row in suggestions[:1]:
+                    add_required_source(suggested_required_sources, row)
+                continue
 
-            for row in row_dicts:
-                source_key = row["source_key"]
-                if source_key not in required_sources:
-                    required_sources[source_key] = {
-                        "source_key": source_key,
-                        "txt_url": row["txt_url"],
-                        "xml_url": row["xml_url"],
-                        "matched_channel_count": 0,
-                        "matched_xmltv_ids": [],
-                    }
-                required_sources[source_key]["matched_channel_count"] += 1
-                if row["xmltv_id"] not in required_sources[source_key]["matched_xmltv_ids"]:
-                    required_sources[source_key]["matched_xmltv_ids"].append(row["xmltv_id"])
+            unmatched.append({**channel, "reason": "no exact or suggested EPGShare match found"})
+
+    all_required_sources = dict(exact_required_sources)
+    for source_key, source in suggested_required_sources.items():
+        if source_key not in all_required_sources:
+            all_required_sources[source_key] = source
+            continue
+
+        all_required_sources[source_key]["matched_channel_count"] += source["matched_channel_count"]
+        for xmltv_id in source["matched_xmltv_ids"]:
+            if xmltv_id not in all_required_sources[source_key]["matched_xmltv_ids"]:
+                all_required_sources[source_key]["matched_xmltv_ids"].append(xmltv_id)
 
     return {
         "ok": True,
         "selected_channel_count": len(selected),
-        "matched_channel_count": len(matches),
+        "matched_channel_count": len(exact_matches),
+        "suggested_channel_count": len(suggested_matches),
         "unmatched_channel_count": len(unmatched),
-        "required_source_count": len(required_sources),
-        "required_sources": sorted(required_sources.values(), key=lambda r: r["source_key"]),
-        "matches": matches,
+        "required_source_count": len(all_required_sources),
+        "required_sources": sorted(all_required_sources.values(), key=lambda r: r["source_key"]),
+        "exact_required_sources": sorted(exact_required_sources.values(), key=lambda r: r["source_key"]),
+        "suggested_required_sources": sorted(suggested_required_sources.values(), key=lambda r: r["source_key"]),
+        "matches": exact_matches,
+        "suggestions": suggested_matches,
         "unmatched": unmatched,
     }

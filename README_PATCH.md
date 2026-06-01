@@ -1,4 +1,4 @@
-# Patch: Dedupe EPGShare all-sources index import
+# Patch: EPGShare country-aware match suggestions
 
 Apply this on branch:
 
@@ -6,28 +6,55 @@ Apply this on branch:
 epgshare-index
 ```
 
-The import failed with:
+This improves:
 
 ```text
-UNIQUE constraint failed: epgshare_channel_index.xmltv_id, epgshare_channel_index.source_key
+GET /api/epgshare/matches
 ```
 
-That means `epg_ripper_ALL_SOURCES1.txt` contains duplicate XMLTV IDs inside the same source section.
+## Why
 
-## Fix
+Exact matching works, but real IDs differ, for example:
 
-- Deduplicates `(source_key, xmltv_id)` while parsing the TXT index.
-- Uses `INSERT OR IGNORE` as a defensive fallback.
+```text
+IPTV tvg-id: AandE.ca
+EPGShare:    A.and.E.Canada.HD.ca2
+```
+
+## What changes
+
+The endpoint now returns:
+
+```text
+matches                  exact normalized tvg-id matches
+suggestions              country-aware suggested matches
+unmatched                no useful exact/suggested match
+required_sources         XML.GZ files needed from exact + top suggestions
+exact_required_sources
+suggested_required_sources
+```
+
+It uses:
+
+```text
+- selected channel group prefix, e.g. CA|, US|, UK|, FR|
+- EPGShare source key country, e.g. epg_ripper_CA2
+- compact ID comparison
+- noise stripping: HD, FHD, UHD, Canada, US, UK, France, etc.
+- number-word handling: BBC One -> BBC1
+```
+
+No fuzzy matches are auto-accepted yet. They are suggestions only.
 
 ## Apply
 
 From the repo root:
 
 ```bash
-unzip iptv_epg_patch_epgshare_dedupe_index.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_epgshare_country_suggestions.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
 git add .
-git commit -m "Dedupe EPGShare index import"
+git commit -m "Add EPGShare country-aware match suggestions"
 git push
 ```
 
@@ -40,11 +67,8 @@ sudo docker compose up --build -d
 curl http://127.0.0.1:8088/health
 ```
 
-Then retry in Diagnostics:
+Then rerun:
 
 ```text
-POST /api/epgshare/index
-GET  /api/jobs
-GET  /api/epgshare/status
-GET  /api/epgshare/matches
+GET /api/epgshare/matches
 ```
