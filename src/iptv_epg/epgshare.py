@@ -191,6 +191,26 @@ def ensure_epgshare_tables() -> None:
                 ON epgshare_channel_index(source_key)
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS epgshare_mappings (
+                    channel_id TEXT PRIMARY KEY,
+                    xmltv_id TEXT,
+                    source_key TEXT,
+                    mapping_type TEXT NOT NULL DEFAULT 'manual',
+                    confidence REAL,
+                    ignored INTEGER NOT NULL DEFAULT 0,
+                    notes TEXT,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_epgshare_mappings_source
+                ON epgshare_mappings(source_key)
+                """
+            )
             conn.commit()
         except Exception:
             conn.rollback()
@@ -706,4 +726,186 @@ def epgshare_matches() -> dict[str, Any]:
         "matches": exact_matches,
         "suggestions": suggested_matches,
         "unmatched": unmatched,
+    }
+
+
+def epgshare_saved_mappings() -> list[dict[str, Any]]:
+    ensure_epgshare_tables()
+
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                epgshare_mappings.channel_id,
+                epgshare_mappings.xmltv_id,
+                epgshare_mappings.source_key,
+                epgshare_mappings.mapping_type,
+                epgshare_mappings.confidence,
+                epgshare_mappings.ignored,
+                epgshare_mappings.notes,
+                epgshare_mappings.updated_at,
+                channels.name,
+                channels.tvg_name,
+                channels.tvg_id,
+                groups.name AS group_name
+            FROM epgshare_mappings
+            LEFT JOIN channels ON channels.id = epgshare_mappings.channel_id
+            LEFT JOIN groups ON groups.id = channels.group_id
+            ORDER BY groups.name, channels.name
+            """
+        ).fetchall()
+
+    return [dict(r) for r in rows]
+
+
+def save_epgshare_mappings(mappings: list[dict[str, Any]]) -> dict[str, Any]:
+    ensure_epgshare_tables()
+
+    saved = 0
+    ignored = 0
+
+    with connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            for item in mappings:
+                channel_id = (item.get("channel_id") or "").strip()
+                if not channel_id:
+                    continue
+
+                is_ignored = 1 if item.get("ignored") else 0
+                xmltv_id = item.get("xmltv_id")
+                source_key = item.get("source_key")
+                mapping_type = item.get("mapping_type") or ("ignored" if is_ignored else "manual")
+                confidence = item.get("confidence")
+                notes = item.get("notes")
+
+                if is_ignored:
+                    xmltv_id = None
+                    source_key = None
+                    ignored += 1
+                else:
+                    if not xmltv_id or not source_key:
+                        continue
+                    saved += 1
+
+                conn.execute(
+                    """
+                    INSERT INTO epgshare_mappings(
+                        channel_id,
+                        xmltv_id,
+                        source_key,
+                        mapping_type,
+                        confidence,
+                        ignored,
+                        notes,
+                        updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(channel_id) DO UPDATE SET
+                        xmltv_id = excluded.xmltv_id,
+                        source_key = excluded.source_key,
+                        mapping_type = excluded.mapping_type,
+                        confidence = excluded.confidence,
+                        ignored = excluded.ignored,
+                        notes = excluded.notes,
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (
+                        channel_id,
+                        xmltv_id,
+                        source_key,
+                        mapping_type,
+                        confidence,
+                        is_ignored,
+                        notes,
+                    ),
+                )
+
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+    return {
+        "ok": True,
+        "received": len(mappings),
+        "saved": saved,
+        "ignored": ignored,
+    }
+
+
+def epgshare_mapping_review() -> dict[str, Any]:
+    ensure_epgshare_tables()
+
+    matches = epgshare_matches()
+    saved = {row["channel_id"]: row for row in epgshare_saved_mappings()}
+
+    rows = []
+
+    for item in matches["matches"]:
+        channel_id = item["channel_id"]
+        exact = item.get("epgshare_matches", [])
+        selected = saved.get(channel_id)
+
+        rows.append({
+            "channel_id": channel_id,
+            "name": item.get("name"),
+            "tvg_name": item.get("tvg_name"),
+            "tvg_id": item.get("tvg_id"),
+            "group_name": item.get("group_name"),
+            "status": "saved" if selected else "exact",
+            "saved_mapping": selected,
+            "exact_matches": exact,
+            "suggestions": exact,
+            "recommended": exact[0] if exact else None,
+        })
+
+    for item in matches["suggestions"]:
+        channel_id = item["channel_id"]
+        suggestions = item.get("suggestions", [])
+        selected = saved.get(channel_id)
+
+        rows.append({
+            "channel_id": channel_id,
+            "name": item.get("name"),
+            "tvg_name": item.get("tvg_name"),
+            "tvg_id": item.get("tvg_id"),
+            "group_name": item.get("group_name"),
+            "status": "saved" if selected else "suggested",
+            "saved_mapping": selected,
+            "exact_matches": [],
+            "suggestions": suggestions,
+            "recommended": suggestions[0] if suggestions else None,
+        })
+
+    for item in matches["unmatched"]:
+        channel_id = item["channel_id"]
+        selected = saved.get(channel_id)
+
+        rows.append({
+            "channel_id": channel_id,
+            "name": item.get("name"),
+            "tvg_name": item.get("tvg_name"),
+            "tvg_id": item.get("tvg_id"),
+            "group_name": item.get("group_name"),
+            "status": "saved" if selected else "unmatched",
+            "saved_mapping": selected,
+            "reason": item.get("reason"),
+            "exact_matches": [],
+            "suggestions": [],
+            "recommended": None,
+        })
+
+    return {
+        "ok": True,
+        "summary": {
+            "selected_channel_count": matches["selected_channel_count"],
+            "exact_match_count": matches["matched_channel_count"],
+            "suggested_match_count": matches["suggested_channel_count"],
+            "unmatched_count": matches["unmatched_channel_count"],
+            "saved_mapping_count": len(saved),
+            "required_source_count": matches["required_source_count"],
+        },
+        "required_sources": matches["required_sources"],
+        "rows": rows,
     }

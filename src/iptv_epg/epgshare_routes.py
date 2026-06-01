@@ -4,13 +4,28 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, Query
+from pydantic import BaseModel, Field
 
 from .db import create_job, update_job
-from .epgshare import epgshare_matches, epgshare_status, import_epgshare_index, search_epgshare
+from .epgshare import epgshare_mapping_review, epgshare_matches, epgshare_saved_mappings, epgshare_status, import_epgshare_index, save_epgshare_mappings, search_epgshare
 
 
 router = APIRouter(prefix="/api/epgshare", tags=["epgshare"])
 executor = ThreadPoolExecutor(max_workers=1)
+
+
+class EpgshareMappingIn(BaseModel):
+    channel_id: str
+    xmltv_id: str | None = None
+    source_key: str | None = None
+    mapping_type: str = "manual"
+    confidence: float | None = None
+    ignored: bool = False
+    notes: str | None = None
+
+
+class EpgshareMappingsIn(BaseModel):
+    mappings: list[EpgshareMappingIn] = Field(default_factory=list)
 
 
 def _run_index_job(job_id: str) -> None:
@@ -59,3 +74,18 @@ def api_epgshare_search(q: str = Query("", min_length=0), limit: int = Query(50,
 @router.get("/matches")
 def api_epgshare_matches() -> dict:
     return epgshare_matches()
+
+
+@router.get("/mapping-review")
+def api_epgshare_mapping_review() -> dict:
+    return epgshare_mapping_review()
+
+
+@router.get("/mappings")
+def api_epgshare_mappings() -> dict:
+    return {"ok": True, "mappings": epgshare_saved_mappings()}
+
+
+@router.post("/mappings")
+def api_save_epgshare_mappings(payload: EpgshareMappingsIn) -> dict:
+    return save_epgshare_mappings([item.model_dump() for item in payload.mappings])

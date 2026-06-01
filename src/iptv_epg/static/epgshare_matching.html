@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>EPGShare Matching Review</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/static/epgshare_matching.css" />
+</head>
+<body>
+  <header>
+    <div>
+      <h1>EPGShare Matching Review</h1>
+      <p>Review exact and suggested EPGShare mappings before filtered EPG generation.</p>
+    </div>
+    <div class="actions">
+      <button id="refresh">Refresh</button>
+      <button id="save">Save selected mappings</button>
+      <button id="export">Export review JSON</button>
+      <a href="/dev/diagnostics" target="_blank" rel="noopener">Diagnostics</a>
+    </div>
+  </header>
+
+  <section id="summary" class="summary"></section>
+  <section id="sources" class="sources"></section>
+  <main id="rows"></main>
+
+  <script src="/static/epgshare_matching.js"></script>
+</body>
+</html>

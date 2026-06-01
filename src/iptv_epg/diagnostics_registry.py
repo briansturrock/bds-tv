@@ -70,6 +70,11 @@ DIAGNOSTIC_ENDPOINTS: list[dict[str, Any]] = [
     endpoint(category="EPGShare", name="Search EPGShare index", method="GET", path="/api/epgshare/search", sample_path="/api/epgshare/search?q=BBC&limit=50", description="Searches the imported EPGShare channel index."),
     endpoint(category="EPGShare", name="Match selected channels against EPGShare", method="GET", path="/api/epgshare/matches", description="Matches selected IPTV channels by tvg-id against the imported EPGShare index and reports required XML.GZ files.", safe_auto_run=True),
 
+    endpoint(category="EPGShare", name="EPGShare mapping review", method="GET", path="/api/epgshare/mapping-review", description="Returns selected IPTV channels with exact/suggested EPGShare matches and saved mapping state.", safe_auto_run=False),
+    endpoint(category="EPGShare", name="List EPGShare mappings", method="GET", path="/api/epgshare/mappings", description="Lists saved EPGShare channel mappings.", safe_auto_run=False),
+    endpoint(category="EPGShare", name="Save EPGShare mappings", method="POST", path="/api/epgshare/mappings", description="Saves reviewed EPGShare mappings or ignored channels.", sample_body={"mappings":[{"channel_id":"PASTE_CHANNEL_ID_HERE","xmltv_id":"PASTE_XMLTV_ID_HERE","source_key":"PASTE_SOURCE_KEY_HERE","mapping_type":"manual","confidence":1.0}]}),
+    endpoint(category="EPGShare", name="EPGShare matching review UI", method="GET", path="/dev/epgshare-matching", description="Developer UI for reviewing and saving EPGShare channel mappings.", safe_auto_run=False),
+
     endpoint(category="Diagnostics", name="Diagnostics console", method="GET", path="/dev/diagnostics", description="Serves this diagnostics console."),
     endpoint(category="Diagnostics", name="Diagnostics endpoint registry", method="GET", path="/dev/diagnostics/endpoints", description="Returns registered diagnostics endpoint definitions.", safe_auto_run=True),
     endpoint(category="Diagnostics", name="Diagnostics coverage", method="GET", path="/dev/diagnostics/coverage", description="Compares actual FastAPI routes with registered diagnostics entries.", safe_auto_run=True),

@@ -1,4 +1,4 @@
-# Patch: Fix EPGShare required source merge mutation
+# Patch: EPGShare mapping review UI and saved mappings
 
 Apply this on branch:
 
@@ -6,32 +6,41 @@ Apply this on branch:
 epgshare-index
 ```
 
-## Bug
+This adds a review step before filtered EPG generation.
 
-`exact_required_sources` was being contaminated by suggested matches.
-
-Example symptom:
+## New backend endpoints
 
 ```text
-matches only contains BLAZE.uk as exact
-exact_required_sources also contains CBBC.HD.uk and BBC.One.CI.HD.uk
+GET  /api/epgshare/mapping-review
+GET  /api/epgshare/mappings
+POST /api/epgshare/mappings
 ```
 
-## Cause
+## New review UI
 
-`all_required_sources = dict(exact_required_sources)` made a shallow copy. The nested source dictionaries were shared, so merging suggestions into `required_sources` mutated `exact_required_sources`.
+```text
+GET /dev/epgshare-matching
+```
 
-## Fix
+## What it does
 
-Build `required_sources` using copied nested dictionaries/lists.
+- Shows selected IPTV channels.
+- Shows exact and suggested EPGShare matches.
+- Lets you choose a match.
+- Lets you mark a channel as no EPG / ignored.
+- Lets you manually search the EPGShare index.
+- Saves reviewed mappings into SQLite.
+- Adds Diagnostics entries for the new endpoints/page.
+
+This does not generate filtered EPG yet. Generation should use saved mappings only.
 
 ## Apply
 
 ```bash
-unzip iptv_epg_patch_epgshare_required_sources_copy.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_epgshare_mapping_review.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
 git add .
-git commit -m "Fix EPGShare required source summary mutation"
+git commit -m "Add EPGShare mapping review UI"
 git push
 ```
 
@@ -44,16 +53,16 @@ sudo docker compose up --build -d
 curl http://127.0.0.1:8088/health
 ```
 
-Then rerun:
+Open:
 
 ```text
-GET /api/epgshare/matches
+http://192.168.0.156:8088/dev/epgshare-matching
 ```
 
-Expected:
+Also test in Diagnostics:
 
 ```text
-exact_required_sources should contain only exact matches.
-suggested_required_sources should contain only suggested matches.
-required_sources should contain the merged view.
+GET  /api/epgshare/mapping-review
+GET  /api/epgshare/mappings
+POST /api/epgshare/mappings
 ```
