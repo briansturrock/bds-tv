@@ -1,4 +1,4 @@
-# Patch: Guide date window and shared horizontal scroll
+# Patch: Guide timeline grid
 
 Apply this on branch:
 
@@ -6,61 +6,39 @@ Apply this on branch:
 guide-page
 ```
 
-## Fixes
+This replaces the card-row guide with a proper time-aligned grid.
 
-### 1. Date/window logic
+## What changes
 
-The Guide now uses a selected date window:
+- Timeline header across the top.
+- Channels down the left.
+- Programme blocks positioned by start/stop time.
+- Timeline starts at the previous half-hour mark.
+- One shared horizontal scroll for the whole guide.
+- Channel names/logos remain sticky on the left.
+- Current programme is highlighted.
+- Current time line appears when inside the visible window.
+- Date picker plus previous/today/next controls.
+- Still only shows groups with selected channels and selected channels inside those groups.
 
-```text
-selected date 00:00 -> next day 00:00
-```
+## Backend
 
-and includes programmes that overlap that date window.
-
-That means:
-
-- programmes already ended before the selected date are excluded
-- programmes starting after the selected date are excluded
-- long programmes that started before the window but are still airing inside it are included
-- current airing still gets highlighted
-
-### 2. Shared horizontal scrolling
-
-The guide no longer gives each channel its own horizontal scrollbar.
-
-Instead:
-
-- the whole guide window scrolls horizontally
-- channel rows stay aligned
-- channel names/logos stay sticky on the left
-- programme cards share one horizontal timeline area
-
-## UI
-
-Adds a date picker to the Guide tab.
-
-## Endpoint change
+`GET /api/guide` now accepts:
 
 ```text
-GET /api/guide?group_id=<id>&date=YYYY-MM-DD
-```
-
-## Backlog noted
-
-EPG generation should allow choosing:
-
-```text
-3, 5, 7, 14 days
+group_id
+date=YYYY-MM-DD
+start=<ISO datetime>
+hours=8
 ```
 
 ## Apply
 
 ```bash
-unzip iptv_epg_patch_guide_date_window_shared_scroll.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_guide_timeline_grid.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
 git add .
-git commit -m "Add guide date window and shared scroll"
+git commit -m "Add guide timeline grid"
 git push
 ```
 

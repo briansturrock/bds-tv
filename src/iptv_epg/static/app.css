@@ -765,11 +765,6 @@ body:has(#tab-channels.active) {
   overflow: auto;
 }
 
-.guide-scroll {
-  min-width: max-content;
-  overflow: visible;
-}
-
 .guide-empty {
   height: 100%;
   display: grid;
@@ -779,24 +774,18 @@ body:has(#tab-channels.active) {
 
 .guide-channel-row {
   display: grid;
-  grid-template-columns: 190px minmax(900px, max-content);
+  grid-template-columns: 190px minmax(0, 1fr);
   gap: 10px;
   border-bottom: 1px solid #eef0f4;
   padding: 8px 0;
-  align-items: stretch;
 }
 
 .guide-channel-info {
-  position: sticky;
-  left: 0;
-  z-index: 2;
-  background: var(--card);
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);
   gap: 8px;
   align-items: center;
   min-width: 0;
-  padding-left: 2px;
 }
 
 .guide-channel-info img {
@@ -815,13 +804,13 @@ body:has(#tab-channels.active) {
 .guide-programmes {
   display: flex;
   gap: 6px;
-  overflow: visible;
+  overflow-x: auto;
   padding-bottom: 4px;
 }
 
 .guide-programme {
-  width: 190px;
-  min-width: 190px;
+  min-width: 170px;
+  max-width: 260px;
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 7px 8px;
@@ -874,6 +863,7 @@ body:has(#tab-channels.active) {
 }
 
 
+/* Guide timeline grid */
 .guide-date-label {
   font-weight: 600;
   color: var(--muted);
@@ -882,4 +872,182 @@ body:has(#tab-channels.active) {
 #guide-date {
   width: auto;
   min-height: 40px;
+}
+
+.guide-layout {
+  height: calc(100vh - 215px);
+  min-height: 520px;
+  display: grid;
+  grid-template-columns: minmax(240px, 280px) 1fr;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.guide-window {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.guide-content {
+  height: 100%;
+  overflow: auto;
+  position: relative;
+}
+
+.guide-grid {
+  --channel-col-width: 210px;
+  --hour-width: 360px;
+  --row-height: 92px;
+  min-width: max-content;
+}
+
+.guide-time-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: var(--channel-col-width) 1fr;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+
+.guide-time-corner {
+  position: sticky;
+  left: 0;
+  z-index: 7;
+  background: var(--card);
+  border-right: 1px solid var(--border);
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font-weight: 600;
+}
+
+.guide-time-axis {
+  position: relative;
+  height: 38px;
+}
+
+.guide-time-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  padding: 10px 0 0 8px;
+  white-space: nowrap;
+}
+
+.guide-channel-row {
+  display: grid;
+  grid-template-columns: var(--channel-col-width) 1fr;
+  min-height: var(--row-height);
+  border-bottom: 1px solid #eef0f4;
+  padding: 0;
+}
+
+.guide-channel-info {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  background: var(--card);
+  border-right: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.guide-channel-info img {
+  width: 42px;
+  max-height: 34px;
+  object-fit: contain;
+}
+
+.guide-channel-info strong,
+.guide-channel-info .muted {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.guide-timeline-row {
+  position: relative;
+  min-height: var(--row-height);
+  background-image: linear-gradient(to right, rgba(209, 213, 219, 0.7) 1px, transparent 1px);
+  background-size: calc(var(--hour-width) / 2) 100%;
+}
+
+.guide-now-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #dc2626;
+  z-index: 3;
+}
+
+.guide-programme {
+  position: absolute;
+  top: 8px;
+  height: calc(var(--row-height) - 16px);
+  min-width: 48px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 7px 8px;
+  background: #fff;
+  overflow: hidden;
+  cursor: default;
+}
+
+.guide-programme.now {
+  background: #e8f7ed;
+  border-color: var(--success-border);
+}
+
+.guide-programme strong {
+  display: block;
+  font-size: 13px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.guide-programme .time,
+.guide-programme .desc {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.guide-programme .desc {
+  margin-top: 4px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.guide-empty {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+@media (max-width: 900px) {
+  .guide-layout {
+    height: auto;
+    min-height: 0;
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+
+  .guide-grid {
+    --channel-col-width: 170px;
+    --hour-width: 320px;
+  }
 }

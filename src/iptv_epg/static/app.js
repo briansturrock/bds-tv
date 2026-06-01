@@ -877,25 +877,13 @@ function renderGuideGroups() {
   });
 }
 
-function selectedGuideDate() {
-  return $("guide-date")?.value || new Date().toISOString().slice(0, 10);
-}
-
-function initialiseGuideDate() {
-  const input = $("guide-date");
-  if (input && !input.value) {
-    input.value = new Date().toISOString().slice(0, 10);
-  }
-}
-
 async function loadGuideForGroup(groupId) {
-  initialiseGuideDate();
   $("guide-status").textContent = "Loading guide…";
   $("guide-content").classList.add("hidden");
   $("guide-empty").classList.remove("hidden");
   $("guide-empty").textContent = "Loading guide…";
 
-  const body = await api(`/api/guide?group_id=${encodeURIComponent(groupId)}&date=${encodeURIComponent(selectedGuideDate())}`);
+  const body = await api(`/api/guide?group_id=${encodeURIComponent(groupId)}`);
 
   if (!body.group) {
     $("guide-status").textContent = body.message || "No guide data.";
@@ -915,13 +903,13 @@ function formatGuideTime(value) {
 
 function renderGuide(body) {
   $("guide-status").textContent =
-    `${body.group.name}: ${body.channel_count} selected channels · ${body.programme_count} programmes · ${body.date}`;
+    `${body.group.name}: ${body.channel_count} selected channels · ${body.programme_count} programmes`;
 
   const content = $("guide-content");
   content.classList.remove("hidden");
   $("guide-empty").classList.add("hidden");
 
-  const rowsHtml = (body.channels || []).map((channel) => {
+  content.innerHTML = (body.channels || []).map((channel) => {
     const logo = channel.logo_url
       ? `<img src="${escapeAttr(channel.logo_url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'" />`
       : `<span></span>`;
@@ -943,9 +931,6 @@ function renderGuide(body) {
       </div>
     `;
   }).join("");
-
-  content.innerHTML = `<div class="guide-scroll">${rowsHtml}</div>`;
-  content.scrollLeft = 0;
 }
 
 function renderGuideProgramme(programme) {
@@ -964,16 +949,224 @@ function renderGuideProgramme(programme) {
 }
 
 function wireGuideEvents() {
-  initialiseGuideDate();
-
   $("guide-refresh").addEventListener("click", () => loadGuideGroups().catch((err) => {
     $("guide-status").textContent = `Could not refresh guide: ${err.message}`;
   }));
 
+  $("guide-group-filter").addEventListener("input", filterGuideGroups);
+}
+
+
+
+/* Guide timeline-grid overrides */
+const GUIDE_HOURS = 8;
+const GUIDE_HOUR_WIDTH = 360;
+
+function floorDateToHalfHour(date) {
+  const copy = new Date(date);
+  copy.setMinutes(copy.getMinutes() >= 30 ? 30 : 0, 0, 0);
+  return copy;
+}
+
+function initialiseGuideDate() {
+  const input = $("guide-date");
+  if (input && !input.value) {
+    input.value = new Date().toISOString().slice(0, 10);
+  }
+}
+
+function selectedGuideDate() {
+  initialiseGuideDate();
+  return $("guide-date")?.value || new Date().toISOString().slice(0, 10);
+}
+
+function currentGuideStart() {
+  const active = guideState.windowStart ? new Date(guideState.windowStart) : null;
+  if (active && !Number.isNaN(active.getTime())) return active;
+  return floorDateToHalfHour(new Date());
+}
+
+async function loadGuideForGroup(groupId, startDate = null) {
+  initialiseGuideDate();
+
+  $("guide-status").textContent = "Loading guide…";
+  $("guide-content").classList.add("hidden");
+  $("guide-empty").classList.remove("hidden");
+  $("guide-empty").textContent = "Loading guide…";
+
+  const params = new URLSearchParams({
+    group_id: groupId,
+    date: selectedGuideDate(),
+    hours: String(GUIDE_HOURS),
+  });
+
+  if (startDate) {
+    params.set("start", startDate.toISOString());
+  }
+
+  const body = await api(`/api/guide?${params.toString()}`);
+  guideState.windowStart = body.window_start;
+  guideState.windowEnd = body.window_end;
+
+  if (!body.group) {
+    $("guide-status").textContent = body.message || "No guide data.";
+    $("guide-empty").textContent = body.message || "No guide data.";
+    return;
+  }
+
+  renderGuide(body);
+}
+
+function formatGuideTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function guideOffsetPx(value, windowStart) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 0;
+  return ((date.getTime() - windowStart.getTime()) / 3600000) * GUIDE_HOUR_WIDTH;
+}
+
+function guideWidthPx(start, stop, windowStart, windowEnd) {
+  const startDate = new Date(start);
+  const stopDate = new Date(stop);
+  const leftDate = startDate < windowStart ? windowStart : startDate;
+  const rightDate = stopDate > windowEnd ? windowEnd : stopDate;
+  return Math.max(48, ((rightDate.getTime() - leftDate.getTime()) / 3600000) * GUIDE_HOUR_WIDTH - 6);
+}
+
+function renderGuide(body) {
+  const windowStart = new Date(body.window_start);
+  const windowEnd = new Date(body.window_end);
+  const timelineWidth = GUIDE_HOURS * GUIDE_HOUR_WIDTH;
+  const now = new Date();
+
+  $("guide-status").textContent =
+    `${body.group.name}: ${body.channel_count} selected channels · ${body.programme_count} programmes · ${formatGuideTime(body.window_start)} – ${formatGuideTime(body.window_end)}`;
+
+  const content = $("guide-content");
+  content.classList.remove("hidden");
+  $("guide-empty").classList.add("hidden");
+
+  const ticks = [];
+  for (let i = 0; i <= GUIDE_HOURS * 2; i++) {
+    const tick = new Date(windowStart.getTime() + i * 30 * 60000);
+    ticks.push(`
+      <div class="guide-time-tick" style="left:${i * (GUIDE_HOUR_WIDTH / 2)}px">
+        ${formatGuideTime(tick.toISOString())}
+      </div>
+    `);
+  }
+
+  const showNow = now >= windowStart && now <= windowEnd;
+  const nowLeft = showNow ? guideOffsetPx(now.toISOString(), windowStart) : null;
+
+  const rowsHtml = (body.channels || []).map((channel) => {
+    const logo = channel.logo_url
+      ? `<img src="${escapeAttr(channel.logo_url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'" />`
+      : `<span></span>`;
+
+    const programmes = (channel.programmes || []).length
+      ? channel.programmes.map((programme) => renderGuideProgramme(programme, windowStart, windowEnd)).join("")
+      : `<div class="guide-programme" style="left:0;width:180px"><strong>No programme data</strong><div class="desc">No matching EPG entries were found.</div></div>`;
+
+    return `
+      <div class="guide-channel-row">
+        <div class="guide-channel-info">
+          ${logo}
+          <div>
+            <strong title="${escapeAttr(channel.name)}">${escapeHtml(channel.name)}</strong>
+            <div class="muted">${escapeHtml(channel.tvg_id || "")}</div>
+          </div>
+        </div>
+        <div class="guide-timeline-row" style="width:${timelineWidth}px">
+          ${showNow ? `<div class="guide-now-line" style="left:${nowLeft}px"></div>` : ""}
+          ${programmes}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  content.innerHTML = `
+    <div class="guide-grid" style="--hour-width:${GUIDE_HOUR_WIDTH}px">
+      <div class="guide-time-header">
+        <div class="guide-time-corner">${escapeHtml(body.date || selectedGuideDate())}</div>
+        <div class="guide-time-axis" style="width:${timelineWidth}px">${ticks.join("")}</div>
+      </div>
+      ${rowsHtml}
+    </div>
+  `;
+
+  content.scrollLeft = 0;
+}
+
+function renderGuideProgramme(programme, windowStart, windowEnd) {
+  const title = programme.title || "Untitled";
+  const desc = programme.desc || "";
+  const time = `${formatGuideTime(programme.start)} – ${formatGuideTime(programme.stop)}`;
+  const tooltip = [title, time, desc].filter(Boolean).join("\\n\\n");
+
+  const startDate = new Date(programme.start);
+  const left = guideOffsetPx((startDate < windowStart ? windowStart : startDate).toISOString(), windowStart);
+  const width = guideWidthPx(programme.start, programme.stop, windowStart, windowEnd);
+
+  return `
+    <div class="guide-programme ${programme.is_now ? "now" : ""}" style="left:${left}px;width:${width}px" title="${escapeAttr(tooltip)}">
+      <strong>${escapeHtml(title)}</strong>
+      <div class="time">${escapeHtml(time)}${programme.is_now ? " · Now" : ""}</div>
+      ${desc ? `<div class="desc">${escapeHtml(desc)}</div>` : ""}
+    </div>
+  `;
+}
+
+function wireGuideEvents() {
+  initialiseGuideDate();
+
+  $("guide-refresh").addEventListener("click", () => {
+    const start = currentGuideStart();
+    loadGuideGroups().then(() => {
+      if (guideState.activeGroupId) return loadGuideForGroup(guideState.activeGroupId, start);
+    }).catch((err) => {
+      $("guide-status").textContent = `Could not refresh guide: ${err.message}`;
+    });
+  });
+
   $("guide-date").addEventListener("change", () => {
+    guideState.windowStart = null;
     if (guideState.activeGroupId) {
       loadGuideForGroup(guideState.activeGroupId).catch((err) => {
         $("guide-status").textContent = `Could not load guide date: ${err.message}`;
+      });
+    }
+  });
+
+  $("guide-prev-window").addEventListener("click", () => {
+    const start = new Date(currentGuideStart().getTime() - 2 * 3600000);
+    if (guideState.activeGroupId) {
+      loadGuideForGroup(guideState.activeGroupId, start).catch((err) => {
+        $("guide-status").textContent = `Could not load previous window: ${err.message}`;
+      });
+    }
+  });
+
+  $("guide-next-window").addEventListener("click", () => {
+    const start = new Date(currentGuideStart().getTime() + 2 * 3600000);
+    if (guideState.activeGroupId) {
+      loadGuideForGroup(guideState.activeGroupId, start).catch((err) => {
+        $("guide-status").textContent = `Could not load next window: ${err.message}`;
+      });
+    }
+  });
+
+  $("guide-today").addEventListener("click", () => {
+    $("guide-date").value = new Date().toISOString().slice(0, 10);
+    guideState.windowStart = null;
+    if (guideState.activeGroupId) {
+      loadGuideForGroup(guideState.activeGroupId).catch((err) => {
+        $("guide-status").textContent = `Could not load today: ${err.message}`;
       });
     }
   });

@@ -101,22 +101,50 @@ def selected_channels_for_group(group_id: str) -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
-def guide_window_for_date(date_value: str | None) -> tuple[datetime, datetime, str]:
-    """Return the guide window for a YYYY-MM-DD date.
+def floor_to_previous_half_hour(value: datetime) -> datetime:
+    value = value.astimezone(timezone.utc)
+    minute = 30 if value.minute >= 30 else 0
+    return value.replace(minute=minute, second=0, microsecond=0)
 
-    The window is UTC for now. The UI sends the browser's selected date. The key
-    rule is overlap, not start-time-only: a long programme that started before
-    the date/window but is still airing inside it is included.
+
+def parse_iso_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def guide_default_window(date_value: str | None = None) -> tuple[datetime, datetime, str]:
+    """Return a useful guide timeline window.
+
+    Today starts at the previous half-hour mark, not midnight. This keeps the
+    current/near-current guide visible while still allowing long programmes that
+    began earlier to appear because overlap logic is used.
+
+    Future/past dates start at midnight for the selected day.
     """
+    now = datetime.now(timezone.utc)
+    today = now.date()
+
     if date_value:
         try:
-            day = datetime.strptime(date_value, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            selected_day = datetime.strptime(date_value, "%Y-%m-%d").date()
         except ValueError:
-            day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+            selected_day = today
     else:
-        day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        selected_day = today
 
-    return day, day + timedelta(days=1), day.date().isoformat()
+    if selected_day == today:
+        window_start = floor_to_previous_half_hour(now)
+        window_end = window_start + timedelta(hours=8)
+        return window_start, window_end, selected_day.isoformat()
+
+    window_start = datetime.combine(selected_day, datetime.min.time(), tzinfo=timezone.utc)
+    window_end = window_start + timedelta(hours=8)
+    return window_start, window_end, selected_day.isoformat()
 
 
 def programme_overlaps_window(start: datetime | None, stop: datetime | None, window_start: datetime, window_end: datetime) -> bool:
@@ -135,14 +163,16 @@ def programme_overlaps_window(start: datetime | None, stop: datetime | None, win
     return True
 
 
-def programmes_for_tvg_ids(tvg_ids: set[str], date_value: str | None) -> tuple[dict[str, list[dict[str, Any]]], str]:
+def programmes_for_tvg_ids(
+    tvg_ids: set[str],
+    window_start: datetime,
+    window_end: datetime,
+) -> dict[str, list[dict[str, Any]]]:
     epg_path = filtered_epg_path()
     programmes: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
-    window_start, window_end, selected_date = guide_window_for_date(date_value)
-
     if not epg_path.exists() or not tvg_ids:
-        return programmes, selected_date
+        return programmes
 
     now = datetime.now(timezone.utc)
 
@@ -184,12 +214,12 @@ def programmes_for_tvg_ids(tvg_ids: set[str], date_value: str | None) -> tuple[d
             )
             elem.clear()
     except ET.ParseError:
-        return programmes, selected_date
+        return programmes
 
     for items in programmes.values():
         items.sort(key=lambda p: p.get("start") or "")
 
-    return programmes, selected_date
+    return programmes
 
 
 @router.get("/groups")
@@ -206,6 +236,8 @@ def api_guide_groups() -> dict[str, Any]:
 def api_guide(
     group_id: str = Query(...),
     date: str | None = Query(None, description="Guide date in YYYY-MM-DD format"),
+    start: str | None = Query(None, description="Timeline start as ISO datetime"),
+    hours: int = Query(8, ge=2, le=24),
 ) -> dict[str, Any]:
     groups = selected_guide_groups()
     group = next((item for item in groups if item["id"] == group_id), None)
@@ -222,8 +254,17 @@ def api_guide(
         }
 
     channels = selected_channels_for_group(group_id)
+    requested_start = parse_iso_datetime(start)
+    if requested_start:
+        window_start = floor_to_previous_half_hour(requested_start)
+        selected_date = window_start.date().isoformat()
+    else:
+        window_start, _default_window_end, selected_date = guide_default_window(date)
+
+    window_end = window_start + timedelta(hours=max(2, min(hours, 24)))
+
     tvg_ids = {channel["tvg_id"] for channel in channels if channel.get("tvg_id")}
-    programmes_by_channel, selected_date = programmes_for_tvg_ids(tvg_ids, date)
+    programmes_by_channel = programmes_for_tvg_ids(tvg_ids, window_start, window_end)
 
     programme_count = 0
     for channel in channels:
@@ -239,4 +280,7 @@ def api_guide(
         "programme_count": programme_count,
         "epg_path": str(filtered_epg_path()),
         "date": selected_date,
+        "window_start": window_start.isoformat(),
+        "window_end": window_end.isoformat(),
+        "hours": hours,
     }
