@@ -1049,7 +1049,9 @@ def generate_filtered_epgshare(job_id: str | None = None, days: int = 3) -> dict
         )
         by_source[source_key]["mappings"].append(mapping)
 
-    output_dir = Path(os.environ.get("DATA_DIR", "/data")) / "output"
+    # Keep output location consistent with filtered.m3u and the existing
+    # browser/download route expectations.
+    output_dir = Path(os.environ.get("DATA_DIR", "/data"))
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / "filtered_epg.xml"
 
@@ -1119,8 +1121,11 @@ def generate_filtered_epgshare(job_id: str | None = None, days: int = 3) -> dict
                             elem.clear()
                             continue
 
+                        # Do not clear child elements such as <title>, <desc>,
+                        # <category>, etc. before the parent <programme> has been
+                        # serialized. Clearing non-programme tags here strips useful
+                        # guide data and produces empty programme elements.
                         if elem.tag != "programme":
-                            elem.clear()
                             continue
 
                         source_channel_id = elem.attrib.get("channel")

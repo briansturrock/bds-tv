@@ -1,4 +1,4 @@
-# Patch: Generate filtered EPG from saved EPGShare mappings
+# Patch: Fix EPGShare output path and empty programme metadata
 
 Apply this on branch:
 
@@ -6,64 +6,45 @@ Apply this on branch:
 epgshare-index
 ```
 
-This adds filtered EPG generation from reviewed/saved EPGShare mappings only.
+## Fix 1: output location
 
-## New endpoint
-
-```text
-POST /api/epgshare/generate-filtered?days=3
-```
-
-## Behaviour
-
-- Reads saved mappings from `epgshare_mappings`.
-- Ignores rows marked `ignored`.
-- Ignores unsaved suggestions.
-- Groups mappings by `source_key`.
-- Downloads only the required `epg_ripper_*.xml.gz` files.
-- Parses only programmes for saved XMLTV IDs.
-- Rewrites programme `channel=""` IDs to your IPTV `tvg-id` values so the EPG matches the filtered M3U.
-- Writes:
+The EPGShare generator wrote:
 
 ```text
 /data/output/filtered_epg.xml
 ```
 
-- Creates a backend job visible in:
+but the app/browser route expects the same style as filtered M3U output, i.e.:
 
 ```text
-GET /api/jobs
+/data/filtered_epg.xml
 ```
 
-## Diagnostics
-
-Adds Diagnostics row for:
+This patch changes EPGShare filtered EPG generation to write:
 
 ```text
-POST /api/epgshare/generate-filtered
+/data/filtered_epg.xml
 ```
 
-## Review UI
+## Fix 2: empty programme metadata
 
-Adds a button to:
+The generated XML had programme rows but empty child elements:
 
-```text
-/dev/epgshare-matching
+```xml
+<title /><desc />
 ```
 
-called:
+Cause: the streaming XML parser cleared child elements like `<title>` and `<desc>` before serializing the parent `<programme>`.
 
-```text
-Generate filtered EPG
-```
+This patch stops clearing non-programme child nodes before the programme is written.
 
 ## Apply
 
 ```bash
-unzip iptv_epg_patch_epgshare_generate_filtered.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_epgshare_output_and_titles.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
 git add .
-git commit -m "Generate filtered EPG from EPGShare mappings"
+git commit -m "Fix EPGShare output path and programme metadata"
 git push
 ```
 
@@ -76,15 +57,22 @@ sudo docker compose up --build -d
 curl http://127.0.0.1:8088/health
 ```
 
-Then use:
-
-```text
-http://192.168.0.156:8088/dev/epgshare-matching
-```
-
-or Diagnostics:
+Then regenerate:
 
 ```text
 POST /api/epgshare/generate-filtered?days=3
 GET  /api/jobs
+```
+
+Verify:
+
+```bash
+sudo ls -lh /docker/iptv_epg/data/filtered_epg.xml
+sudo grep -m 5 "<title" /docker/iptv_epg/data/filtered_epg.xml
+```
+
+Then test browser:
+
+```text
+http://192.168.0.156:8088/filtered_epg.xml
 ```
