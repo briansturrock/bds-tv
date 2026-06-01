@@ -1,50 +1,58 @@
-# Patch: Fix EPGShare output path and empty programme metadata
+# Patch: Product EPG Management UI
 
 Apply this on branch:
 
 ```text
-epgshare-index
+epg-product-ui
 ```
 
-## Fix 1: output location
+This adds a product-style EPG management page on top of the working EPGShare backend.
 
-The EPGShare generator wrote:
+## New page
 
 ```text
-/data/output/filtered_epg.xml
+GET /epg
 ```
 
-but the app/browser route expects the same style as filtered M3U output, i.e.:
+## Layout
+
+- Left column: selected channels, mapping status, filter.
+- Right column: selected channel details, saved mapping, suggestions, manual search, save/ignore actions.
+- Top actions:
+  - refresh
+  - import/update EPGShare index
+  - generate filtered EPG
+  - links to filtered.m3u and filtered_epg.xml
+  - recent EPGShare job status
+
+## Backend
+
+No new data endpoints are required. This page uses existing endpoints:
 
 ```text
-/data/filtered_epg.xml
+GET  /api/epgshare/mapping-review
+GET  /api/epgshare/search
+POST /api/epgshare/mappings
+POST /api/epgshare/index
+POST /api/epgshare/generate-filtered
+GET  /api/jobs
 ```
 
-This patch changes EPGShare filtered EPG generation to write:
+## Diagnostics
+
+Adds a Diagnostics row for:
 
 ```text
-/data/filtered_epg.xml
+GET /epg
 ```
-
-## Fix 2: empty programme metadata
-
-The generated XML had programme rows but empty child elements:
-
-```xml
-<title /><desc />
-```
-
-Cause: the streaming XML parser cleared child elements like `<title>` and `<desc>` before serializing the parent `<programme>`.
-
-This patch stops clearing non-programme child nodes before the programme is written.
 
 ## Apply
 
 ```bash
-unzip iptv_epg_patch_epgshare_output_and_titles.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_epg_product_ui.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
 git add .
-git commit -m "Fix EPGShare output path and programme metadata"
+git commit -m "Add product EPG management UI"
 git push
 ```
 
@@ -57,22 +65,8 @@ sudo docker compose up --build -d
 curl http://127.0.0.1:8088/health
 ```
 
-Then regenerate:
+Open:
 
 ```text
-POST /api/epgshare/generate-filtered?days=3
-GET  /api/jobs
-```
-
-Verify:
-
-```bash
-sudo ls -lh /docker/iptv_epg/data/filtered_epg.xml
-sudo grep -m 5 "<title" /docker/iptv_epg/data/filtered_epg.xml
-```
-
-Then test browser:
-
-```text
-http://192.168.0.156:8088/filtered_epg.xml
+http://192.168.0.156:8088/epg
 ```
