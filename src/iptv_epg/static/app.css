@@ -533,3 +533,69 @@ a {
     max-height: 340px;
   }
 }
+
+
+/* Compact Channels tab layout */
+#tab-channels .channels-layout {
+  min-height: calc(100vh - 175px);
+}
+
+#tab-channels .groups-pane,
+#tab-channels .channels-pane {
+  min-height: 0;
+}
+
+#tab-channels .group-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 5px 8px;
+}
+
+#tab-channels .group-row > span:first-child {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+#tab-channels .group-row .counts {
+  white-space: nowrap;
+}
+
+#tab-channels .group-row button,
+#tab-channels .channel-row button,
+#tab-channels .move-button,
+#tab-channels .order-button {
+  min-width: 30px;
+  min-height: 28px;
+  padding: 3px 8px;
+  line-height: 1;
+}
+
+#tab-channels .channel-row {
+  display: grid;
+  grid-template-columns: auto 34px minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 5px 8px;
+}
+
+#tab-channels .channel-row img {
+  width: 30px;
+  max-height: 20px;
+}
+
+#tab-channels .channel-row .channel-name,
+#tab-channels .channel-row .channel-meta {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+#tab-channels .channel-select-header {
+  min-height: 38px;
+  padding: 6px 9px;
+}

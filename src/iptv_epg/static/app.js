@@ -397,7 +397,6 @@ async function init() {
   }
 }
 
-init();
 
 
 /* EPG tab integration */
@@ -695,3 +694,23 @@ function wireEpgEvents() {
   $("epg-import-index").addEventListener("click", () => importEpgIndex().catch((err) => alert(err.message)));
   $("epg-generate").addEventListener("click", () => generateEpgFromMappings().catch((err) => alert(err.message)));
 }
+
+// Start the app after every tab module has been declared.
+init().catch((err) => {
+  console.error(err);
+  const status = document.getElementById("header-status") || document.getElementById("epg-job-status");
+  if (status) status.textContent = `Startup failed: ${err.message || err}`;
+});
+
+
+function ensureActiveEpgTabLoaded() {
+  const epgPanel = document.getElementById("tab-epg");
+  if (epgPanel && epgPanel.classList.contains("active") && !epgState.loaded) {
+    loadEpgReview().catch((err) => {
+      const status = document.getElementById("epg-job-status");
+      if (status) status.textContent = `Could not load EPG review: ${err.message || err}`;
+    });
+  }
+}
+
+setTimeout(ensureActiveEpgTabLoaded, 0);

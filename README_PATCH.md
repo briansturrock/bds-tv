@@ -1,4 +1,4 @@
-# Patch: Integrate EPG into the main app shell
+# Patch: Fix EPG tab load and compact Channels rows
 
 Apply this on branch:
 
@@ -6,56 +6,23 @@ Apply this on branch:
 epg-product-ui
 ```
 
-This is not a cosmetic navigation patch. It moves the EPG UI into the same root app shell as Settings and Channels.
+## Fix 1: EPG tab did not load selected channels
 
-## Result
+The previous app-shell integration called `init()` before the EPG tab state/functions were fully declared. Depending on load/click timing, the EPG tab could render the shell but not load `/api/epgshare/mapping-review`.
 
-The root app now has equal top-level sections:
+This patch moves app startup to the end of `app.js`, after the EPG tab module is declared, and adds a fallback to load the EPG review when the EPG tab is active.
 
-```text
-Settings | Channels | EPG | Diagnostics
-```
+## Fix 2: compact Channels tab rows
 
-Core pages live in the root app:
-
-```text
-/          Settings, Channels, EPG
-/dev/...   Developer tools only
-```
-
-## What this patch does
-
-- Adds an `EPG` tab inside `src/iptv_epg/static/index.html`.
-- Moves the EPG Management UI into that root tab.
-- Adds EPG styles to `app.css`.
-- Adds EPG behaviour to `app.js`.
-- Removes the `/epg` product route wiring from `main.py`.
-- Removes the `/epg` diagnostics row.
-- Keeps `/dev/epgshare-matching` as a dev page for now.
-
-## Cleanup required
-
-After applying the patch, remove the obsolete standalone EPG product page files:
-
-```bash
-git rm -f src/iptv_epg/epg_product_routes.py
-git rm -f src/iptv_epg/static/epg.html
-git rm -f src/iptv_epg/static/epg.css
-git rm -f src/iptv_epg/static/epg.js
-```
+The Channels tab still wastes vertical space when reorder arrow buttons are present. This patch makes group/channel rows single-line, compact entries where the name, count, checkbox/logo and ordering controls sit on one line.
 
 ## Apply
 
 ```bash
-unzip iptv_epg_patch_integrate_epg_into_app_shell.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_epg_tab_load_and_compact_channels.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
-git rm -f src/iptv_epg/epg_product_routes.py
-git rm -f src/iptv_epg/static/epg.html
-git rm -f src/iptv_epg/static/epg.css
-git rm -f src/iptv_epg/static/epg.js
-git status --short
 git add .
-git commit -m "Integrate EPG into main app shell"
+git commit -m "Fix EPG tab loading and compact channel rows"
 git push
 ```
 
@@ -71,11 +38,8 @@ curl http://127.0.0.1:8088/health
 Test:
 
 ```text
-http://192.168.0.156:8088/
-http://192.168.0.156:8088/#settings
-http://192.168.0.156:8088/#channels
 http://192.168.0.156:8088/#epg
-http://192.168.0.156:8088/dev/diagnostics
+http://192.168.0.156:8088/#channels
 ```
 
-`/epg` should no longer be the product route. The product EPG UI is now the EPG tab inside `/`.
+The EPG tab should now populate the selected channel list, and the Channels tab should use more compact single-line rows.
