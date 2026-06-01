@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Diagnostics Console</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/static/diagnostics.css" />
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Diagnostics Console</h1>
+      <p>Backend endpoint runner, smoke checks, coverage, and exportable results.</p>
+    </div>
+    <div class="actions">
+      <button id="run-smoke">Run smoke checks again</button>
+      <button id="copy-all">Copy all results</button>
+      <button id="export-all">Export all JSON</button>
+      <button id="clear-results">Clear results</button>
+    </div>
+  </header>
+  <section class="summary">
+    <div><strong id="summary-pass">0</strong><span>passed</span></div>
+    <div><strong id="summary-fail">0</strong><span>failed</span></div>
+    <div><strong id="summary-pending">0</strong><span>not run</span></div>
+    <div><strong id="summary-last-run">Never</strong><span>last run</span></div>
+  </section>
+  <main id="endpoint-groups"></main>
+  <script src="/static/diagnostics.js"></script>
+</body>
+</html>

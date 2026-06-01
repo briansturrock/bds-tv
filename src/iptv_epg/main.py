@@ -29,6 +29,7 @@ from .db import (
     update_job,
 )
 from .epg import detect_epg_urls, generate_filtered_epg, scan_epg_channels
+from .diagnostics_routes import router as diagnostics_router
 from .m3u import fetch_and_index_m3u, generate_filtered_m3u
 from .settings import FILTERED_EPG, FILTERED_M3U, ensure_runtime_dirs
 
@@ -38,6 +39,7 @@ executor = ThreadPoolExecutor(max_workers=2)
 
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.include_router(diagnostics_router)
 
 
 class SettingsIn(BaseModel):
@@ -147,22 +149,6 @@ def api_fetch_m3u() -> dict:
     executor.submit(run_m3u_fetch_job, job_id, url)
 
     return {"ok": True, "job_id": job_id, "message": "M3U fetch/index job started"}
-
-
-
-@app.get("/api/jobs")
-def api_list_jobs(limit: int = Query(25, ge=1, le=200)) -> dict:
-    with connect() as conn:
-        rows = conn.execute(
-            """
-            SELECT *
-            FROM jobs
-            ORDER BY started_at DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
-    return {"ok": True, "jobs": [dict(r) for r in rows]}
 
 
 @app.get("/api/jobs/{job_id}")
