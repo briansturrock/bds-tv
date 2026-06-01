@@ -1,4 +1,4 @@
-# Patch: Guide page phase 1
+# Patch: Preserve Guide programme titles/descriptions
 
 Apply this on branch:
 
@@ -6,55 +6,39 @@ Apply this on branch:
 guide-page
 ```
 
-## Scope
+## Problem
 
-Adds a Guide tab inside the main app shell:
-
-```text
-Settings | Channels | EPG | Guide | Diagnostics
-```
-
-This is phase 1 only. No streaming yet.
-
-## Behaviour
-
-The Guide shows only:
-
-- groups that have selected channels
-- selected channels inside those groups
-
-It uses:
+The Guide tab showed every airing as:
 
 ```text
-/data/filtered_epg.xml
+Untitled
 ```
 
-and selected channel state from SQLite.
+with no description, even though `filtered_epg.xml` contains programme metadata.
 
-## New endpoints
+## Cause
 
-```text
-GET /api/guide/groups
-GET /api/guide?group_id=<group_id>
+The Guide backend uses `ElementTree.iterparse()`. It was clearing child nodes like:
+
+```xml
+<title>
+<desc>
+<category>
 ```
 
-## UI
+before the parent `<programme>` element was processed.
 
-- Groups on the left.
-- Guide window on the right.
-- Channels in the selected group.
-- Channel icons/logos where available.
-- Current airing highlighted.
-- Programme hover tooltip shows title/time/description.
-- Programmes are loaded from the generated filtered EPG.
+## Fix
+
+Only clear elements once the parent `<programme>` has been processed/skipped.
 
 ## Apply
 
 ```bash
-unzip iptv_epg_patch_guide_page_phase1.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_guide_preserve_programme_metadata.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
 git add .
-git commit -m "Add guide page phase 1"
+git commit -m "Preserve guide programme metadata"
 git push
 ```
 
@@ -71,5 +55,6 @@ Test:
 
 ```text
 http://192.168.0.156:8088/#guide
-http://192.168.0.156:8088/dev/diagnostics
 ```
+
+You should now see real programme titles and hover descriptions where they exist in the XML.

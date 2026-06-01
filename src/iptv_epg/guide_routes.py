@@ -115,8 +115,11 @@ def programmes_for_tvg_ids(tvg_ids: set[str], hours_back: int, hours_forward: in
     try:
         context = ET.iterparse(epg_path, events=("end",))
         for _event, elem in context:
+            # Do not clear child elements such as <title>, <desc>, <category>,
+            # etc. before the parent <programme> has been processed. Clearing
+            # non-programme elements here strips useful guide metadata and makes
+            # every programme appear as Untitled/no description.
             if elem.tag != "programme":
-                elem.clear()
                 continue
 
             channel = elem.attrib.get("channel") or ""
