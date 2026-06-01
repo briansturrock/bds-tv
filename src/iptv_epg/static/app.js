@@ -255,6 +255,34 @@ function renderGroups() {
   list.appendChild(fragment);
 }
 
+
+function resetSelectShownCheckbox() {
+  const checkbox = $("select-shown-checkbox");
+  if (!checkbox) return;
+
+  checkbox.checked = false;
+  checkbox.indeterminate = false;
+  checkbox.disabled = true;
+}
+
+function updateSelectShownCheckbox() {
+  const checkbox = $("select-shown-checkbox");
+  if (!checkbox) return;
+
+  const total = state.visibleChannelIds?.length || 0;
+  const selected = state.visibleSelectedIds?.length || 0;
+
+  checkbox.disabled = total === 0;
+  checkbox.checked = total > 0 && selected === total;
+  checkbox.indeterminate = selected > 0 && selected < total;
+
+  const meta = $("shown-selection-meta");
+  if (meta) {
+    meta.textContent = total ? `${selected}/${total} shown selected` : "No shown channels";
+  }
+}
+
+
 async function loadChannels() {
   if (!state.selectedGroupId) return;
 

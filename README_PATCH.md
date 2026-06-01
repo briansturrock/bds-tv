@@ -1,4 +1,4 @@
-# Patch: Fix channel loading after ordering UI restore
+# Patch: Restore select-shown checkbox helpers
 
 Apply this on branch:
 
@@ -8,29 +8,32 @@ epg-product-ui
 
 ## Problem
 
-After restoring the group ordering buttons, clicking a group changed the heading but left the channels pane stuck on:
+After restoring ordering controls, clicking a group failed with:
 
 ```text
-Loading channels...
+resetSelectShownCheckbox is not defined
 ```
+
+That prevented the Channels page from loading channel rows.
 
 ## Fix
 
-This patch makes the group/channel loading path defensive:
+Adds back the missing helper functions:
 
-- catches group-load errors and shows them in the channels pane
-- prevents the UI from staying stuck at "Loading channels..."
-- avoids reloading the channel list after every order-save
-- renders the reordered channel list immediately, then saves order
-- hardens `renderChannels()` against malformed/null results
+```text
+resetSelectShownCheckbox()
+updateSelectShownCheckbox()
+```
+
+These keep the "Select shown channels" checkbox state in sync.
 
 ## Apply
 
 ```bash
-unzip iptv_epg_patch_fix_channel_load_after_order_restore.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_restore_select_shown_helpers.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
 git add .
-git commit -m "Fix channel loading after ordering restore"
+git commit -m "Restore select shown checkbox helpers"
 git push
 ```
 
@@ -49,4 +52,4 @@ Test:
 http://192.168.0.156:8088/#channels
 ```
 
-Click several groups and confirm channels load. Then test group/channel up/down arrows.
+Click groups and confirm channels load.
