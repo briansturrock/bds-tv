@@ -7,7 +7,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
 from .db import create_job, update_job
-from .epgshare import epgshare_mapping_review, epgshare_matches, epgshare_saved_mappings, epgshare_status, import_epgshare_index, save_epgshare_mappings, search_epgshare
+from .epgshare import epgshare_mapping_review, epgshare_matches, epgshare_saved_mappings, epgshare_status, generate_filtered_epgshare, import_epgshare_index, save_epgshare_mappings, search_epgshare
 
 
 router = APIRouter(prefix="/api/epgshare", tags=["epgshare"])
@@ -89,3 +89,40 @@ def api_epgshare_mappings() -> dict:
 @router.post("/mappings")
 def api_save_epgshare_mappings(payload: EpgshareMappingsIn) -> dict:
     return save_epgshare_mappings([item.model_dump() for item in payload.mappings])
+
+
+def _run_generate_filtered_job(job_id: str, days: int) -> None:
+    try:
+        result = generate_filtered_epgshare(job_id=job_id, days=days)
+        update_job(
+            job_id,
+            status="complete",
+            message=(
+                f"Generated EPGShare filtered EPG with "
+                f"{result['channel_count']} channels and {result['programme_count']} programmes"
+            ),
+            progress_current=int(result["source_count"]),
+            progress_total=int(result["source_count"]),
+            finish=True,
+        )
+    except Exception as exc:
+        update_job(
+            job_id,
+            status="failed",
+            message="EPGShare filtered EPG generation failed",
+            error=str(exc),
+            finish=True,
+        )
+
+
+@router.post("/generate-filtered")
+def api_generate_filtered_epgshare(days: int = Query(3, ge=1, le=14)) -> dict:
+    job_id = str(uuid.uuid4())
+    create_job(job_id, "epgshare_filtered_epg", "Queued EPGShare filtered EPG generation")
+    executor.submit(_run_generate_filtered_job, job_id, days)
+    return {
+        "ok": True,
+        "job_id": job_id,
+        "message": "EPGShare filtered EPG generation job started",
+        "days": days,
+    }

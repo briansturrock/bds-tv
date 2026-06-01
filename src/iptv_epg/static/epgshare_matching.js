@@ -218,3 +218,24 @@ $("export").addEventListener("click", exportReview);
 loadReview().catch(err => {
   $("rows").innerHTML = `<pre>${esc(err.message || err)}</pre>`;
 });
+
+
+async function generateFilteredEpg() {
+  const ok = confirm("Generate filtered_epg.xml from saved mappings only?");
+  if (!ok) return;
+
+  const res = await fetch("/api/epgshare/generate-filtered?days=3", { method: "POST" });
+  const body = await res.json();
+
+  if (!res.ok || !body.ok) {
+    alert(`Generation failed to start: ${JSON.stringify(body)}`);
+    return;
+  }
+
+  alert(`Generation job started: ${body.job_id}`);
+}
+
+const generateButton = $("generate");
+if (generateButton) {
+  generateButton.addEventListener("click", generateFilteredEpg);
+}

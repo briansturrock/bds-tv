@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import gzip
+import os
 import re
+import tempfile
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
+from pathlib import Path
 from typing import Any
+from xml.etree import ElementTree as ET
 
 import requests
 
@@ -908,4 +914,255 @@ def epgshare_mapping_review() -> dict[str, Any]:
         },
         "required_sources": matches["required_sources"],
         "rows": rows,
+    }
+
+
+def epgshare_active_mappings() -> list[dict[str, Any]]:
+    ensure_epgshare_tables()
+
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                epgshare_mappings.channel_id,
+                epgshare_mappings.xmltv_id,
+                epgshare_mappings.source_key,
+                epgshare_mappings.mapping_type,
+                epgshare_mappings.confidence,
+                epgshare_mappings.updated_at,
+                channels.name,
+                channels.tvg_name,
+                channels.tvg_id,
+                groups.name AS group_name,
+                epgshare_sources.xml_url,
+                epgshare_sources.txt_url
+            FROM epgshare_mappings
+            JOIN channels ON channels.id = epgshare_mappings.channel_id
+            JOIN groups ON groups.id = channels.group_id
+            JOIN epgshare_sources ON epgshare_sources.source_key = epgshare_mappings.source_key
+            WHERE epgshare_mappings.ignored = 0
+              AND epgshare_mappings.xmltv_id IS NOT NULL
+              AND epgshare_mappings.source_key IS NOT NULL
+              AND channels.selected = 1
+              AND channels.missing = 0
+              AND groups.missing = 0
+            ORDER BY epgshare_mappings.source_key, channels.name
+            """
+        ).fetchall()
+
+    return [dict(r) for r in rows]
+
+
+def xmltv_time_to_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+
+    match = re.match(r"^(\d{14})", value.strip())
+    if not match:
+        return None
+
+    try:
+        return datetime.strptime(match.group(1), "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def programme_in_window(elem: ET.Element, window_start: datetime, window_end: datetime) -> bool:
+    start = xmltv_time_to_datetime(elem.attrib.get("start"))
+    stop = xmltv_time_to_datetime(elem.attrib.get("stop"))
+
+    if start is None and stop is None:
+        return True
+
+    if stop is not None and stop < window_start:
+        return False
+
+    if start is not None and start > window_end:
+        return False
+
+    return True
+
+
+def download_to_tempfile(url: str) -> Path:
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; iptv_epg/0.1)",
+        "Accept": "application/gzip,application/xml,text/xml,*/*",
+    }
+
+    response = requests.get(url, stream=True, timeout=(20, 300), headers=headers)
+    response.raise_for_status()
+
+    fd, path = tempfile.mkstemp(prefix="epgshare_", suffix=".xml.gz")
+    temp_path = Path(path)
+
+    try:
+        with os.fdopen(fd, "wb") as out:
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    out.write(chunk)
+    except Exception:
+        try:
+            temp_path.unlink(missing_ok=True)
+        finally:
+            raise
+
+    return temp_path
+
+
+def rewrite_channel_element(mapping: dict[str, Any]) -> ET.Element:
+    target_id = mapping.get("tvg_id") or mapping.get("xmltv_id")
+    channel = ET.Element("channel", {"id": target_id})
+
+    display = ET.SubElement(channel, "display-name")
+    display.text = mapping.get("tvg_name") or mapping.get("name") or target_id
+
+    if mapping.get("name") and mapping.get("name") != display.text:
+        alt = ET.SubElement(channel, "display-name")
+        alt.text = mapping["name"]
+
+    return channel
+
+
+def serialize_element(elem: ET.Element) -> str:
+    return ET.tostring(elem, encoding="unicode", short_empty_elements=True)
+
+
+def generate_filtered_epgshare(job_id: str | None = None, days: int = 3) -> dict[str, Any]:
+    ensure_epgshare_tables()
+
+    days = max(1, min(int(days), 14))
+    mappings = epgshare_active_mappings()
+
+    if not mappings:
+        raise RuntimeError("No saved EPGShare mappings found. Review and save mappings before generating EPG.")
+
+    by_source: dict[str, dict[str, Any]] = {}
+    for mapping in mappings:
+        source_key = mapping["source_key"]
+        by_source.setdefault(
+            source_key,
+            {
+                "source_key": source_key,
+                "xml_url": mapping["xml_url"],
+                "mappings": [],
+            },
+        )
+        by_source[source_key]["mappings"].append(mapping)
+
+    output_dir = Path(os.environ.get("DATA_DIR", "/data")) / "output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / "filtered_epg.xml"
+
+    window_start = datetime.now(timezone.utc) - timedelta(hours=6)
+    window_end = datetime.now(timezone.utc) + timedelta(days=days)
+
+    source_total = len(by_source)
+    programme_count = 0
+    channel_count = 0
+    downloaded_sources = []
+    missing_channel_ids: list[dict[str, Any]] = []
+
+    if job_id:
+        update_job(
+            job_id,
+            message=f"Generating EPGShare filtered EPG from {source_total} XML.GZ source files",
+            progress_current=0,
+            progress_total=source_total,
+        )
+
+    with output_path.open("w", encoding="utf-8") as out:
+        out.write('<?xml version="1.0" encoding="UTF-8"?>\n')
+        out.write('<tv generator-info-name="iptv_epg EPGShare filtered">\n')
+
+        # Emit channel definitions that match the IPTV M3U tvg-id values.
+        for mapping in mappings:
+            out.write(serialize_element(rewrite_channel_element(mapping)))
+            out.write("\n")
+            channel_count += 1
+
+        for index, source in enumerate(sorted(by_source.values(), key=lambda s: s["source_key"]), start=1):
+            source_key = source["source_key"]
+            xml_url = source["xml_url"]
+
+            if job_id:
+                update_job(
+                    job_id,
+                    message=f"Downloading/parsing EPGShare source {index}/{source_total}: {source_key}",
+                    progress_current=index - 1,
+                    progress_total=source_total,
+                )
+
+            source_mappings = source["mappings"]
+            source_xmltv_ids = {m["xmltv_id"] for m in source_mappings}
+            target_by_xmltv_id = {
+                m["xmltv_id"]: (m.get("tvg_id") or m["xmltv_id"])
+                for m in source_mappings
+            }
+
+            temp_path = download_to_tempfile(xml_url)
+            downloaded_sources.append({
+                "source_key": source_key,
+                "xml_url": xml_url,
+                "mapping_count": len(source_mappings),
+            })
+
+            seen_channel_ids = set()
+
+            try:
+                with gzip.open(temp_path, "rb") as gz:
+                    context = ET.iterparse(gz, events=("end",))
+                    for _event, elem in context:
+                        if elem.tag == "channel":
+                            channel_id = elem.attrib.get("id")
+                            if channel_id in source_xmltv_ids:
+                                seen_channel_ids.add(channel_id)
+                            elem.clear()
+                            continue
+
+                        if elem.tag != "programme":
+                            elem.clear()
+                            continue
+
+                        source_channel_id = elem.attrib.get("channel")
+                        if source_channel_id not in source_xmltv_ids:
+                            elem.clear()
+                            continue
+
+                        if not programme_in_window(elem, window_start, window_end):
+                            elem.clear()
+                            continue
+
+                        elem.attrib["channel"] = target_by_xmltv_id[source_channel_id]
+                        out.write(serialize_element(elem))
+                        out.write("\n")
+                        programme_count += 1
+                        elem.clear()
+
+                for xmltv_id in source_xmltv_ids - seen_channel_ids:
+                    missing_channel_ids.append({
+                        "source_key": source_key,
+                        "xmltv_id": xmltv_id,
+                    })
+            finally:
+                temp_path.unlink(missing_ok=True)
+
+            if job_id:
+                update_job(
+                    job_id,
+                    message=f"Parsed EPGShare source {index}/{source_total}: {source_key}",
+                    progress_current=index,
+                    progress_total=source_total,
+                )
+
+        out.write("</tv>\n")
+
+    return {
+        "ok": True,
+        "output_path": str(output_path),
+        "days": days,
+        "source_count": source_total,
+        "channel_count": channel_count,
+        "programme_count": programme_count,
+        "downloaded_sources": downloaded_sources,
+        "missing_channel_ids": missing_channel_ids,
     }
