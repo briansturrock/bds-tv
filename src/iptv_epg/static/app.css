@@ -596,3 +596,13 @@ a.button,
 #tab-channels a.button:hover {
   color: var(--accent);
 }
+
+
+/* Keep ordering controls visible and aligned */
+#tab-channels .order-button {
+  visibility: visible;
+}
+
+#tab-channels .order-button:disabled {
+  opacity: 0.35;
+}

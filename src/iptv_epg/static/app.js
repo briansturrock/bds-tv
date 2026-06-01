@@ -188,7 +188,6 @@ async function saveChannelOrderFromVisibleChannels() {
     }),
   });
   setMessage("channels-info", "Saved channel order.");
-  await loadChannels();
 }
 
 async function moveChannel(channelId, direction) {
@@ -233,7 +232,11 @@ function renderGroups() {
       state.selectedGroup = group;
       state.channelsOffset = 0;
       renderGroups();
-      loadChannels();
+      loadChannels().catch((err) => {
+        $("selected-group-meta").textContent = "Could not load channels.";
+        $("channels-list").innerHTML = `<div class="channel-row"><span></span><span></span><span>Could not load channels: ${escapeHtml(err.message)}</span><span></span><span></span><span></span></div>`;
+        setMessage("channels-info", `Could not load channels: ${err.message}`, true);
+      });
     });
 
     row.querySelector(".group-up").addEventListener("click", (event) => {
@@ -273,12 +276,18 @@ async function loadChannels() {
   $("selected-group-meta").textContent =
     `${state.channelsTotal} channels · showing ${state.channelsOffset + 1}-${Math.min(state.channelsOffset + state.channelsLimit, state.channelsTotal)}`;
 
-  renderChannels(result.channels || []);
-  updateSelectShownCheckbox();
+  try {
+    renderChannels(result.channels || []);
+    updateSelectShownCheckbox();
+  } catch (err) {
+    $("selected-group-meta").textContent = "Could not render channels.";
+    $("channels-list").innerHTML = `<div class="channel-row"><span></span><span></span><span>Could not render channels: ${escapeHtml(err.message)}</span><span></span><span></span><span></span></div>`;
+    throw err;
+  }
 }
 
 function renderChannels(channels) {
-  state.currentChannels = channels || [];
+  state.currentChannels = Array.isArray(channels) ? channels : [];
   const list = $("channels-list");
   list.innerHTML = "";
 

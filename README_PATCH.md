@@ -1,4 +1,4 @@
-# Patch: Restore ordering UI and keep compact rows
+# Patch: Fix channel loading after ordering UI restore
 
 Apply this on branch:
 
@@ -6,30 +6,31 @@ Apply this on branch:
 epg-product-ui
 ```
 
-## What this fixes
+## Problem
 
-The backend ordering endpoints still existed, but the frontend ordering controls had been lost from `static/app.js`.
+After restoring the group ordering buttons, clicking a group changed the heading but left the channels pane stuck on:
 
-This patch restores:
+```text
+Loading channels...
+```
 
-- group up/down buttons
-- channel up/down buttons
-- save calls to:
-  - `POST /api/groups/order`
-  - `POST /api/channels/order`
-- compact single-line group rows
-- compact single-line channel rows
-- button/link alignment CSS for the Channels toolbar
+## Fix
 
-It also keeps the EPG app-shell load-order fix by starting the app after the EPG tab code is declared.
+This patch makes the group/channel loading path defensive:
+
+- catches group-load errors and shows them in the channels pane
+- prevents the UI from staying stuck at "Loading channels..."
+- avoids reloading the channel list after every order-save
+- renders the reordered channel list immediately, then saves order
+- hardens `renderChannels()` against malformed/null results
 
 ## Apply
 
 ```bash
-unzip iptv_epg_patch_restore_ordering_ui.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_fix_channel_load_after_order_restore.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
 git add .
-git commit -m "Restore ordering UI controls"
+git commit -m "Fix channel loading after ordering restore"
 git push
 ```
 
@@ -46,5 +47,6 @@ Test:
 
 ```text
 http://192.168.0.156:8088/#channels
-http://192.168.0.156:8088/#epg
 ```
+
+Click several groups and confirm channels load. Then test group/channel up/down arrows.
