@@ -16,6 +16,7 @@
       <button class="tab-button active" data-tab="settings">Settings</button>
       <button class="tab-button" data-tab="channels">Channels</button>
       <button class="tab-button" data-tab="epg">EPG</button>
+      <button class="tab-button" data-tab="guide">Guide</button>
       <a class="tab-link" href="/dev/diagnostics" target="_blank" rel="noopener">Diagnostics</a>
     </nav>
   </header>
@@ -145,6 +146,40 @@
                 <span id="epg-save-state" class="muted"></span>
               </section>
             </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+
+    <section id="tab-guide" class="tab-panel">
+      <div class="guide-shell">
+        <div class="guide-toolbar">
+          <div>
+            <h2>Guide</h2>
+            <p class="muted">Selected groups and selected channels only.</p>
+          </div>
+          <div class="button-row">
+            <button id="guide-refresh">Refresh guide</button>
+          </div>
+        </div>
+
+        <div id="guide-status" class="guide-status">Guide not loaded yet.</div>
+
+        <div class="guide-layout">
+          <aside class="guide-groups card">
+            <div class="guide-panel-head">
+              <h2>Groups</h2>
+              <input id="guide-group-filter" type="search" placeholder="Filter groups" />
+            </div>
+            <div id="guide-group-list" class="guide-group-list"></div>
+          </aside>
+
+          <section class="guide-window card">
+            <div id="guide-empty" class="guide-empty">
+              Select a group to view the guide.
+            </div>
+            <div id="guide-content" class="guide-content hidden"></div>
           </section>
         </div>
       </div>

@@ -444,7 +444,13 @@ function switchTab(tab) {
     });
   }
 
-  if (["settings", "channels", "epg"].includes(tab)) {
+  if (tab === "guide" && !guideState.loaded) {
+    loadGuideGroups().catch((err) => {
+      $("guide-status").textContent = `Could not load guide groups: ${err.message}`;
+    });
+  }
+
+  if (["settings", "channels", "epg", "guide"].includes(tab)) {
     history.replaceState(null, "", `#${tab}`);
   }
 }
@@ -491,9 +497,10 @@ function wireEvents() {
 async function init() {
   wireEvents();
   wireEpgEvents();
+  wireGuideEvents();
 
   const initialTab = window.location.hash.replace("#", "");
-  if (["settings", "channels", "epg"].includes(initialTab)) {
+  if (["settings", "channels", "epg", "guide"].includes(initialTab)) {
     switchTab(initialTab);
   }
 
@@ -805,9 +812,154 @@ function wireEpgEvents() {
   $("epg-generate").addEventListener("click", () => generateEpgFromMappings().catch((err) => alert(err.message)));
 }
 
+
+/* Guide tab integration */
+const guideState = {
+  groups: [],
+  filteredGroups: [],
+  activeGroupId: null,
+  loaded: false,
+};
+
+async function loadGuideGroups() {
+  const body = await api("/api/guide/groups");
+  guideState.groups = body.groups || [];
+  guideState.filteredGroups = [...guideState.groups];
+  guideState.loaded = true;
+
+  if (!guideState.activeGroupId && guideState.groups.length) {
+    guideState.activeGroupId = guideState.groups[0].id;
+  }
+
+  renderGuideGroups();
+
+  if (guideState.activeGroupId) {
+    await loadGuideForGroup(guideState.activeGroupId);
+  } else {
+    $("guide-status").textContent = "No selected channels. Select channels first, then generate EPG.";
+    $("guide-content").classList.add("hidden");
+    $("guide-empty").classList.remove("hidden");
+  }
+}
+
+function filterGuideGroups() {
+  const term = $("guide-group-filter").value.trim().toLowerCase();
+  guideState.filteredGroups = guideState.groups.filter((group) =>
+    !term || `${group.name}`.toLowerCase().includes(term)
+  );
+  renderGuideGroups();
+}
+
+function renderGuideGroups() {
+  const list = $("guide-group-list");
+  list.innerHTML = "";
+
+  if (!guideState.filteredGroups.length) {
+    list.innerHTML = `<div class="guide-group-row"><strong>No groups with selected channels.</strong></div>`;
+    return;
+  }
+
+  list.innerHTML = guideState.filteredGroups.map((group) => `
+    <div class="guide-group-row ${group.id === guideState.activeGroupId ? "active" : ""}" data-group-id="${escapeAttr(group.id)}">
+      <strong title="${escapeAttr(group.name)}">${escapeHtml(group.name)}</strong>
+      <span class="muted">${group.selected_channel_count}</span>
+    </div>
+  `).join("");
+
+  document.querySelectorAll(".guide-group-row[data-group-id]").forEach((row) => {
+    row.addEventListener("click", () => {
+      guideState.activeGroupId = row.dataset.groupId;
+      renderGuideGroups();
+      loadGuideForGroup(guideState.activeGroupId).catch((err) => {
+        $("guide-status").textContent = `Could not load guide: ${err.message}`;
+      });
+    });
+  });
+}
+
+async function loadGuideForGroup(groupId) {
+  $("guide-status").textContent = "Loading guide…";
+  $("guide-content").classList.add("hidden");
+  $("guide-empty").classList.remove("hidden");
+  $("guide-empty").textContent = "Loading guide…";
+
+  const body = await api(`/api/guide?group_id=${encodeURIComponent(groupId)}`);
+
+  if (!body.group) {
+    $("guide-status").textContent = body.message || "No guide data.";
+    $("guide-empty").textContent = body.message || "No guide data.";
+    return;
+  }
+
+  renderGuide(body);
+}
+
+function formatGuideTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function renderGuide(body) {
+  $("guide-status").textContent =
+    `${body.group.name}: ${body.channel_count} selected channels · ${body.programme_count} programmes`;
+
+  const content = $("guide-content");
+  content.classList.remove("hidden");
+  $("guide-empty").classList.add("hidden");
+
+  content.innerHTML = (body.channels || []).map((channel) => {
+    const logo = channel.logo_url
+      ? `<img src="${escapeAttr(channel.logo_url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'" />`
+      : `<span></span>`;
+
+    const programmes = (channel.programmes || []).length
+      ? channel.programmes.map(renderGuideProgramme).join("")
+      : `<div class="guide-programme"><strong>No programme data</strong><div class="desc">No matching EPG entries were found for ${escapeHtml(channel.tvg_id || channel.name)}.</div></div>`;
+
+    return `
+      <div class="guide-channel-row">
+        <div class="guide-channel-info">
+          ${logo}
+          <div>
+            <strong title="${escapeAttr(channel.name)}">${escapeHtml(channel.name)}</strong>
+            <div class="muted">${escapeHtml(channel.tvg_id || "")}</div>
+          </div>
+        </div>
+        <div class="guide-programmes">${programmes}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderGuideProgramme(programme) {
+  const title = programme.title || "Untitled";
+  const desc = programme.desc || "";
+  const time = `${formatGuideTime(programme.start)} – ${formatGuideTime(programme.stop)}`;
+  const tooltip = [title, time, desc].filter(Boolean).join("\\n\\n");
+
+  return `
+    <div class="guide-programme ${programme.is_now ? "now" : ""}" title="${escapeAttr(tooltip)}">
+      <strong>${escapeHtml(title)}</strong>
+      <div class="time">${escapeHtml(time)}${programme.is_now ? " · Now" : ""}</div>
+      ${desc ? `<div class="desc">${escapeHtml(desc)}</div>` : ""}
+    </div>
+  `;
+}
+
+function wireGuideEvents() {
+  $("guide-refresh").addEventListener("click", () => loadGuideGroups().catch((err) => {
+    $("guide-status").textContent = `Could not refresh guide: ${err.message}`;
+  }));
+
+  $("guide-group-filter").addEventListener("input", filterGuideGroups);
+}
+
+
 // Start the app after every tab module has been declared.
 init().catch((err) => {
   console.error(err);
-  const status = document.getElementById("header-status") || document.getElementById("epg-job-status");
+  const status = document.getElementById("header-status") || document.getElementById("guide-status");
   if (status) status.textContent = `Startup failed: ${err.message || err}`;
 });

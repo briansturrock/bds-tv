@@ -1,0 +1,212 @@
+from __future__ import annotations
+
+import os
+import re
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any
+from xml.etree import ElementTree as ET
+
+from fastapi import APIRouter, Query
+
+from .db import connect
+
+
+router = APIRouter(prefix="/api/guide", tags=["guide"])
+
+
+def filtered_epg_path() -> Path:
+    return Path(os.environ.get("DATA_DIR", "/data")) / "filtered_epg.xml"
+
+
+def parse_xmltv_time(value: str | None) -> datetime | None:
+    if not value:
+        return None
+
+    value = value.strip()
+    match = re.match(r"^(\d{14})(?:\s*([+-]\d{4}))?", value)
+    if not match:
+        return None
+
+    date_part = match.group(1)
+    offset_part = match.group(2) or "+0000"
+
+    try:
+        return datetime.strptime(f"{date_part} {offset_part}", "%Y%m%d%H%M%S %z")
+    except ValueError:
+        return None
+
+
+def first_text(elem: ET.Element, name: str) -> str:
+    child = elem.find(name)
+    if child is None or child.text is None:
+        return ""
+    return child.text.strip()
+
+
+def selected_guide_groups() -> list[dict[str, Any]]:
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                groups.id,
+                groups.name,
+                COUNT(channels.id) AS selected_channel_count
+            FROM groups
+            JOIN channels ON channels.group_id = groups.id
+            WHERE groups.missing = 0
+              AND channels.missing = 0
+              AND channels.selected = 1
+            GROUP BY groups.id, groups.name, groups.user_order, groups.provider_order
+            HAVING COUNT(channels.id) > 0
+            ORDER BY
+                CASE WHEN groups.user_order IS NULL THEN 1 ELSE 0 END,
+                groups.user_order ASC,
+                groups.provider_order ASC
+            """
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def selected_channels_for_group(group_id: str) -> list[dict[str, Any]]:
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                channels.id AS channel_id,
+                channels.name,
+                channels.tvg_name,
+                channels.tvg_id,
+                channels.logo_url,
+                channels.provider_order,
+                channels.user_order,
+                groups.id AS group_id,
+                groups.name AS group_name
+            FROM channels
+            JOIN groups ON groups.id = channels.group_id
+            WHERE groups.id = ?
+              AND groups.missing = 0
+              AND channels.missing = 0
+              AND channels.selected = 1
+            ORDER BY
+                CASE WHEN channels.user_order IS NULL THEN 1 ELSE 0 END,
+                channels.user_order ASC,
+                channels.provider_order ASC
+            """,
+            (group_id,),
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def programmes_for_tvg_ids(tvg_ids: set[str], hours_back: int, hours_forward: int) -> dict[str, list[dict[str, Any]]]:
+    epg_path = filtered_epg_path()
+    programmes: dict[str, list[dict[str, Any]]] = defaultdict(list)
+
+    if not epg_path.exists() or not tvg_ids:
+        return programmes
+
+    now = datetime.now(timezone.utc)
+    window_start = now - timedelta(hours=max(0, min(hours_back, 24)))
+    window_end = now + timedelta(hours=max(1, min(hours_forward, 72)))
+
+    try:
+        context = ET.iterparse(epg_path, events=("end",))
+        for _event, elem in context:
+            if elem.tag != "programme":
+                elem.clear()
+                continue
+
+            channel = elem.attrib.get("channel") or ""
+            if channel not in tvg_ids:
+                elem.clear()
+                continue
+
+            start = parse_xmltv_time(elem.attrib.get("start"))
+            stop = parse_xmltv_time(elem.attrib.get("stop"))
+
+            if start and start.astimezone(timezone.utc) > window_end:
+                elem.clear()
+                continue
+
+            if stop and stop.astimezone(timezone.utc) < window_start:
+                elem.clear()
+                continue
+
+            start_utc = start.astimezone(timezone.utc) if start else None
+            stop_utc = stop.astimezone(timezone.utc) if stop else None
+
+            programmes[channel].append(
+                {
+                    "channel": channel,
+                    "title": first_text(elem, "title") or "Untitled",
+                    "sub_title": first_text(elem, "sub-title"),
+                    "desc": first_text(elem, "desc"),
+                    "category": first_text(elem, "category"),
+                    "start": start_utc.isoformat() if start_utc else None,
+                    "stop": stop_utc.isoformat() if stop_utc else None,
+                    "is_now": bool(start_utc and stop_utc and start_utc <= now <= stop_utc),
+                }
+            )
+            elem.clear()
+    except ET.ParseError:
+        return programmes
+
+    for items in programmes.values():
+        items.sort(key=lambda p: p.get("start") or "")
+
+    return programmes
+
+
+@router.get("/groups")
+def api_guide_groups() -> dict[str, Any]:
+    groups = selected_guide_groups()
+    return {
+        "ok": True,
+        "groups": groups,
+        "group_count": len(groups),
+    }
+
+
+@router.get("")
+def api_guide(
+    group_id: str = Query(...),
+    hours_back: int = Query(2, ge=0, le=24),
+    hours_forward: int = Query(10, ge=1, le=72),
+) -> dict[str, Any]:
+    groups = selected_guide_groups()
+    group = next((item for item in groups if item["id"] == group_id), None)
+
+    if not group:
+        return {
+            "ok": True,
+            "group": None,
+            "channels": [],
+            "channel_count": 0,
+            "programme_count": 0,
+            "epg_path": str(filtered_epg_path()),
+            "message": "Group not found or has no selected channels.",
+        }
+
+    channels = selected_channels_for_group(group_id)
+    tvg_ids = {channel["tvg_id"] for channel in channels if channel.get("tvg_id")}
+    programmes_by_channel = programmes_for_tvg_ids(tvg_ids, hours_back, hours_forward)
+
+    programme_count = 0
+    for channel in channels:
+        programmes = programmes_by_channel.get(channel.get("tvg_id") or "", [])
+        channel["programmes"] = programmes
+        programme_count += len(programmes)
+
+    return {
+        "ok": True,
+        "group": group,
+        "channels": channels,
+        "channel_count": len(channels),
+        "programme_count": programme_count,
+        "epg_path": str(filtered_epg_path()),
+        "hours_back": hours_back,
+        "hours_forward": hours_forward,
+    }

@@ -1,30 +1,60 @@
-# Patch: Channels toolbar button styling and independent scrolling
+# Patch: Guide page phase 1
 
 Apply this on branch:
 
 ```text
-epg-product-ui
+guide-page
 ```
 
-## Fixes
+## Scope
 
-### 1. Channels toolbar button/link mismatch
+Adds a Guide tab inside the main app shell:
 
-The "Open filtered.m3u" control was a plain link while the other controls were buttons. This patch makes it use the same button styling and aligns all toolbar controls.
+```text
+Settings | Channels | EPG | Guide | Diagnostics
+```
 
-### 2. Channels page scrolling
+This is phase 1 only. No streaming yet.
 
-The Channels page was scrolling as one full page. This patch makes the Groups pane and Channels pane independently scrollable while the overall Channels tab stays fixed-height.
+## Behaviour
 
-When you select a group, the channels list resets to the top.
+The Guide shows only:
+
+- groups that have selected channels
+- selected channels inside those groups
+
+It uses:
+
+```text
+/data/filtered_epg.xml
+```
+
+and selected channel state from SQLite.
+
+## New endpoints
+
+```text
+GET /api/guide/groups
+GET /api/guide?group_id=<group_id>
+```
+
+## UI
+
+- Groups on the left.
+- Guide window on the right.
+- Channels in the selected group.
+- Channel icons/logos where available.
+- Current airing highlighted.
+- Programme hover tooltip shows title/time/description.
+- Programmes are loaded from the generated filtered EPG.
 
 ## Apply
 
 ```bash
-unzip iptv_epg_patch_channels_toolbar_and_independent_scroll.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_guide_page_phase1.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
 git add .
-git commit -m "Fix channels toolbar and independent scrolling"
+git commit -m "Add guide page phase 1"
 git push
 ```
 
@@ -40,12 +70,6 @@ curl http://127.0.0.1:8088/health
 Test:
 
 ```text
-http://192.168.0.156:8088/#channels
+http://192.168.0.156:8088/#guide
+http://192.168.0.156:8088/dev/diagnostics
 ```
-
-Confirm:
-
-- `Open filtered.m3u` looks like a button.
-- The Groups list scrolls independently.
-- The Channels list scrolls independently.
-- Selecting a new group resets the channel list to the top.
