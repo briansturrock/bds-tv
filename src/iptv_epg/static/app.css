@@ -1051,3 +1051,79 @@ body:has(#tab-channels.active) {
     --hour-width: 320px;
   }
 }
+
+
+/* Guide phase-1 row polish */
+.guide-grid {
+  --channel-col-width: 210px;
+  --hour-width: 360px;
+  --row-height: 68px;
+}
+
+.guide-time-corner {
+  padding: 4px 8px;
+}
+
+.guide-date-select {
+  width: 100%;
+  min-height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 6px;
+}
+
+.guide-channel-row {
+  min-height: var(--row-height);
+}
+
+.guide-timeline-row {
+  min-height: var(--row-height);
+}
+
+.guide-channel-info {
+  padding: 6px 10px;
+}
+
+.guide-channel-info img {
+  width: 38px;
+  max-height: 28px;
+}
+
+.guide-channel-info strong {
+  font-size: 12px;
+}
+
+.guide-channel-info .muted {
+  font-size: 11px;
+}
+
+.guide-programme {
+  top: 5px;
+  height: calc(var(--row-height) - 10px);
+  max-width: none !important;
+  box-sizing: border-box;
+  padding: 5px 7px;
+}
+
+.guide-programme strong {
+  font-size: 12px;
+}
+
+.guide-programme .time,
+.guide-programme .desc {
+  font-size: 11px;
+}
+
+.guide-programme .desc {
+  -webkit-line-clamp: 1;
+}
+
+.guide-programme strong,
+.guide-programme .time,
+.guide-programme .desc {
+  pointer-events: none;
+}

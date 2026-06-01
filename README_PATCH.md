@@ -1,4 +1,4 @@
-# Patch: Guide timeline grid
+# Patch: Guide timeline row polish
 
 Apply this on branch:
 
@@ -6,39 +6,55 @@ Apply this on branch:
 guide-page
 ```
 
-This replaces the card-row guide with a proper time-aligned grid.
+This is the corrected polish patch: it makes guide rows shorter, not the channel column narrower.
 
-## What changes
+## Fixes
 
-- Timeline header across the top.
-- Channels down the left.
-- Programme blocks positioned by start/stop time.
-- Timeline starts at the previous half-hour mark.
-- One shared horizontal scroll for the whole guide.
-- Channel names/logos remain sticky on the left.
-- Current programme is highlighted.
-- Current time line appears when inside the visible window.
-- Date picker plus previous/today/next controls.
-- Still only shows groups with selected channels and selected channels inside those groups.
+### 1. Programme block widths
 
-## Backend
+The BBC3/CBBC example had correct programme times but the visual block was too short.
 
-`GET /api/guide` now accepts:
+Cause: an older `.guide-programme { max-width: ... }` rule was still capping programme block width.
+
+Fix: remove that visual cap with a timeline-specific override.
+
+### 2. Shorter channel rows
+
+Rows are reduced in height so more channels fit vertically.
+
+The channel/logo column width is kept sensible.
+
+### 3. Date selector in the grid corner
+
+The toolbar date input is removed.
+
+The date area in the timeline grid corner becomes a dropdown, with options based on dates available in `filtered_epg.xml` for selected channels.
+
+Labels are:
 
 ```text
-group_id
-date=YYYY-MM-DD
-start=<ISO datetime>
-hours=8
+Today
+Tomorrow
+Wednesday
+Thursday
+...
+```
+
+depending on available EPG dates.
+
+## New endpoint
+
+```text
+GET /api/guide/dates
 ```
 
 ## Apply
 
 ```bash
-unzip iptv_epg_patch_guide_timeline_grid.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_guide_timeline_row_polish.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
 git add .
-git commit -m "Add guide timeline grid"
+git commit -m "Polish guide timeline rows"
 git push
 ```
 

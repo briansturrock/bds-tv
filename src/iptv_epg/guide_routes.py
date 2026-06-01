@@ -101,6 +101,89 @@ def selected_channels_for_group(group_id: str) -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
+def selected_tvg_ids() -> set[str]:
+    with connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT channels.tvg_id
+            FROM channels
+            JOIN groups ON groups.id = channels.group_id
+            WHERE groups.missing = 0
+              AND channels.missing = 0
+              AND channels.selected = 1
+              AND channels.tvg_id IS NOT NULL
+              AND channels.tvg_id != ''
+            """
+        ).fetchall()
+
+    return {row["tvg_id"] for row in rows}
+
+
+def guide_date_label(date_value: str) -> str:
+    try:
+        date_obj = datetime.strptime(date_value, "%Y-%m-%d").date()
+    except ValueError:
+        return date_value
+
+    today = datetime.now(timezone.utc).date()
+
+    if date_obj == today:
+        return "Today"
+
+    if date_obj == today + timedelta(days=1):
+        return "Tomorrow"
+
+    return date_obj.strftime("%A")
+
+
+def available_guide_dates() -> list[dict[str, str]]:
+    epg_path = filtered_epg_path()
+    tvg_ids = selected_tvg_ids()
+    dates: set[str] = set()
+
+    if not epg_path.exists() or not tvg_ids:
+        return []
+
+    today = datetime.now(timezone.utc).date()
+
+    try:
+        context = ET.iterparse(epg_path, events=("end",))
+        for _event, elem in context:
+            if elem.tag != "programme":
+                continue
+
+            channel = elem.attrib.get("channel") or ""
+            if channel not in tvg_ids:
+                elem.clear()
+                continue
+
+            start = parse_xmltv_time(elem.attrib.get("start"))
+            stop = parse_xmltv_time(elem.attrib.get("stop"))
+
+            if start:
+                start_date = start.astimezone(timezone.utc).date()
+                if start_date >= today:
+                    dates.add(start_date.isoformat())
+
+            if stop:
+                stop_date = stop.astimezone(timezone.utc).date()
+                if stop_date >= today:
+                    dates.add(stop_date.isoformat())
+
+            elem.clear()
+    except ET.ParseError:
+        return []
+
+    return [
+        {
+            "date": date_value,
+            "label": guide_date_label(date_value),
+        }
+        for date_value in sorted(dates)[:14]
+    ]
+
+
+
 def floor_to_previous_half_hour(value: datetime) -> datetime:
     value = value.astimezone(timezone.utc)
     minute = 30 if value.minute >= 30 else 0
@@ -229,6 +312,16 @@ def api_guide_groups() -> dict[str, Any]:
         "ok": True,
         "groups": groups,
         "group_count": len(groups),
+    }
+
+
+@router.get("/dates")
+def api_guide_dates() -> dict[str, Any]:
+    dates = available_guide_dates()
+    return {
+        "ok": True,
+        "dates": dates,
+        "date_count": len(dates),
     }
 
 

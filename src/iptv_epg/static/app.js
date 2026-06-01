@@ -817,11 +817,14 @@ function wireEpgEvents() {
 const guideState = {
   groups: [],
   filteredGroups: [],
+  dates: [],
   activeGroupId: null,
+  selectedDate: null,
   loaded: false,
 };
 
 async function loadGuideGroups() {
+  await loadGuideDates();
   const body = await api("/api/guide/groups");
   guideState.groups = body.groups || [];
   guideState.filteredGroups = [...guideState.groups];
@@ -958,6 +961,19 @@ function wireGuideEvents() {
 
 
 
+
+async function loadGuideDates() {
+  const body = await api("/api/guide/dates");
+  guideState.dates = body.dates || [];
+
+  if (!guideState.selectedDate) {
+    const today = new Date().toISOString().slice(0, 10);
+    const hasToday = guideState.dates.some((item) => item.date === today);
+    guideState.selectedDate = hasToday ? today : (guideState.dates[0]?.date || today);
+  }
+}
+
+
 /* Guide timeline-grid overrides */
 const GUIDE_HOURS = 8;
 const GUIDE_HOUR_WIDTH = 360;
@@ -969,15 +985,14 @@ function floorDateToHalfHour(date) {
 }
 
 function initialiseGuideDate() {
-  const input = $("guide-date");
-  if (input && !input.value) {
-    input.value = new Date().toISOString().slice(0, 10);
+  if (!guideState.selectedDate) {
+    guideState.selectedDate = new Date().toISOString().slice(0, 10);
   }
 }
 
 function selectedGuideDate() {
   initialiseGuideDate();
-  return $("guide-date")?.value || new Date().toISOString().slice(0, 10);
+  return guideState.selectedDate;
 }
 
 function currentGuideStart() {
@@ -1093,7 +1108,7 @@ function renderGuide(body) {
   content.innerHTML = `
     <div class="guide-grid" style="--hour-width:${GUIDE_HOUR_WIDTH}px">
       <div class="guide-time-header">
-        <div class="guide-time-corner">${escapeHtml(body.date || selectedGuideDate())}</div>
+        <div class="guide-time-corner">${renderGuideDateSelect(body.date || selectedGuideDate())}</div>
         <div class="guide-time-axis" style="width:${timelineWidth}px">${ticks.join("")}</div>
       </div>
       ${rowsHtml}
@@ -1101,6 +1116,35 @@ function renderGuide(body) {
   `;
 
   content.scrollLeft = 0;
+
+  const dateSelect = document.getElementById("guide-date-select");
+  if (dateSelect) {
+    dateSelect.addEventListener("change", () => {
+      guideState.selectedDate = dateSelect.value;
+      guideState.windowStart = null;
+      if (guideState.activeGroupId) {
+        loadGuideForGroup(guideState.activeGroupId).catch((err) => {
+          $("guide-status").textContent = `Could not load guide date: ${err.message}`;
+        });
+      }
+    });
+  }
+}
+
+function renderGuideDateSelect(selectedDate) {
+  const dates = guideState.dates.length
+    ? guideState.dates
+    : [{ date: selectedDate, label: "Today" }];
+
+  return `
+    <select id="guide-date-select" class="guide-date-select" aria-label="Guide date">
+      ${dates.map((item) => `
+        <option value="${escapeAttr(item.date)}" ${item.date === selectedDate ? "selected" : ""}>
+          ${escapeHtml(item.label)}
+        </option>
+      `).join("")}
+    </select>
+  `;
 }
 
 function renderGuideProgramme(programme, windowStart, windowEnd) {
@@ -1134,15 +1178,6 @@ function wireGuideEvents() {
     });
   });
 
-  $("guide-date").addEventListener("change", () => {
-    guideState.windowStart = null;
-    if (guideState.activeGroupId) {
-      loadGuideForGroup(guideState.activeGroupId).catch((err) => {
-        $("guide-status").textContent = `Could not load guide date: ${err.message}`;
-      });
-    }
-  });
-
   $("guide-prev-window").addEventListener("click", () => {
     const start = new Date(currentGuideStart().getTime() - 2 * 3600000);
     if (guideState.activeGroupId) {
@@ -1162,7 +1197,7 @@ function wireGuideEvents() {
   });
 
   $("guide-today").addEventListener("click", () => {
-    $("guide-date").value = new Date().toISOString().slice(0, 10);
+    guideState.selectedDate = new Date().toISOString().slice(0, 10);
     guideState.windowStart = null;
     if (guideState.activeGroupId) {
       loadGuideForGroup(guideState.activeGroupId).catch((err) => {
