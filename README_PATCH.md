@@ -1,4 +1,4 @@
-# Patch: Product EPG Management UI
+# Patch: Tighten EPG product UI layout
 
 Apply this on branch:
 
@@ -6,53 +6,24 @@ Apply this on branch:
 epg-product-ui
 ```
 
-This adds a product-style EPG management page on top of the working EPGShare backend.
+This fixes the first-pass EPG Management UI issues:
 
-## New page
-
-```text
-GET /epg
-```
-
-## Layout
-
-- Left column: selected channels, mapping status, filter.
-- Right column: selected channel details, saved mapping, suggestions, manual search, save/ignore actions.
-- Top actions:
-  - refresh
-  - import/update EPGShare index
-  - generate filtered EPG
-  - links to filtered.m3u and filtered_epg.xml
-  - recent EPGShare job status
-
-## Backend
-
-No new data endpoints are required. This page uses existing endpoints:
-
-```text
-GET  /api/epgshare/mapping-review
-GET  /api/epgshare/search
-POST /api/epgshare/mappings
-POST /api/epgshare/index
-POST /api/epgshare/generate-filtered
-GET  /api/jobs
-```
-
-## Diagnostics
-
-Adds a Diagnostics row for:
-
-```text
-GET /epg
-```
+- Adds an EPG link to the main app header.
+- Makes `/epg` feel like part of the app, not a separate tool.
+- Removes the "App" external-style link from the EPG page.
+- Shrinks the top header/summary/job area.
+- Shows only the latest EPGShare job line instead of a large job history block.
+- Makes the channel rows much more compact.
+- Gives the left channel list enough usable height and its own scrollbar.
+- Keeps the right detail pane scrollable only when it has real content.
 
 ## Apply
 
 ```bash
-unzip iptv_epg_patch_epg_product_ui.zip -d /tmp/iptv_epg_patch
+unzip iptv_epg_patch_epg_product_ui_layout_fix.zip -d /tmp/iptv_epg_patch
 cp -R /tmp/iptv_epg_patch/* .
 git add .
-git commit -m "Add product EPG management UI"
+git commit -m "Tighten EPG product UI layout"
 git push
 ```
 
@@ -68,5 +39,6 @@ curl http://127.0.0.1:8088/health
 Open:
 
 ```text
+http://192.168.0.156:8088/
 http://192.168.0.156:8088/epg
 ```

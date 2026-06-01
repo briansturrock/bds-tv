@@ -15,6 +15,7 @@
     <nav>
       <button class="tab-button active" data-tab="settings">Settings</button>
       <button class="tab-button" data-tab="channels">Channels</button>
+      <a class="tab-link" href="/epg">EPG</a>
     </nav>
   </header>
 
@@ -49,7 +50,6 @@
         <aside class="groups-pane card">
           <h2>Groups</h2>
           <input id="group-search" type="search" placeholder="Search groups" />
-          <div class="order-help muted">Selected groups can be ordered with ↑ / ↓.</div>
           <div id="groups-list" class="list"></div>
         </aside>
 
@@ -58,7 +58,7 @@
             <div>
               <h2 id="selected-group-title">Channels</h2>
               <div id="selected-group-meta" class="muted">Select a group.</div>
-              <div class="autosave-note">Selections and ordering save automatically.</div>
+              <div class="autosave-note">Selections save automatically.</div>
             </div>
             <div class="button-row">
               <button id="prev-page">Prev</button>

@@ -294,10 +294,11 @@ async function loadJobs() {
     const body = await res.json();
     const jobs = (body.jobs || []).filter(job =>
       String(job.job_type || "").startsWith("epgshare")
-    ).slice(0, 4);
+    );
 
-    $("job-status").innerHTML = jobs.length
-      ? jobs.map(job => `${esc(job.job_type)}: <strong>${esc(job.status)}</strong> — ${esc(job.message || "")}`).join("<br>")
+    const latest = jobs[0];
+    $("job-status").innerHTML = latest
+      ? `Latest EPGShare job: <strong>${esc(latest.status)}</strong> — ${esc(latest.message || latest.job_type || "")}`
       : "No EPGShare jobs yet.";
   } catch (err) {
     $("job-status").textContent = `Could not load jobs: ${err.message || err}`;
