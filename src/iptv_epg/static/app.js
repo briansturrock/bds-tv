@@ -366,12 +366,7 @@ function renderChannels(channels) {
         setMessage("channels-info", `Saved: ${channel.name} ${checkbox.checked ? "selected" : "unselected"}.`);
         await loadStatus();
         await loadGroups(false);
-        if (checkbox.checked) {
-          if (!state.visibleSelectedIds.includes(channel.id)) state.visibleSelectedIds.push(channel.id);
-        } else {
-          state.visibleSelectedIds = state.visibleSelectedIds.filter((id) => id !== channel.id);
-        }
-        updateSelectShownCheckbox();
+        await loadChannels();
       } catch (err) {
         checkbox.checked = !checkbox.checked;
         setMessage("channels-info", `Save failed: ${err.message}`, true);
