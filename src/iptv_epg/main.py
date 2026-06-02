@@ -264,6 +264,7 @@ def watch_channel(channel_id: str, mode: str = Query("copy")):
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
   <style>
     html, body {{
+      width: 100%;
       height: 100%;
       overflow: hidden;
     }}
@@ -276,16 +277,17 @@ def watch_channel(channel_id: str, mode: str = Query("copy")):
       flex-direction: column;
     }}
     header {{
-      flex: 0 0 auto;
-      min-height: 38px;
+      flex: 0 0 38px;
+      height: 38px;
       box-sizing: border-box;
-      padding: 7px 12px;
+      padding: 6px 12px;
       background: #171b23;
       border-bottom: 1px solid #2b3240;
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 12px;
+      overflow: hidden;
     }}
     h1 {{
       margin: 0;
@@ -298,10 +300,12 @@ def watch_channel(channel_id: str, mode: str = Query("copy")):
     main {{
       flex: 1 1 auto;
       min-height: 0;
+      box-sizing: border-box;
       display: grid;
       place-items: center;
       position: relative;
       overflow: hidden;
+      padding: 8px 8px 42px;
     }}
     video {{
       width: 100%;
@@ -311,6 +315,7 @@ def watch_channel(channel_id: str, mode: str = Query("copy")):
       background: #000;
       object-fit: contain;
       display: block;
+      box-sizing: border-box;
     }}
     a {{
       color: #93c5fd;
@@ -327,12 +332,12 @@ def watch_channel(channel_id: str, mode: str = Query("copy")):
     }}
     #status {{
       position: absolute;
-      left: 12px;
-      top: 10px;
+      left: 14px;
+      top: 14px;
       background: rgba(0, 0, 0, 0.72);
       padding: 6px 8px;
       border-radius: 6px;
-      max-width: calc(100vw - 24px);
+      max-width: calc(100vw - 28px);
       z-index: 3;
       pointer-events: none;
     }}
@@ -348,40 +353,46 @@ def watch_channel(channel_id: str, mode: str = Query("copy")):
     </div>
   </header>
   <main>
-    <video id="player" controls autoplay playsinline></video>
-    <div id="status">Starting stream…</div>
+    <video id="player" controls playsinline preload="auto"></video>
+    <div id="status">Loading stream…</div>
   </main>
   <script>
     const hlsUrl = "/hls/{channel_id}/{mode}/index.m3u8";
     const video = document.getElementById("player");
     const statusEl = document.getElementById("status");
     let hls = null;
+    let sawVideoFrame = false;
 
     function setStatus(message) {{
       statusEl.textContent = message;
     }}
 
-    async function playVideo() {{
-      setStatus("Stream loaded. Starting playback…");
-      try {{
-        await video.play();
-      }} catch (err) {{
-        setStatus("Playback is ready. Use the video controls to start. " + err.message);
-      }}
-    }}
-
-    video.addEventListener("playing", () => {{
+    video.addEventListener("loadedmetadata", () => {{
       if (video.videoWidth && video.videoHeight) {{
-        setStatus("Playing.");
+        sawVideoFrame = true;
+        setStatus("Stream ready. Press play in the video controls.");
       }} else {{
-        setStatus("Audio is playing, but no video track is visible. Try Compatible mode.");
+        setStatus("Audio track loaded, but no video track is visible. Try Compatible mode.");
       }}
     }});
 
-    video.addEventListener("loadedmetadata", () => {{
-      if (!video.videoWidth || !video.videoHeight) {{
-        setStatus("Audio-only playback detected. Try Compatible mode.");
+    video.addEventListener("playing", () => {{
+      if (sawVideoFrame || (video.videoWidth && video.videoHeight)) {{
+        setStatus("Playing.");
+      }} else {{
+        setStatus("Audio is playing, but no video frames are visible. Try Compatible mode.");
       }}
+    }});
+
+    video.addEventListener("timeupdate", () => {{
+      if (video.videoWidth && video.videoHeight) {{
+        sawVideoFrame = true;
+      }}
+    }});
+
+    video.addEventListener("error", () => {{
+      const err = video.error;
+      setStatus("Video element error" + (err ? ` (${{err.code}})` : "") + ". Try Compatible mode.");
     }});
 
     async function startPlayer() {{
@@ -389,7 +400,7 @@ def watch_channel(channel_id: str, mode: str = Query("copy")):
 
       if (video.canPlayType("application/vnd.apple.mpegurl")) {{
         video.src = hlsUrl;
-        await playVideo();
+        setStatus("Stream ready. Press play in the video controls.");
         return;
       }}
 
@@ -420,13 +431,14 @@ def watch_channel(channel_id: str, mode: str = Query("copy")):
       let manifestLoaded = false;
       hls.on(Hls.Events.MANIFEST_PARSED, () => {{
         manifestLoaded = true;
-        setStatus("Stream manifest loaded. Buffering…");
-        playVideo();
+        setStatus("Stream ready. Press play in the video controls.");
       }});
 
       setTimeout(() => {{
         if (!manifestLoaded) {{
           setStatus("Still waiting for stream. Try {alternate_label} or refresh this tab.");
+        }} else if (!sawVideoFrame) {{
+          setStatus("Stream is loaded. Press play. If you only get audio, try Compatible mode.");
         }}
       }}, 15000);
 
