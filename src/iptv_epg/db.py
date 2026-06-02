@@ -380,10 +380,56 @@ def set_channels_selected(channel_ids: list[str], selected: bool) -> dict[str, i
         conn.execute("BEGIN IMMEDIATE")
         try:
             before = conn.total_changes
-            conn.executemany(
-                "UPDATE channels SET selected = ? WHERE id = ? AND missing = 0",
-                [(value, channel_id) for channel_id in channel_ids],
-            )
+
+            if selected:
+                rows = conn.execute(
+                    """
+                    SELECT id, group_id, selected, user_order, provider_order
+                    FROM channels
+                    WHERE id IN ({placeholders}) AND missing = 0
+                    ORDER BY group_id, provider_order ASC
+                    """.format(placeholders=",".join("?" for _ in channel_ids)),
+                    channel_ids,
+                ).fetchall()
+
+                next_order_by_group: dict[str, int] = {}
+
+                for row in rows:
+                    group_id = row["group_id"]
+
+                    if group_id not in next_order_by_group:
+                        max_order_row = conn.execute(
+                            """
+                            SELECT COALESCE(MAX(user_order), -1) AS max_order
+                            FROM channels
+                            WHERE group_id = ?
+                              AND selected = 1
+                              AND missing = 0
+                            """,
+                            (group_id,),
+                        ).fetchone()
+                        next_order_by_group[group_id] = int(max_order_row["max_order"]) + 1
+
+                    # Existing selected channels keep their current order. Newly
+                    # selected channels are appended to the bottom of the selected
+                    # block so existing user ordering is preserved.
+                    if int(row["selected"] or 0) == 0:
+                        conn.execute(
+                            "UPDATE channels SET selected = 1, user_order = ? WHERE id = ? AND missing = 0",
+                            (next_order_by_group[group_id], row["id"]),
+                        )
+                        next_order_by_group[group_id] += 1
+                    else:
+                        conn.execute(
+                            "UPDATE channels SET selected = 1 WHERE id = ? AND missing = 0",
+                            (row["id"],),
+                        )
+            else:
+                conn.executemany(
+                    "UPDATE channels SET selected = ? WHERE id = ? AND missing = 0",
+                    [(value, channel_id) for channel_id in channel_ids],
+                )
+
             refresh_group_selected_counts(conn)
             updated = conn.total_changes - before
             conn.commit()
