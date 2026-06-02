@@ -227,7 +227,7 @@ def api_selected_channels() -> dict:
 
 
 @app.get("/watch/{channel_id}", response_class=HTMLResponse)
-def watch_channel(channel_id: str):
+def watch_channel(channel_id: str, mode: str = Query("copy")):
     with connect() as conn:
         row = conn.execute(
             """
@@ -242,6 +242,10 @@ def watch_channel(channel_id: str):
 
     if not row:
         raise HTTPException(status_code=404, detail="Selected channel not found")
+
+    mode = "compatible" if mode == "compatible" else "copy"
+    alternate_mode = "copy" if mode == "compatible" else "compatible"
+    alternate_label = "Fast mode" if mode == "compatible" else "Compatible mode"
 
     channel_name = str(row["name"] or "Channel")
     safe_name = (
@@ -259,14 +263,23 @@ def watch_channel(channel_id: str):
   <title>{safe_name}</title>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
   <style>
+    html, body {{
+      height: 100%;
+      overflow: hidden;
+    }}
     body {{
       margin: 0;
       background: #101217;
       color: #f8fafc;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
     }}
     header {{
-      padding: 10px 14px;
+      flex: 0 0 auto;
+      min-height: 38px;
+      box-sizing: border-box;
+      padding: 7px 12px;
       background: #171b23;
       border-bottom: 1px solid #2b3240;
       display: flex;
@@ -276,26 +289,41 @@ def watch_channel(channel_id: str):
     }}
     h1 {{
       margin: 0;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 600;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
     }}
     main {{
-      height: calc(100vh - 46px);
+      flex: 1 1 auto;
+      min-height: 0;
       display: grid;
       place-items: center;
       position: relative;
+      overflow: hidden;
     }}
     video {{
       width: 100%;
       height: 100%;
+      max-width: 100%;
+      max-height: 100%;
       background: #000;
+      object-fit: contain;
+      display: block;
     }}
     a {{
       color: #93c5fd;
+      white-space: nowrap;
     }}
     .hint, #status {{
       font-size: 12px;
       color: #cbd5e1;
+    }}
+    .hint {{
+      display: flex;
+      gap: 10px;
+      align-items: center;
     }}
     #status {{
       position: absolute;
@@ -313,7 +341,9 @@ def watch_channel(channel_id: str):
   <header>
     <h1>{safe_name}</h1>
     <div class="hint">
-      <a href="/stream/{channel_id}">Open raw stream</a>
+      <span>{mode}</span>
+      <a href="/watch/{channel_id}?mode={alternate_mode}">{alternate_label}</a>
+      <a href="/stream/{channel_id}">Raw stream</a>
     </div>
   </header>
   <main>
@@ -321,7 +351,7 @@ def watch_channel(channel_id: str):
     <div id="status">Starting stream…</div>
   </main>
   <script>
-    const hlsUrl = "/hls/{channel_id}/index.m3u8";
+    const hlsUrl = "/hls/{channel_id}/{mode}/index.m3u8";
     const video = document.getElementById("player");
     const statusEl = document.getElementById("status");
     let hls = null;
@@ -340,7 +370,7 @@ def watch_channel(channel_id: str):
     }}
 
     async function startPlayer() {{
-      setStatus("Starting HLS stream through container…");
+      setStatus("Starting {mode} HLS stream through container…");
 
       if (video.canPlayType("application/vnd.apple.mpegurl")) {{
         video.src = hlsUrl;
@@ -353,21 +383,26 @@ def watch_channel(channel_id: str):
         return;
       }}
 
-      if (hls) {{
-        hls.destroy();
-      }}
-
       hls = new Hls({{
         liveSyncDurationCount: 3,
         lowLatencyMode: false,
       }});
 
       hls.on(Hls.Events.ERROR, (_event, data) => {{
-        setStatus("HLS error: " + data.type + " / " + data.details);
+        if (!data.fatal) {{
+          setStatus("Recovering stream: " + data.details);
+          return;
+        }}
+
+        setStatus("HLS error: " + data.type + " / " + data.details + ". Try {alternate_label}.");
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {{
+          hls.startLoad();
+        }} else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {{
+          hls.recoverMediaError();
+        }}
       }});
 
       let manifestLoaded = false;
-
       hls.on(Hls.Events.MANIFEST_PARSED, () => {{
         manifestLoaded = true;
         playVideo();
@@ -375,7 +410,7 @@ def watch_channel(channel_id: str):
 
       setTimeout(() => {{
         if (!manifestLoaded) {{
-          setStatus("Still waiting for the stream to become playable. Try refreshing the watch tab once.");
+          setStatus("Still waiting for stream. Try {alternate_label} or refresh this tab.");
         }}
       }}, 15000);
 
@@ -391,9 +426,27 @@ def watch_channel(channel_id: str):
 </html>"""
 
 
-def hls_channel_dir(channel_id: str) -> Path:
-    safe = "".join(ch for ch in channel_id if ch.isalnum() or ch in ("-", "_"))
-    return HLS_ROOT / safe
+def hls_key(channel_id: str, mode: str) -> str:
+    return f"{mode}:{channel_id}"
+
+
+def hls_channel_dir(channel_id: str, mode: str = "copy") -> Path:
+    safe_channel = "".join(ch for ch in channel_id if ch.isalnum() or ch in ("-", "_"))
+    safe_mode = "compatible" if mode == "compatible" else "copy"
+    return HLS_ROOT / safe_mode / safe_channel
+
+
+def stop_hls_process(key: str) -> None:
+    proc = HLS_PROCESSES.pop(key, None)
+    if proc and proc.poll() is None:
+        proc.terminate()
+
+
+def stop_other_hls_processes(active_key: str) -> None:
+    for key in list(HLS_PROCESSES.keys()):
+        if key == active_key:
+            continue
+        stop_hls_process(key)
 
 
 def selected_channel_stream_url(channel_id: str) -> tuple[str, str]:
@@ -419,25 +472,8 @@ def selected_channel_stream_url(channel_id: str) -> tuple[str, str]:
     return str(row["name"] or "Channel"), str(stream_url)
 
 
-def ensure_hls_stream(channel_id: str) -> Path:
-    _name, stream_url = selected_channel_stream_url(channel_id)
-
-    hls_dir = hls_channel_dir(channel_id)
-    playlist = hls_dir / "index.m3u8"
-
-    proc = HLS_PROCESSES.get(channel_id)
-    if proc and proc.poll() is None and playlist.exists():
-        return playlist
-
-    if proc and proc.poll() is None:
-        proc.terminate()
-
-    if hls_dir.exists():
-        shutil.rmtree(hls_dir, ignore_errors=True)
-    hls_dir.mkdir(parents=True, exist_ok=True)
-
-    segment_pattern = str(hls_dir / "seg_%05d.ts")
-    cmd = [
+def ffmpeg_hls_command(stream_url: str, playlist: Path, segment_pattern: str, mode: str) -> list[str]:
+    common = [
         "ffmpeg",
         "-hide_banner",
         "-loglevel",
@@ -460,8 +496,38 @@ def ensure_hls_stream(channel_id: str) -> Path:
         "0:a:0?",
         "-sn",
         "-dn",
-        "-c",
-        "copy",
+    ]
+
+    if mode == "compatible":
+        codecs = [
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-tune",
+            "zerolatency",
+            "-profile:v",
+            "baseline",
+            "-level",
+            "3.1",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-ac",
+            "2",
+            "-ar",
+            "48000",
+            "-b:a",
+            "128k",
+        ]
+    else:
+        codecs = [
+            "-c",
+            "copy",
+        ]
+
+    hls = [
         "-f",
         "hls",
         "-hls_time",
@@ -475,27 +541,53 @@ def ensure_hls_stream(channel_id: str) -> Path:
         str(playlist),
     ]
 
-    HLS_PROCESSES[channel_id] = subprocess.Popen(
+    return common + codecs + hls
+
+
+def ensure_hls_stream(channel_id: str, mode: str = "copy") -> Path:
+    mode = "compatible" if mode == "compatible" else "copy"
+    _name, stream_url = selected_channel_stream_url(channel_id)
+
+    key = hls_key(channel_id, mode)
+    stop_other_hls_processes(key)
+
+    hls_dir = hls_channel_dir(channel_id, mode)
+    playlist = hls_dir / "index.m3u8"
+
+    proc = HLS_PROCESSES.get(key)
+    if proc and proc.poll() is None and playlist.exists():
+        return playlist
+
+    stop_hls_process(key)
+
+    if hls_dir.exists():
+        shutil.rmtree(hls_dir, ignore_errors=True)
+    hls_dir.mkdir(parents=True, exist_ok=True)
+
+    segment_pattern = str(hls_dir / "seg_%05d.ts")
+    cmd = ffmpeg_hls_command(stream_url, playlist, segment_pattern, mode)
+
+    HLS_PROCESSES[key] = subprocess.Popen(
         cmd,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
 
-    deadline = time.time() + 18
+    deadline = time.time() + (24 if mode == "compatible" else 12)
     while time.time() < deadline:
-        proc = HLS_PROCESSES.get(channel_id)
+        proc = HLS_PROCESSES.get(key)
         if proc and proc.poll() is not None:
             break
         if playlist.exists() and playlist.stat().st_size > 0:
             return playlist
         time.sleep(0.25)
 
-    raise HTTPException(status_code=504, detail="Timed out waiting for HLS stream to start")
+    raise HTTPException(status_code=504, detail=f"Timed out waiting for {mode} HLS stream to start")
 
 
-@app.get("/hls/{channel_id}/index.m3u8")
-def hls_playlist(channel_id: str):
-    playlist = ensure_hls_stream(channel_id)
+@app.get("/hls/{channel_id}/{mode}/index.m3u8")
+def hls_playlist(channel_id: str, mode: str):
+    playlist = ensure_hls_stream(channel_id, mode)
     return FileResponse(
         playlist,
         media_type="application/vnd.apple.mpegurl",
@@ -503,12 +595,12 @@ def hls_playlist(channel_id: str):
     )
 
 
-@app.get("/hls/{channel_id}/{segment_name}")
-def hls_segment(channel_id: str, segment_name: str):
+@app.get("/hls/{channel_id}/{mode}/{segment_name}")
+def hls_segment(channel_id: str, mode: str, segment_name: str):
     if not segment_name.endswith(".ts"):
         raise HTTPException(status_code=404, detail="Segment not found")
 
-    segment = hls_channel_dir(channel_id) / segment_name
+    segment = hls_channel_dir(channel_id, mode) / segment_name
     if not segment.exists():
         raise HTTPException(status_code=404, detail="Segment not found")
 
