@@ -1071,13 +1071,19 @@ function renderGuideProgramme(programme) {
   const title = programme.title || "Untitled";
   const desc = programme.desc || "";
   const time = `${formatGuideTime(programme.start)} – ${formatGuideTime(programme.stop)}`;
-  const tooltip = [title, time, desc].filter(Boolean).join("\\n\\n");
 
   return `
-    <div class="guide-programme ${programme.is_now ? "now" : ""}" title="${escapeAttr(tooltip)}">
-      <strong>${escapeHtml(title)}</strong>
-      <div class="time">${escapeHtml(time)}${programme.is_now ? " · Now" : ""}</div>
-      ${desc ? `<div class="desc">${escapeHtml(desc)}</div>` : ""}
+    <div class="guide-programme ${programme.is_now ? "now" : ""}">
+      <div class="guide-programme-visible">
+        <strong>${escapeHtml(title)}</strong>
+        <div class="time">${escapeHtml(time)}${programme.is_now ? " · Now" : ""}</div>
+        ${desc ? `<div class="desc">${escapeHtml(desc)}</div>` : ""}
+      </div>
+      <div class="guide-programme-hover">
+        <strong>${escapeHtml(title)}</strong>
+        <div>${escapeHtml(time)}</div>
+        ${desc ? `<div>${escapeHtml(desc)}</div>` : ""}
+      </div>
     </div>
   `;
 }
@@ -1290,17 +1296,23 @@ function renderGuideProgramme(programme, windowStart, windowEnd) {
   const title = programme.title || "Untitled";
   const desc = programme.desc || "";
   const time = `${formatGuideTime(programme.start)} – ${formatGuideTime(programme.stop)}`;
-  const tooltip = [title, time, desc].filter(Boolean).join("\\n\\n");
 
   const startDate = new Date(programme.start);
   const left = guideOffsetPx((startDate < windowStart ? windowStart : startDate).toISOString(), windowStart);
   const width = guideWidthPx(programme.start, programme.stop, windowStart, windowEnd);
 
   return `
-    <div class="guide-programme ${programme.is_now ? "now" : ""}" style="left:${left}px;width:${width}px" title="${escapeAttr(tooltip)}">
-      <strong>${escapeHtml(title)}</strong>
-      <div class="time">${escapeHtml(time)}${programme.is_now ? " · Now" : ""}</div>
-      ${desc ? `<div class="desc">${escapeHtml(desc)}</div>` : ""}
+    <div class="guide-programme ${programme.is_now ? "now" : ""}" style="left:${left}px;width:${width}px">
+      <div class="guide-programme-visible">
+        <strong>${escapeHtml(title)}</strong>
+        <div class="time">${escapeHtml(time)}${programme.is_now ? " · Now" : ""}</div>
+        ${desc ? `<div class="desc">${escapeHtml(desc)}</div>` : ""}
+      </div>
+      <div class="guide-programme-hover">
+        <strong>${escapeHtml(title)}</strong>
+        <div>${escapeHtml(time)}</div>
+        ${desc ? `<div>${escapeHtml(desc)}</div>` : ""}
+      </div>
     </div>
   `;
 }

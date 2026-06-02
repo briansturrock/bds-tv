@@ -1224,3 +1224,54 @@ body:has(#tab-channels.active) {
     max-height: 300px;
   }
 }
+
+
+/* Hotfix: Guide programme hover details */
+.guide-programme {
+  overflow: visible;
+  z-index: 1;
+}
+
+.guide-programme:hover {
+  z-index: 20;
+}
+
+.guide-programme-visible {
+  height: 100%;
+  overflow: hidden;
+}
+
+.guide-programme-hover {
+  display: none;
+  position: absolute;
+  left: 8px;
+  top: calc(100% + 6px);
+  min-width: 320px;
+  max-width: 560px;
+  background: rgba(20, 20, 20, 0.96);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: normal;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+}
+
+.guide-programme-hover strong {
+  display: block;
+  color: #fff;
+  font-weight: 700;
+  margin-bottom: 3px;
+  white-space: normal;
+}
+
+.guide-programme-hover div {
+  margin-top: 3px;
+}
+
+.guide-programme:hover .guide-programme-hover {
+  display: block;
+}
