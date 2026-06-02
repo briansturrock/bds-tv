@@ -1118,7 +1118,7 @@ async function loadGuideDates() {
 
 
 /* Guide timeline-grid overrides */
-const GUIDE_HOURS = 8;
+const GUIDE_HOURS = 8; // fallback only; normal guide window runs to end of selected day
 const GUIDE_HOUR_WIDTH = 360;
 
 function floorDateToHalfHour(date) {
@@ -1141,8 +1141,33 @@ function selectedGuideDate() {
 function currentGuideStart() {
   const active = guideState.windowStart ? new Date(guideState.windowStart) : null;
   if (active && !Number.isNaN(active.getTime())) return active;
-  return floorDateToHalfHour(new Date());
+  return guideStartForSelectedDate();
 }
+
+function guideStartForSelectedDate() {
+  const selected = selectedGuideDate();
+  const today = new Date().toISOString().slice(0, 10);
+
+  if (selected === today) {
+    return floorDateToHalfHour(new Date());
+  }
+
+  const start = new Date(`${selected}T00:00:00`);
+  return Number.isNaN(start.getTime()) ? floorDateToHalfHour(new Date()) : start;
+}
+
+function guideHoursUntilEndOfDay(startDate) {
+  const end = new Date(startDate);
+  end.setHours(24, 0, 0, 0);
+
+  const ms = end.getTime() - startDate.getTime();
+  if (ms <= 0) return GUIDE_HOURS;
+
+  // Round up to the next half hour so the end-of-day grid is complete.
+  const hours = Math.ceil(ms / (30 * 60000)) / 2;
+  return Math.max(1, Math.min(24, hours));
+}
+
 
 async function loadGuideForGroup(groupId, startDate = null) {
   initialiseGuideDate();
@@ -1152,15 +1177,15 @@ async function loadGuideForGroup(groupId, startDate = null) {
   $("guide-empty").classList.remove("hidden");
   $("guide-empty").textContent = "Loading guide…";
 
+  const windowStart = startDate || guideStartForSelectedDate();
+  const guideHours = guideHoursUntilEndOfDay(windowStart);
+
   const params = new URLSearchParams({
     group_id: groupId,
     date: selectedGuideDate(),
-    hours: String(GUIDE_HOURS),
+    start: windowStart.toISOString(),
+    hours: String(guideHours),
   });
-
-  if (startDate) {
-    params.set("start", startDate.toISOString());
-  }
 
   const body = await api(`/api/guide?${params.toString()}`);
   guideState.windowStart = body.window_start;
@@ -1199,7 +1224,8 @@ function guideWidthPx(start, stop, windowStart, windowEnd) {
 function renderGuide(body) {
   const windowStart = new Date(body.window_start);
   const windowEnd = new Date(body.window_end);
-  const timelineWidth = GUIDE_HOURS * GUIDE_HOUR_WIDTH;
+  const guideHours = Number(body.hours || GUIDE_HOURS);
+  const timelineWidth = guideHours * GUIDE_HOUR_WIDTH;
   const now = new Date();
 
   $("guide-status").textContent =
@@ -1210,7 +1236,7 @@ function renderGuide(body) {
   $("guide-empty").classList.add("hidden");
 
   const ticks = [];
-  for (let i = 0; i <= GUIDE_HOURS * 2; i++) {
+  for (let i = 0; i <= guideHours * 2; i++) {
     const tick = new Date(windowStart.getTime() + i * 30 * 60000);
     ticks.push(`
       <div class="guide-time-tick" style="left:${i * (GUIDE_HOUR_WIDTH / 2)}px">
@@ -1268,7 +1294,7 @@ function renderGuide(body) {
       guideState.selectedDate = dateSelect.value;
       guideState.windowStart = null;
       if (guideState.activeGroupId) {
-        loadGuideForGroup(guideState.activeGroupId).catch((err) => {
+        loadGuideForGroup(guideState.activeGroupId, guideStartForSelectedDate()).catch((err) => {
           $("guide-status").textContent = `Could not load guide date: ${err.message}`;
         });
       }
