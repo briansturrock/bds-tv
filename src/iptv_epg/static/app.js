@@ -520,6 +520,9 @@ async function init() {
 const epgState = {
   review: null,
   rows: [],
+  groups: [],
+  filteredGroups: [],
+  activeGroupName: null,
   activeChannelId: null,
   pending: null,
   loaded: false,
@@ -556,14 +559,26 @@ async function loadEpgReview() {
   const body = await api("/api/epgshare/mapping-review");
   epgState.review = body;
   epgState.rows = body.rows || [];
+  epgState.groups = buildEpgGroups(epgState.rows);
+  epgState.filteredGroups = [...epgState.groups];
   epgState.loaded = true;
 
-  if (!epgState.activeChannelId && epgState.rows.length) {
-    epgState.activeChannelId = epgState.rows[0].channel_id;
+  const activeRow = epgState.rows.find((row) => row.channel_id === epgState.activeChannelId);
+  if (activeRow) {
+    epgState.activeGroupName = activeRow.group_name || "Ungrouped";
   }
 
-  if (!epgState.rows.some((row) => row.channel_id === epgState.activeChannelId)) {
-    epgState.activeChannelId = epgState.rows[0]?.channel_id || null;
+  if (!epgState.activeGroupName || !epgState.groups.some((group) => group.name === epgState.activeGroupName)) {
+    epgState.activeGroupName = epgState.groups[0]?.name || null;
+  }
+
+  const rowsForGroup = epgRowsForActiveGroup();
+  if (!epgState.activeChannelId && rowsForGroup.length) {
+    epgState.activeChannelId = rowsForGroup[0].channel_id;
+  }
+
+  if (!rowsForGroup.some((row) => row.channel_id === epgState.activeChannelId)) {
+    epgState.activeChannelId = rowsForGroup[0]?.channel_id || null;
   }
 
   epgState.pending = null;
@@ -577,9 +592,78 @@ async function refreshEpg() {
 
 function renderEpg() {
   renderEpgSummary();
+  renderEpgGroupList();
   renderEpgChannelList();
   renderEpgDetail();
 }
+
+
+function buildEpgGroups(rows) {
+  const groupsByName = new Map();
+
+  for (const row of rows) {
+    const name = row.group_name || "Ungrouped";
+    if (!groupsByName.has(name)) {
+      groupsByName.set(name, {
+        name,
+        channel_count: 0,
+        mapped_count: 0,
+        unmatched_count: 0,
+        ignored_count: 0,
+      });
+    }
+
+    const group = groupsByName.get(name);
+    group.channel_count += 1;
+
+    const status = epgStatusFor(row);
+    if (status === "saved" || status === "exact") group.mapped_count += 1;
+    if (status === "unmatched") group.unmatched_count += 1;
+    if (status === "ignored") group.ignored_count += 1;
+  }
+
+  return [...groupsByName.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function epgRowsForActiveGroup() {
+  if (!epgState.activeGroupName) return [];
+  return epgState.rows.filter((row) => (row.group_name || "Ungrouped") === epgState.activeGroupName);
+}
+
+function renderEpgGroupList() {
+  if (!epgState.review) return;
+
+  const filter = $("epg-group-filter")?.value.trim().toLowerCase() || "";
+  epgState.filteredGroups = epgState.groups.filter((group) =>
+    !filter || group.name.toLowerCase().includes(filter)
+  );
+
+  const list = $("epg-group-list");
+  if (!list) return;
+
+  if (!epgState.filteredGroups.length) {
+    list.innerHTML = `<div class="epg-group-row"><strong>No groups.</strong></div>`;
+    return;
+  }
+
+  list.innerHTML = epgState.filteredGroups.map((group) => `
+    <div class="epg-group-row ${group.name === epgState.activeGroupName ? "active" : ""}" data-group-name="${escapeAttr(group.name)}">
+      <strong title="${escapeAttr(group.name)}">${escapeHtml(group.name)}</strong>
+      <div class="meta">${group.channel_count} channels · ${group.mapped_count} mapped · ${group.unmatched_count} unmatched</div>
+    </div>
+  `).join("");
+
+  document.querySelectorAll(".epg-group-row[data-group-name]").forEach((el) => {
+    el.addEventListener("click", () => {
+      epgState.activeGroupName = el.dataset.groupName;
+      const rows = epgRowsForActiveGroup();
+      epgState.activeChannelId = rows[0]?.channel_id || null;
+      epgState.pending = null;
+      renderEpg();
+    });
+  });
+}
+
 
 function renderEpgSummary() {
   if (!epgState.review) return;
@@ -598,15 +682,20 @@ function renderEpgChannelList() {
   if (!epgState.review) return;
 
   const filter = $("epg-channel-filter").value.trim().toLowerCase();
-  const rows = epgState.rows.filter((row) => {
+  const rows = epgRowsForActiveGroup().filter((row) => {
     const haystack = `${row.name} ${row.tvg_id} ${row.group_name} ${epgStatusFor(row)}`.toLowerCase();
     return !filter || haystack.includes(filter);
   });
 
+  if (!rows.length) {
+    $("epg-channel-list").innerHTML = `<div class="epg-channel-card"><strong>No channels in this group.</strong></div>`;
+    return;
+  }
+
   $("epg-channel-list").innerHTML = rows.map((row) => `
     <div class="epg-channel-card ${row.channel_id === epgState.activeChannelId ? "active" : ""}" data-channel-id="${escapeAttr(row.channel_id)}">
       <strong>${escapeHtml(row.name)}</strong>
-      <div class="meta">${escapeHtml(row.group_name)} · ${escapeHtml(row.tvg_id)}</div>
+      <div class="meta">${escapeHtml(row.tvg_id || "")}</div>
       <div class="epg-badges">
         <span class="epg-status ${escapeAttr(epgStatusFor(row))}">${escapeHtml(epgStatusFor(row))}</span>
         ${row.recommended ? `<span class="epg-status">${escapeHtml(row.recommended.source_key)}</span>` : ""}
@@ -614,7 +703,7 @@ function renderEpgChannelList() {
     </div>
   `).join("");
 
-  document.querySelectorAll(".epg-channel-card").forEach((el) => {
+  document.querySelectorAll(".epg-channel-card[data-channel-id]").forEach((el) => {
     el.addEventListener("click", () => {
       epgState.activeChannelId = el.dataset.channelId;
       epgState.pending = null;
@@ -804,6 +893,7 @@ async function loadEpgJobs() {
 
 function wireEpgEvents() {
   $("epg-refresh").addEventListener("click", () => refreshEpg().catch((err) => alert(err.message)));
+  $("epg-group-filter").addEventListener("input", renderEpgGroupList);
   $("epg-channel-filter").addEventListener("input", renderEpgChannelList);
   $("epg-save-current").addEventListener("click", () => saveCurrentEpgMapping().catch((err) => alert(err.message)));
   $("epg-ignore-current").addEventListener("click", () => ignoreCurrentEpgMapping().catch((err) => alert(err.message)));

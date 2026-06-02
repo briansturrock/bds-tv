@@ -1158,3 +1158,69 @@ body:has(#tab-channels.active) {
   font-size: 12px;
   background: #fff;
 }
+
+
+/* Hotfix: EPG grouped navigation */
+.epg-layout {
+  grid-template-columns: minmax(220px, 24%) minmax(280px, 30%) 1fr;
+}
+
+.epg-group-panel,
+.epg-channel-panel,
+.epg-detail-panel {
+  min-height: 0;
+}
+
+.epg-group-list,
+.epg-channel-list {
+  height: calc(100% - 72px);
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.epg-group-row {
+  padding: 8px 10px;
+  border-bottom: 1px solid #eef0f4;
+  cursor: pointer;
+  display: grid;
+  gap: 3px;
+}
+
+.epg-group-row:hover,
+.epg-group-row.active {
+  background: #eff6ff;
+}
+
+.epg-group-row strong {
+  font-size: 13px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.epg-group-row .meta {
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.epg-channel-card .meta {
+  font-size: 11px;
+}
+
+@media (max-width: 1000px) {
+  .epg-layout {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .epg-group-list,
+  .epg-channel-list {
+    max-height: 300px;
+  }
+}
