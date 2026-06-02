@@ -328,12 +328,13 @@ def watch_channel(channel_id: str, mode: str = Query("copy")):
     #status {{
       position: absolute;
       left: 12px;
-      bottom: 10px;
+      top: 10px;
       background: rgba(0, 0, 0, 0.72);
       padding: 6px 8px;
       border-radius: 6px;
       max-width: calc(100vw - 24px);
       z-index: 3;
+      pointer-events: none;
     }}
   </style>
 </head>
@@ -347,7 +348,7 @@ def watch_channel(channel_id: str, mode: str = Query("copy")):
     </div>
   </header>
   <main>
-    <video id="player" controls autoplay playsinline muted></video>
+    <video id="player" controls autoplay playsinline></video>
     <div id="status">Starting stream…</div>
   </main>
   <script>
@@ -361,13 +362,27 @@ def watch_channel(channel_id: str, mode: str = Query("copy")):
     }}
 
     async function playVideo() {{
+      setStatus("Stream loaded. Starting playback…");
       try {{
         await video.play();
-        setStatus("Playing.");
       }} catch (err) {{
-        setStatus("Playback is ready. Use the video controls if it does not start automatically. " + err.message);
+        setStatus("Playback is ready. Use the video controls to start. " + err.message);
       }}
     }}
+
+    video.addEventListener("playing", () => {{
+      if (video.videoWidth && video.videoHeight) {{
+        setStatus("Playing.");
+      }} else {{
+        setStatus("Audio is playing, but no video track is visible. Try Compatible mode.");
+      }}
+    }});
+
+    video.addEventListener("loadedmetadata", () => {{
+      if (!video.videoWidth || !video.videoHeight) {{
+        setStatus("Audio-only playback detected. Try Compatible mode.");
+      }}
+    }});
 
     async function startPlayer() {{
       setStatus("Starting {mode} HLS stream through container…");
@@ -405,6 +420,7 @@ def watch_channel(channel_id: str, mode: str = Query("copy")):
       let manifestLoaded = false;
       hls.on(Hls.Events.MANIFEST_PARSED, () => {{
         manifestLoaded = true;
+        setStatus("Stream manifest loaded. Buffering…");
         playVideo();
       }});
 
@@ -512,6 +528,8 @@ def ffmpeg_hls_command(stream_url: str, playlist: Path, segment_pattern: str, mo
             "3.1",
             "-pix_fmt",
             "yuv420p",
+            "-vf",
+            "scale=trunc(iw/2)*2:trunc(ih/2)*2",
             "-c:a",
             "aac",
             "-ac",
