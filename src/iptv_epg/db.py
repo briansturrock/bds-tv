@@ -398,21 +398,41 @@ def set_channels_selected(channel_ids: list[str], selected: bool) -> dict[str, i
                     group_id = row["group_id"]
 
                     if group_id not in next_order_by_group:
-                        max_order_row = conn.execute(
+                        # Normalise the existing selected block first. Older
+                        # selections may have NULL user_order values; if we only
+                        # give the newly selected channel a user_order, the UI
+                        # sort places it above the NULL-ordered existing
+                        # selections. Assigning stable orders to the existing
+                        # selected channels preserves their current/provider
+                        # order and lets new selections append to the bottom.
+                        existing_selected = conn.execute(
                             """
-                            SELECT COALESCE(MAX(user_order), -1) AS max_order
+                            SELECT id
                             FROM channels
                             WHERE group_id = ?
                               AND selected = 1
                               AND missing = 0
+                            ORDER BY
+                              CASE WHEN user_order IS NULL THEN 1 ELSE 0 END,
+                              user_order ASC,
+                              provider_order ASC
                             """,
                             (group_id,),
-                        ).fetchone()
-                        next_order_by_group[group_id] = int(max_order_row["max_order"]) + 1
+                        ).fetchall()
 
-                    # Existing selected channels keep their current order. Newly
-                    # selected channels are appended to the bottom of the selected
-                    # block so existing user ordering is preserved.
+                        next_order = 0
+                        for existing in existing_selected:
+                            conn.execute(
+                                "UPDATE channels SET user_order = ? WHERE id = ? AND missing = 0",
+                                (next_order, existing["id"]),
+                            )
+                            next_order += 1
+
+                        next_order_by_group[group_id] = next_order
+
+                    # Existing selected channels keep their normalised order.
+                    # Newly selected channels are appended to the bottom of the
+                    # selected block so existing user ordering is preserved.
                     if int(row["selected"] or 0) == 0:
                         conn.execute(
                             "UPDATE channels SET selected = 1, user_order = ? WHERE id = ? AND missing = 0",
