@@ -952,11 +952,17 @@ function renderGuideProgramme(programme) {
 }
 
 function wireGuideEvents() {
-  $("guide-refresh").addEventListener("click", () => loadGuideGroups().catch((err) => {
-    $("guide-status").textContent = `Could not refresh guide: ${err.message}`;
-  }));
+  const refreshButton = $("guide-refresh");
+  if (refreshButton) {
+    refreshButton.addEventListener("click", () => loadGuideGroups().catch((err) => {
+      $("guide-status").textContent = `Could not refresh guide: ${err.message}`;
+    }));
+  }
 
-  $("guide-group-filter").addEventListener("input", filterGuideGroups);
+  const groupFilter = $("guide-group-filter");
+  if (groupFilter) {
+    groupFilter.addEventListener("input", filterGuideGroups);
+  }
 }
 
 
@@ -1171,16 +1177,22 @@ function renderGuideProgramme(programme, windowStart, windowEnd) {
 function wireGuideEvents() {
   initialiseGuideDate();
 
-  $("guide-refresh").addEventListener("click", () => {
-    const start = currentGuideStart();
-    loadGuideGroups().then(() => {
-      if (guideState.activeGroupId) return loadGuideForGroup(guideState.activeGroupId, start);
-    }).catch((err) => {
-      $("guide-status").textContent = `Could not refresh guide: ${err.message}`;
+  const refreshButton = $("guide-refresh");
+  if (refreshButton) {
+    refreshButton.addEventListener("click", () => {
+      const start = currentGuideStart();
+      loadGuideGroups().then(() => {
+        if (guideState.activeGroupId) return loadGuideForGroup(guideState.activeGroupId, start);
+      }).catch((err) => {
+        $("guide-status").textContent = `Could not refresh guide: ${err.message}`;
+      });
     });
-  });
+  }
 
-  $("guide-group-filter").addEventListener("input", filterGuideGroups);
+  const groupFilter = $("guide-group-filter");
+  if (groupFilter) {
+    groupFilter.addEventListener("input", filterGuideGroups);
+  }
 }
 
 
