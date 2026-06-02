@@ -307,28 +307,6 @@ def watch_channel(channel_id: str):
       max-width: calc(100vw - 24px);
       z-index: 3;
     }}
-    #play-overlay {{
-      position: absolute;
-      inset: 0;
-      display: grid;
-      place-items: center;
-      background: radial-gradient(circle at center, rgba(15, 23, 42, 0.45), rgba(0, 0, 0, 0.72));
-      z-index: 2;
-    }}
-    #play-button {{
-      border: 1px solid #93c5fd;
-      background: #1d4ed8;
-      color: #fff;
-      border-radius: 999px;
-      padding: 14px 26px;
-      font-size: 18px;
-      font-weight: 700;
-      cursor: pointer;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-    }}
-    #play-button:hover {{
-      background: #2563eb;
-    }}
   </style>
 </head>
 <body>
@@ -346,26 +324,18 @@ def watch_channel(channel_id: str):
     const hlsUrl = "/hls/{channel_id}/index.m3u8";
     const video = document.getElementById("player");
     const statusEl = document.getElementById("status");
-    const overlay = document.getElementById("play-overlay");
-    const playButton = document.getElementById("play-button");
     let hls = null;
 
     function setStatus(message) {{
       statusEl.textContent = message;
     }}
 
-    function hideOverlay() {{
-      overlay.style.display = "none";
-    }}
-
     async function playVideo() {{
       try {{
         await video.play();
-        hideOverlay();
         setStatus("Playing.");
       }} catch (err) {{
-        overlay.style.display = "grid";
-        setStatus("Click Play to start. " + err.message);
+        setStatus("Playback is ready. Use the video controls if it does not start automatically. " + err.message);
       }}
     }}
 
@@ -396,18 +366,25 @@ def watch_channel(channel_id: str):
         setStatus("HLS error: " + data.type + " / " + data.details);
       }});
 
+      let manifestLoaded = false;
+
       hls.on(Hls.Events.MANIFEST_PARSED, () => {{
+        manifestLoaded = true;
         playVideo();
       }});
+
+      setTimeout(() => {{
+        if (!manifestLoaded) {{
+          setStatus("Still waiting for the stream to become playable. Try refreshing the watch tab once.");
+        }}
+      }}, 15000);
 
       hls.loadSource(hlsUrl);
       hls.attachMedia(video);
     }}
 
-    playButton.addEventListener("click", () => {{
-      startPlayer().catch((err) => {{
-        setStatus("Playback failed: " + err.message);
-      }});
+    startPlayer().catch((err) => {{
+      setStatus("Playback failed: " + err.message);
     }});
   </script>
 </body>
@@ -473,30 +450,18 @@ def ensure_hls_stream(channel_id: str) -> Path:
         "1",
         "-reconnect_delay_max",
         "5",
+        "-fflags",
+        "+genpts",
         "-i",
         stream_url,
         "-map",
         "0:v:0?",
         "-map",
         "0:a:0?",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-tune",
-        "zerolatency",
-        "-crf",
-        "23",
-        "-pix_fmt",
-        "yuv420p",
-        "-c:a",
-        "aac",
-        "-ac",
-        "2",
-        "-ar",
-        "48000",
-        "-b:a",
-        "128k",
+        "-sn",
+        "-dn",
+        "-c",
+        "copy",
         "-f",
         "hls",
         "-hls_time",
