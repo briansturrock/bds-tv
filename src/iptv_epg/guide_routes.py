@@ -330,7 +330,7 @@ def api_guide(
     group_id: str = Query(...),
     date: str | None = Query(None, description="Guide date in YYYY-MM-DD format"),
     start: str | None = Query(None, description="Timeline start as ISO datetime"),
-    hours: int = Query(8, ge=2, le=24),
+    hours: float = Query(8, ge=1, le=24),
 ) -> dict[str, Any]:
     groups = selected_guide_groups()
     group = next((item for item in groups if item["id"] == group_id), None)
@@ -354,7 +354,7 @@ def api_guide(
     else:
         window_start, _default_window_end, selected_date = guide_default_window(date)
 
-    window_end = window_start + timedelta(hours=max(2, min(hours, 24)))
+    window_end = window_start + timedelta(hours=max(1, min(float(hours), 24)))
 
     tvg_ids = {channel["tvg_id"] for channel in channels if channel.get("tvg_id")}
     programmes_by_channel = programmes_for_tvg_ids(tvg_ids, window_start, window_end)
