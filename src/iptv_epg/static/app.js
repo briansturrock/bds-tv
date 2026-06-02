@@ -598,6 +598,42 @@ function renderEpg() {
 }
 
 
+function epgOrderNumber(value, fallback = 999999999) {
+  if (value === null || value === undefined || value === "") return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function compareEpgGroupOrder(a, b) {
+  const aHasUser = a.group_user_order !== null && a.group_user_order !== undefined;
+  const bHasUser = b.group_user_order !== null && b.group_user_order !== undefined;
+
+  if (aHasUser !== bHasUser) return aHasUser ? -1 : 1;
+
+  const userDiff = epgOrderNumber(a.group_user_order) - epgOrderNumber(b.group_user_order);
+  if (userDiff) return userDiff;
+
+  const providerDiff = epgOrderNumber(a.group_provider_order) - epgOrderNumber(b.group_provider_order);
+  if (providerDiff) return providerDiff;
+
+  return String(a.name || "").localeCompare(String(b.name || ""));
+}
+
+function compareEpgChannelOrder(a, b) {
+  const aHasUser = a.channel_user_order !== null && a.channel_user_order !== undefined;
+  const bHasUser = b.channel_user_order !== null && b.channel_user_order !== undefined;
+
+  if (aHasUser !== bHasUser) return aHasUser ? -1 : 1;
+
+  const userDiff = epgOrderNumber(a.channel_user_order) - epgOrderNumber(b.channel_user_order);
+  if (userDiff) return userDiff;
+
+  const providerDiff = epgOrderNumber(a.channel_provider_order) - epgOrderNumber(b.channel_provider_order);
+  if (providerDiff) return providerDiff;
+
+  return String(a.name || "").localeCompare(String(b.name || ""));
+}
+
 function buildEpgGroups(rows) {
   const groupsByName = new Map();
 
@@ -606,6 +642,9 @@ function buildEpgGroups(rows) {
     if (!groupsByName.has(name)) {
       groupsByName.set(name, {
         name,
+        group_id: row.group_id,
+        group_user_order: row.group_user_order,
+        group_provider_order: row.group_provider_order,
         channel_count: 0,
         mapped_count: 0,
         unmatched_count: 0,
@@ -622,12 +661,14 @@ function buildEpgGroups(rows) {
     if (status === "ignored") group.ignored_count += 1;
   }
 
-  return [...groupsByName.values()].sort((a, b) => a.name.localeCompare(b.name));
+  return [...groupsByName.values()].sort(compareEpgGroupOrder);
 }
 
 function epgRowsForActiveGroup() {
   if (!epgState.activeGroupName) return [];
-  return epgState.rows.filter((row) => (row.group_name || "Ungrouped") === epgState.activeGroupName);
+  return epgState.rows
+    .filter((row) => (row.group_name || "Ungrouped") === epgState.activeGroupName)
+    .sort(compareEpgChannelOrder);
 }
 
 function renderEpgGroupList() {
