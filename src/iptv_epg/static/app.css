@@ -1275,3 +1275,21 @@ body:has(#tab-channels.active) {
 .guide-programme:hover .guide-programme-hover {
   display: block;
 }
+
+
+/* Hotfix: EPG manual search preferred mapping */
+.epg-subhead {
+  margin: 8px 0 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+#epg-manual-results {
+  margin-top: 8px;
+}
+
+#epg-manual-results .epg-option.selected,
+#epg-suggestions .epg-option.selected {
+  border-color: var(--accent);
+  background: #eff6ff;
+}

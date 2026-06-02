@@ -520,6 +520,11 @@ const epgState = {
   activeGroupName: null,
   activeChannelId: null,
   pending: null,
+  manualSearch: {
+    channelId: null,
+    query: "",
+    results: [],
+  },
   loaded: false,
 };
 
@@ -769,10 +774,18 @@ function renderEpgDetail() {
   $("epg-detail-status").textContent = epgStatusFor(row);
   $("epg-detail-status").className = `epg-status ${epgStatusFor(row)}`;
 
+  if (epgState.manualSearch.channelId !== row.channel_id) {
+    epgState.manualSearch = {
+      channelId: row.channel_id,
+      query: row.tvg_id || row.name || "",
+      results: [],
+    };
+  }
+
   renderEpgCurrent(row);
   renderEpgSuggestions(row);
-  $("epg-manual-query").value = row.tvg_id || row.name || "";
-  $("epg-manual-results").innerHTML = "";
+  $("epg-manual-query").value = epgState.manualSearch.query;
+  renderEpgManualResults();
   $("epg-save-state").textContent = "";
 }
 
@@ -799,21 +812,54 @@ function renderEpgCurrent(row) {
 
 function renderEpgSuggestions(row) {
   const suggestions = row.suggestions || [];
+  const pendingHtml = renderEpgPendingOption(row);
 
-  if (!suggestions.length) {
-    $("epg-suggestions").innerHTML = `<p>No suggestions. Use manual search.</p>`;
-    return;
-  }
+  const filteredSuggestions = suggestions.filter((opt) =>
+    !epgState.pending ||
+    epgState.pending.channel_id !== row.channel_id ||
+    epgState.pending.xmltv_id !== opt.xmltv_id ||
+    epgState.pending.source_key !== opt.source_key
+  );
 
-  $("epg-suggestions").innerHTML = suggestions
-    .map((opt, idx) => renderEpgOption(opt, idx === 0 ? "recommended" : "manual"))
-    .join("");
+  const suggestionHtml = filteredSuggestions.length
+    ? filteredSuggestions
+        .map((opt, idx) => renderEpgOption(opt, idx === 0 ? "recommended" : "manual"))
+        .join("")
+    : `<p>No other suggestions. Use manual search.</p>`;
+
+  $("epg-suggestions").innerHTML = `
+    ${pendingHtml}
+    ${pendingHtml ? `<h3 class="epg-subhead">Other options</h3>` : ""}
+    ${suggestionHtml}
+  `;
+
   wireEpgOptions();
 }
 
+function renderEpgPendingOption(row) {
+  if (!epgState.pending || epgState.pending.channel_id !== row.channel_id) {
+    return "";
+  }
+
+  return `
+    <h3 class="epg-subhead">Preferred mapping</h3>
+    ${renderEpgOption({
+      xmltv_id: epgState.pending.xmltv_id,
+      source_key: epgState.pending.source_key,
+      confidence: epgState.pending.confidence ?? 1,
+      reason: epgState.pending.mapping_type === "manual" ? "selected from manual search" : "selected option",
+    }, epgState.pending.mapping_type || "manual")}
+  `;
+}
+
 function renderEpgOption(opt, type) {
+  const row = activeEpgRow();
   const pending = epgState.pending;
-  const selected = pending?.xmltv_id === opt.xmltv_id && pending?.source_key === opt.source_key;
+  const selected =
+    row &&
+    pending?.channel_id === row.channel_id &&
+    pending?.xmltv_id === opt.xmltv_id &&
+    pending?.source_key === opt.source_key;
 
   return `
     <div class="epg-option ${selected ? "selected" : ""}"
@@ -832,6 +878,8 @@ function wireEpgOptions() {
   document.querySelectorAll("#epg-suggestions .epg-option, #epg-manual-results .epg-option").forEach((el) => {
     el.addEventListener("click", () => {
       const row = activeEpgRow();
+      if (!row) return;
+
       epgState.pending = {
         channel_id: row.channel_id,
         xmltv_id: el.dataset.xmltvId,
@@ -839,7 +887,9 @@ function wireEpgOptions() {
         mapping_type: el.dataset.type || "manual",
         confidence: Number(el.dataset.confidence || 1),
       };
-      renderEpgDetail();
+
+      renderEpgSuggestions(row);
+      renderEpgManualResults();
       $("epg-save-state").textContent = "Unsaved selection";
     });
   });
@@ -865,6 +915,45 @@ async function ignoreCurrentEpgMapping() {
   await saveEpgMappings([{ channel_id: row.channel_id, ignored: true, mapping_type: "ignored" }]);
 }
 
+function applySavedEpgMappingsLocally(mappings) {
+  const nowText = "just now";
+
+  for (const mapping of mappings) {
+    const row = epgState.rows.find((item) => item.channel_id === mapping.channel_id);
+    if (!row) continue;
+
+    if (mapping.ignored) {
+      row.saved_mapping = {
+        ignored: true,
+        mapping_type: "ignored",
+        updated_at: nowText,
+      };
+      row.status = "saved";
+      continue;
+    }
+
+    row.saved_mapping = {
+      channel_id: mapping.channel_id,
+      xmltv_id: mapping.xmltv_id,
+      source_key: mapping.source_key,
+      mapping_type: mapping.mapping_type || "manual",
+      confidence: mapping.confidence ?? 1,
+      ignored: false,
+      updated_at: nowText,
+    };
+    row.status = "saved";
+    row.recommended = {
+      xmltv_id: mapping.xmltv_id,
+      source_key: mapping.source_key,
+      confidence: mapping.confidence ?? 1,
+      reason: "saved mapping",
+    };
+  }
+
+  epgState.groups = buildEpgGroups(epgState.rows);
+  epgState.filteredGroups = [...epgState.groups];
+}
+
 async function saveEpgMappings(mappings) {
   $("epg-save-state").textContent = "Saving...";
   const body = await api("/api/epgshare/mappings", {
@@ -878,25 +967,64 @@ async function saveEpgMappings(mappings) {
     return;
   }
 
+  applySavedEpgMappingsLocally(mappings);
+  epgState.pending = null;
   $("epg-save-state").textContent = "Saved";
-  await loadEpgReview();
+  renderEpg();
 }
 
-async function manualEpgSearch() {
-  const q = $("epg-manual-query").value.trim();
-  $("epg-manual-results").innerHTML = `<p>Searching...</p>`;
+function renderEpgManualResults() {
+  const row = activeEpgRow();
+  const search = epgState.manualSearch;
 
-  const body = await api(`/api/epgshare/search?q=${encodeURIComponent(q)}&limit=30`);
-  $("epg-manual-results").innerHTML = (body.results || [])
+  if (!row || search.channelId !== row.channel_id) {
+    $("epg-manual-results").innerHTML = "";
+    return;
+  }
+
+  if (!search.results.length) {
+    $("epg-manual-results").innerHTML = "";
+    return;
+  }
+
+  $("epg-manual-results").innerHTML = search.results
     .map((result) => renderEpgOption({
       xmltv_id: result.xmltv_id,
       source_key: result.source_key,
-      confidence: 1,
-      reason: "manual search result",
+      confidence: result.confidence ?? 1,
+      reason: result.reason || "manual search result",
     }, "manual"))
-    .join("") || `<p>No results.</p>`;
+    .join("");
 
   wireEpgOptions();
+}
+
+async function manualEpgSearch() {
+  const row = activeEpgRow();
+  if (!row) return;
+
+  const q = $("epg-manual-query").value.trim();
+  epgState.manualSearch = {
+    channelId: row.channel_id,
+    query: q,
+    results: [],
+  };
+
+  $("epg-manual-results").innerHTML = `<p>Searching...</p>`;
+
+  const body = await api(`/api/epgshare/search?q=${encodeURIComponent(q)}&limit=30`);
+  epgState.manualSearch.results = (body.results || []).map((result) => ({
+    xmltv_id: result.xmltv_id,
+    source_key: result.source_key,
+    confidence: result.confidence ?? 1,
+    reason: result.reason || "manual search result",
+  }));
+
+  renderEpgManualResults();
+
+  if (!epgState.manualSearch.results.length) {
+    $("epg-manual-results").innerHTML = `<p>No results.</p>`;
+  }
 }
 
 async function importEpgIndex() {
@@ -933,6 +1061,12 @@ function wireEpgEvents() {
   $("epg-channel-filter").addEventListener("input", renderEpgChannelList);
   $("epg-save-current").addEventListener("click", () => saveCurrentEpgMapping().catch((err) => alert(err.message)));
   $("epg-ignore-current").addEventListener("click", () => ignoreCurrentEpgMapping().catch((err) => alert(err.message)));
+  $("epg-manual-query").addEventListener("input", () => {
+    const row = activeEpgRow();
+    if (!row) return;
+    epgState.manualSearch.channelId = row.channel_id;
+    epgState.manualSearch.query = $("epg-manual-query").value;
+  });
   $("epg-manual-search").addEventListener("click", () => manualEpgSearch().catch((err) => alert(err.message)));
   $("epg-import-index").addEventListener("click", () => importEpgIndex().catch((err) => alert(err.message)));
   $("epg-generate").addEventListener("click", () => generateEpgFromMappings().catch((err) => alert(err.message)));
