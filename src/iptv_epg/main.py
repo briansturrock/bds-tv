@@ -251,6 +251,7 @@ def watch_channel(channel_id: str):
 <head>
   <meta charset="utf-8" />
   <title>{safe_name}</title>
+  <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"></script>
   <style>
     body {{
       margin: 0;
@@ -276,6 +277,7 @@ def watch_channel(channel_id: str):
       height: calc(100vh - 46px);
       display: grid;
       place-items: center;
+      position: relative;
     }}
     video {{
       width: 100%;
@@ -285,9 +287,18 @@ def watch_channel(channel_id: str):
     a {{
       color: #93c5fd;
     }}
-    .hint {{
+    .hint, #status {{
       font-size: 12px;
       color: #cbd5e1;
+    }}
+    #status {{
+      position: absolute;
+      left: 12px;
+      bottom: 10px;
+      background: rgba(0, 0, 0, 0.65);
+      padding: 6px 8px;
+      border-radius: 6px;
+      max-width: calc(100vw - 24px);
     }}
   </style>
 </head>
@@ -299,8 +310,63 @@ def watch_channel(channel_id: str):
     </div>
   </header>
   <main>
-    <video controls autoplay playsinline src="/stream/{channel_id}"></video>
+    <video id="player" controls autoplay playsinline muted></video>
+    <div id="status">Starting player…</div>
   </main>
+  <script>
+    const streamUrl = "/stream/{channel_id}";
+    const video = document.getElementById("player");
+    const statusEl = document.getElementById("status");
+
+    function setStatus(message) {{
+      statusEl.textContent = message;
+    }}
+
+    async function startNative() {{
+      video.src = streamUrl;
+      video.muted = false;
+      try {{
+        await video.play();
+        setStatus("Playing with browser native player.");
+      }} catch (err) {{
+        setStatus("Browser native playback did not start: " + err.message);
+      }}
+    }}
+
+    if (window.mpegts && mpegts.getFeatureList().mseLivePlayback) {{
+      setStatus("Starting MPEG-TS player…");
+      const player = mpegts.createPlayer({{
+        type: "mpegts",
+        isLive: true,
+        url: streamUrl,
+      }}, {{
+        enableWorker: true,
+        liveBufferLatencyChasing: true,
+        stashInitialSize: 384 * 1024,
+      }});
+
+      player.attachMediaElement(video);
+      player.load();
+
+      video.muted = false;
+      video.play()
+        .then(() => setStatus("Playing."))
+        .catch((err) => setStatus("Click play to start. " + err.message));
+
+      player.on(mpegts.Events.ERROR, (_type, detail) => {{
+        setStatus("Player error: " + detail + ". Trying browser native playback…");
+        try {{
+          player.unload();
+          player.detachMediaElement();
+          player.destroy();
+        }} catch (_err) {{}}
+        startNative();
+      }});
+    }} else {{
+      setStatus("MPEG-TS player unavailable. Trying browser native playback…");
+      startNative();
+    }}
+  </script>
 </body>
 </html>"""
 
