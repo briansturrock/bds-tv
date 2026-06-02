@@ -295,10 +295,33 @@ def watch_channel(channel_id: str):
       position: absolute;
       left: 12px;
       bottom: 10px;
-      background: rgba(0, 0, 0, 0.65);
+      background: rgba(0, 0, 0, 0.72);
       padding: 6px 8px;
       border-radius: 6px;
       max-width: calc(100vw - 24px);
+      z-index: 3;
+    }}
+    #play-overlay {{
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at center, rgba(15, 23, 42, 0.45), rgba(0, 0, 0, 0.72));
+      z-index: 2;
+    }}
+    #play-button {{
+      border: 1px solid #93c5fd;
+      background: #1d4ed8;
+      color: #fff;
+      border-radius: 999px;
+      padding: 14px 26px;
+      font-size: 18px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    }}
+    #play-button:hover {{
+      background: #2563eb;
     }}
   </style>
 </head>
@@ -310,32 +333,74 @@ def watch_channel(channel_id: str):
     </div>
   </header>
   <main>
-    <video id="player" controls autoplay playsinline muted></video>
-    <div id="status">Starting player…</div>
+    <video id="player" controls playsinline></video>
+    <div id="play-overlay">
+      <button id="play-button" type="button">▶ Play</button>
+    </div>
+    <div id="status">Click Play to start the stream.</div>
   </main>
   <script>
     const streamUrl = "/stream/{channel_id}";
     const video = document.getElementById("player");
     const statusEl = document.getElementById("status");
+    const overlay = document.getElementById("play-overlay");
+    const playButton = document.getElementById("play-button");
+    let player = null;
 
     function setStatus(message) {{
       statusEl.textContent = message;
     }}
 
-    async function startNative() {{
-      video.src = streamUrl;
-      video.muted = false;
+    function hideOverlay() {{
+      overlay.style.display = "none";
+    }}
+
+    async function playVideo() {{
       try {{
         await video.play();
-        setStatus("Playing with browser native player.");
+        hideOverlay();
+        setStatus("Playing.");
       }} catch (err) {{
-        setStatus("Browser native playback did not start: " + err.message);
+        overlay.style.display = "grid";
+        setStatus("Click Play to start. " + err.message);
       }}
     }}
 
-    if (window.mpegts && mpegts.getFeatureList().mseLivePlayback) {{
+    function destroyPlayer() {{
+      if (!player) return;
+      try {{
+        player.unload();
+        player.detachMediaElement();
+        player.destroy();
+      }} catch (_err) {{}}
+      player = null;
+    }}
+
+    async function startNative() {{
+      destroyPlayer();
+      setStatus("Trying browser native playback…");
+      video.src = streamUrl;
+      await playVideo();
+    }}
+
+    async function startMpegTs() {{
+      destroyPlayer();
+
+      if (!window.mpegts) {{
+        setStatus("MPEG-TS player did not load. Trying browser native playback…");
+        await startNative();
+        return;
+      }}
+
+      const features = mpegts.getFeatureList ? mpegts.getFeatureList() : {{}};
+      if (!features.mseLivePlayback) {{
+        setStatus("MPEG-TS live playback not supported here. Trying browser native playback…");
+        await startNative();
+        return;
+      }}
+
       setStatus("Starting MPEG-TS player…");
-      const player = mpegts.createPlayer({{
+      player = mpegts.createPlayer({{
         type: "mpegts",
         isLive: true,
         url: streamUrl,
@@ -345,27 +410,20 @@ def watch_channel(channel_id: str):
         stashInitialSize: 384 * 1024,
       }});
 
+      player.on(mpegts.Events.ERROR, (type, detail) => {{
+        setStatus("Player error: " + type + " / " + detail + ". Try the raw stream link or refresh.");
+      }});
+
       player.attachMediaElement(video);
       player.load();
-
-      video.muted = false;
-      video.play()
-        .then(() => setStatus("Playing."))
-        .catch((err) => setStatus("Click play to start. " + err.message));
-
-      player.on(mpegts.Events.ERROR, (_type, detail) => {{
-        setStatus("Player error: " + detail + ". Trying browser native playback…");
-        try {{
-          player.unload();
-          player.detachMediaElement();
-          player.destroy();
-        }} catch (_err) {{}}
-        startNative();
-      }});
-    }} else {{
-      setStatus("MPEG-TS player unavailable. Trying browser native playback…");
-      startNative();
+      await playVideo();
     }}
+
+    playButton.addEventListener("click", () => {{
+      startMpegTs().catch((err) => {{
+        setStatus("Playback failed: " + err.message);
+      }});
+    }});
   </script>
 </body>
 </html>"""
