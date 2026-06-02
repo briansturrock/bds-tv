@@ -22,6 +22,7 @@ from .db import (
     init_db,
     row_to_dict,
     set_channel_order,
+    set_channel_preferred_logo,
     set_channels_selected,
     set_group_order,
     set_group_selected,
@@ -72,6 +73,10 @@ class GroupOrderIn(BaseModel):
 class ChannelOrderIn(BaseModel):
     group_id: str
     channel_ids: list[str] = Field(default_factory=list)
+
+
+class ChannelLogoIn(BaseModel):
+    preferred_logo_url: str | None = None
 
 
 class EpgSourceIn(BaseModel):
@@ -222,6 +227,14 @@ def api_select_channels(payload: ChannelSelectionIn) -> dict:
 @app.post("/api/channels/order")
 def api_channel_order(payload: ChannelOrderIn) -> dict:
     result = set_channel_order(payload.group_id, payload.channel_ids)
+    return {"ok": True, **result}
+
+
+@app.post("/api/channels/{channel_id}/preferred-logo")
+def api_channel_preferred_logo(channel_id: str, payload: ChannelLogoIn) -> dict:
+    result = set_channel_preferred_logo(channel_id, payload.preferred_logo_url)
+    if not result.get("updated"):
+        raise HTTPException(status_code=404, detail="Channel not found")
     return {"ok": True, **result}
 
 

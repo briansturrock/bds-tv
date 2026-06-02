@@ -66,6 +66,7 @@ SCHEMA: tuple[str, ...] = (
         tvg_name TEXT,
         tvg_id TEXT,
         logo_url TEXT,
+        preferred_logo_url TEXT,
         stream_url TEXT NOT NULL,
         extinf TEXT NOT NULL,
         provider_order INTEGER NOT NULL,
@@ -150,12 +151,20 @@ def connect(path: Path = DB_PATH) -> sqlite3.Connection:
     return conn
 
 
+def ensure_runtime_schema(conn: sqlite3.Connection) -> None:
+    """Apply lightweight schema updates for existing runtime databases."""
+    channel_columns = {row["name"] for row in conn.execute("PRAGMA table_info(channels)").fetchall()}
+    if "preferred_logo_url" not in channel_columns:
+        conn.execute("ALTER TABLE channels ADD COLUMN preferred_logo_url TEXT")
+
+
 def init_db(path: Path = DB_PATH) -> None:
     with connect(path) as conn:
         conn.execute("BEGIN IMMEDIATE")
         try:
             for statement in SCHEMA:
                 conn.execute(statement)
+            ensure_runtime_schema(conn)
             conn.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (?)", (1,))
             conn.execute("INSERT OR IGNORE INTO m3u_sources(id) VALUES (1)")
             conn.commit()
@@ -344,7 +353,10 @@ def get_channels(group_id: str, offset: int = 0, limit: int = 200) -> dict[str, 
                 name,
                 tvg_name,
                 tvg_id,
-                logo_url,
+                logo_url AS default_logo_url,
+                preferred_logo_url,
+                COALESCE(NULLIF(preferred_logo_url, ''), logo_url) AS logo_url,
+                COALESCE(NULLIF(preferred_logo_url, ''), logo_url) AS effective_logo_url,
                 provider_order,
                 user_order,
                 selected,
@@ -532,6 +544,47 @@ def set_channel_order(group_id: str, channel_ids: list[str]) -> dict[str, int]:
     return {"updated": int(updated)}
 
 
+def set_channel_preferred_logo(channel_id: str, preferred_logo_url: str | None) -> dict[str, Any]:
+    cleaned = (preferred_logo_url or "").strip() or None
+
+    with connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute(
+                """
+                UPDATE channels
+                SET preferred_logo_url = ?
+                WHERE id = ?
+                  AND missing = 0
+                """,
+                (cleaned, channel_id),
+            )
+            row = conn.execute(
+                """
+                SELECT
+                    id AS channel_id,
+                    logo_url AS default_logo_url,
+                    preferred_logo_url,
+                    COALESCE(NULLIF(preferred_logo_url, ''), logo_url) AS effective_logo_url
+                FROM channels
+                WHERE id = ?
+                  AND missing = 0
+                """,
+                (channel_id,),
+            ).fetchone()
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+    if not row:
+        return {"updated": 0, "channel_id": channel_id}
+
+    result = dict(row)
+    result["updated"] = 1
+    return result
+
+
 def get_selected_channels() -> list[dict[str, Any]]:
     with connect() as conn:
         rows = conn.execute(
@@ -544,7 +597,10 @@ def get_selected_channels() -> list[dict[str, Any]]:
                 channels.name,
                 channels.tvg_name,
                 channels.tvg_id,
-                channels.logo_url,
+                channels.logo_url AS default_logo_url,
+                channels.preferred_logo_url,
+                COALESCE(NULLIF(channels.preferred_logo_url, ''), channels.logo_url) AS logo_url,
+                COALESCE(NULLIF(channels.preferred_logo_url, ''), channels.logo_url) AS effective_logo_url,
                 channels.stream_url,
                 channels.extinf,
                 groups.provider_order AS group_provider_order,

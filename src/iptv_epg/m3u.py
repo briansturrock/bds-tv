@@ -349,6 +349,21 @@ def fetch_and_index_m3u(url: str, job_id: str) -> dict[str, int | bool | str]:
     return {"unchanged": False, **counts}
 
 
+def extinf_with_logo(extinf: str, logo_url: str | None) -> str:
+    logo = (logo_url or "").strip().replace('"', '%22')
+    if not logo:
+        return extinf
+
+    if re.search(r'tvg-logo="[^"]*"', extinf):
+        return re.sub(r'tvg-logo="[^"]*"', f'tvg-logo="{logo}"', extinf, count=1)
+
+    comma_index = extinf.find(",")
+    if comma_index >= 0:
+        return f'{extinf[:comma_index]} tvg-logo="{logo}"{extinf[comma_index:]}'
+
+    return f'{extinf} tvg-logo="{logo}"'
+
+
 def generate_filtered_m3u(job_id: str | None = None) -> dict[str, int | str]:
     FILTERED_M3U.parent.mkdir(parents=True, exist_ok=True)
 
@@ -358,7 +373,8 @@ def generate_filtered_m3u(job_id: str | None = None) -> dict[str, int | str]:
             SELECT
                 groups.name AS group_name,
                 channels.extinf,
-                channels.stream_url
+                channels.stream_url,
+                COALESCE(NULLIF(channels.preferred_logo_url, ''), channels.logo_url) AS effective_logo_url
             FROM channels
             JOIN groups ON groups.id = channels.group_id
             WHERE channels.selected = 1
@@ -381,7 +397,7 @@ def generate_filtered_m3u(job_id: str | None = None) -> dict[str, int | str]:
     with tmp.open("w", encoding="utf-8") as f:
         f.write("#EXTM3U\n")
         for row in rows:
-            f.write(row["extinf"].rstrip() + "\n")
+            f.write(extinf_with_logo(row["extinf"].rstrip(), row["effective_logo_url"]) + "\n")
             f.write(row["stream_url"].rstrip() + "\n")
 
     shutil.move(str(tmp), str(FILTERED_M3U))

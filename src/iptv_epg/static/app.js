@@ -782,11 +782,78 @@ function renderEpgDetail() {
     };
   }
 
+  renderEpgLogoEditor(row);
   renderEpgCurrent(row);
   renderEpgSuggestions(row);
   $("epg-manual-query").value = epgState.manualSearch.query;
   renderEpgManualResults();
   $("epg-save-state").textContent = "";
+}
+
+function logoValue(value) {
+  return String(value || "").trim();
+}
+
+function renderLogoPreview(url, label) {
+  const clean = logoValue(url);
+  if (!clean) {
+    return `<div class="epg-logo-preview empty">No ${escapeHtml(label)} logo</div>`;
+  }
+
+  return `<img class="epg-logo-preview" src="${escapeAttr(clean)}" alt="${escapeAttr(label)} logo" loading="lazy" referrerpolicy="no-referrer" onerror="this.classList.add('broken')" />`;
+}
+
+function renderEpgLogoEditor(row) {
+  const defaultLogo = logoValue(row.default_logo_url || row.logo_url);
+  const preferredLogo = logoValue(row.preferred_logo_url);
+  const currentLogo = logoValue(row.effective_logo_url || row.logo_url);
+
+  $("epg-logo-editor").innerHTML = `
+    <div class="epg-logo-grid">
+      <div class="epg-logo-card">
+        <h3>Default logo URL</h3>
+        ${renderLogoPreview(defaultLogo, "default")}
+        <input class="epg-logo-url" value="${escapeAttr(defaultLogo)}" readonly />
+      </div>
+      <div class="epg-logo-card">
+        <h3>Custom logo URL</h3>
+        ${renderLogoPreview(preferredLogo, "custom")}
+        <input id="epg-preferred-logo-url" class="epg-logo-url" value="${escapeAttr(preferredLogo)}" placeholder="Paste custom logo URL" />
+      </div>
+      <div class="epg-logo-card">
+        <h3>Current logo URL</h3>
+        ${renderLogoPreview(currentLogo, "current")}
+        <input class="epg-logo-url" value="${escapeAttr(currentLogo)}" readonly />
+      </div>
+    </div>
+    <div class="epg-logo-actions">
+      <button id="epg-save-logo">Save logo</button>
+      <button id="epg-clear-logo">Use default</button>
+      <span id="epg-logo-state" class="muted"></span>
+    </div>
+  `;
+
+  $("epg-save-logo").addEventListener("click", () => saveEpgLogo(row.channel_id, $("epg-preferred-logo-url").value).catch((err) => alert(err.message)));
+  $("epg-clear-logo").addEventListener("click", () => saveEpgLogo(row.channel_id, "").catch((err) => alert(err.message)));
+}
+
+async function saveEpgLogo(channelId, preferredLogoUrl) {
+  $("epg-logo-state").textContent = "Saving...";
+  const body = await api(`/api/channels/${encodeURIComponent(channelId)}/preferred-logo`, {
+    method: "POST",
+    body: JSON.stringify({ preferred_logo_url: preferredLogoUrl }),
+  });
+
+  const row = epgState.rows.find((item) => item.channel_id === channelId);
+  if (row) {
+    row.default_logo_url = body.default_logo_url || row.default_logo_url || row.logo_url || "";
+    row.preferred_logo_url = body.preferred_logo_url || "";
+    row.effective_logo_url = body.effective_logo_url || row.default_logo_url || "";
+    row.logo_url = row.effective_logo_url;
+  }
+
+  $("epg-logo-state").textContent = "Saved";
+  renderEpgDetail();
 }
 
 function renderEpgCurrent(row) {
