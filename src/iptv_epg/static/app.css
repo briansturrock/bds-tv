@@ -1376,19 +1376,3 @@ body:has(#tab-channels.active) {
 .guide-channel-row:hover .guide-channel-info {
   background: #dbe1ea;
 }
-
-
-/* Hotfix: slightly darker guide logo column */
-.guide-time-corner,
-.guide-channel-info {
-  background: #cbd5e1;
-}
-
-.guide-channel-row:hover .guide-channel-info,
-.guide-channel-info:hover {
-  background: #b8c3d3;
-}
-
-.guide-channel-placeholder {
-  background: #dbe1ea;
-}
