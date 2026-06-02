@@ -7,7 +7,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, PlainTextResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -218,6 +218,91 @@ def api_channels(
 @app.get("/api/selected-channels")
 def api_selected_channels() -> dict:
     return {"ok": True, "channels": get_selected_channels()}
+
+
+@app.get("/watch/{channel_id}", response_class=HTMLResponse)
+def watch_channel(channel_id: str):
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT id, name
+            FROM channels
+            WHERE id = ?
+              AND selected = 1
+              AND missing = 0
+            """,
+            (channel_id,),
+        ).fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Selected channel not found")
+
+    channel_name = str(row["name"] or "Channel")
+    safe_name = (
+        channel_name
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+    return f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>{safe_name}</title>
+  <style>
+    body {{
+      margin: 0;
+      background: #101217;
+      color: #f8fafc;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }}
+    header {{
+      padding: 10px 14px;
+      background: #171b23;
+      border-bottom: 1px solid #2b3240;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }}
+    h1 {{
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+    }}
+    main {{
+      height: calc(100vh - 46px);
+      display: grid;
+      place-items: center;
+    }}
+    video {{
+      width: 100%;
+      height: 100%;
+      background: #000;
+    }}
+    a {{
+      color: #93c5fd;
+    }}
+    .hint {{
+      font-size: 12px;
+      color: #cbd5e1;
+    }}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>{safe_name}</h1>
+    <div class="hint">
+      <a href="/stream/{channel_id}">Open raw stream</a>
+    </div>
+  </header>
+  <main>
+    <video controls autoplay playsinline src="/stream/{channel_id}"></video>
+  </main>
+</body>
+</html>"""
 
 
 @app.get("/stream/{channel_id}")

@@ -1418,7 +1418,7 @@ function guideWidthPx(start, stop, windowStart, windowEnd) {
 }
 
 function guideStreamUrl(channelId) {
-  return `/stream/${encodeURIComponent(channelId)}`;
+  return `/watch/${encodeURIComponent(channelId)}`;
 }
 
 function openGuideStream(channelId) {
