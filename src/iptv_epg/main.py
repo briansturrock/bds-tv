@@ -339,11 +339,8 @@ def watch_channel(channel_id: str):
     </div>
   </header>
   <main>
-    <video id="player" controls playsinline></video>
-    <div id="play-overlay">
-      <button id="play-button" type="button">▶ Play</button>
-    </div>
-    <div id="status">Click Play to start the stream.</div>
+    <video id="player" controls autoplay playsinline muted></video>
+    <div id="status">Starting stream…</div>
   </main>
   <script>
     const hlsUrl = "/hls/{channel_id}/index.m3u8";
@@ -470,20 +467,44 @@ def ensure_hls_stream(channel_id: str) -> Path:
         "warning",
         "-user_agent",
         "VLC/3.0.0 LibVLC/3.0.0",
+        "-reconnect",
+        "1",
+        "-reconnect_streamed",
+        "1",
+        "-reconnect_delay_max",
+        "5",
         "-i",
         stream_url,
+        "-map",
+        "0:v:0?",
+        "-map",
+        "0:a:0?",
         "-c:v",
-        "copy",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-tune",
+        "zerolatency",
+        "-crf",
+        "23",
+        "-pix_fmt",
+        "yuv420p",
         "-c:a",
-        "copy",
+        "aac",
+        "-ac",
+        "2",
+        "-ar",
+        "48000",
+        "-b:a",
+        "128k",
         "-f",
         "hls",
         "-hls_time",
-        "4",
+        "3",
         "-hls_list_size",
-        "8",
+        "10",
         "-hls_flags",
-        "delete_segments+append_list+omit_endlist",
+        "delete_segments+append_list+omit_endlist+independent_segments",
         "-hls_segment_filename",
         segment_pattern,
         str(playlist),
@@ -495,7 +516,7 @@ def ensure_hls_stream(channel_id: str) -> Path:
         stderr=subprocess.DEVNULL,
     )
 
-    deadline = time.time() + 12
+    deadline = time.time() + 18
     while time.time() < deadline:
         proc = HLS_PROCESSES.get(channel_id)
         if proc and proc.poll() is not None:
