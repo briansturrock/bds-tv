@@ -7,7 +7,6 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from fastapi import FastAPI, HTTPException, Query
@@ -225,39 +224,6 @@ def api_channels(
 @app.get("/api/selected-channels")
 def api_selected_channels() -> dict:
     return {"ok": True, "channels": get_selected_channels()}
-
-
-@app.get("/api/logo-proxy")
-def api_logo_proxy(url: str = Query(...)) -> Response:
-    parsed = urlparse(url)
-
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise HTTPException(status_code=400, detail="Invalid logo URL")
-
-    try:
-        req = Request(
-            url,
-            headers={
-                "User-Agent": "Mozilla/5.0",
-                "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-            },
-        )
-        with urlopen(req, timeout=15) as upstream:
-            content = upstream.read(1024 * 1024 * 3)
-            content_type = upstream.headers.get("Content-Type") or "image/png"
-    except HTTPError as exc:
-        raise HTTPException(status_code=exc.code, detail=f"Logo upstream error: {exc.reason}") from exc
-    except URLError as exc:
-        raise HTTPException(status_code=502, detail=f"Could not load logo: {exc.reason}") from exc
-
-    if not str(content_type).lower().startswith("image/"):
-        content_type = "image/png"
-
-    return Response(
-        content=content,
-        media_type=content_type,
-        headers={"Cache-Control": "public, max-age=86400"},
-    )
 
 
 @app.get("/watch/{channel_id}", response_class=HTMLResponse)

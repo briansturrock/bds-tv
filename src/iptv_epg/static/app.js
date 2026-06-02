@@ -39,13 +39,6 @@ async function api(path, options = {}) {
   return body;
 }
 
-function proxiedLogoUrl(url) {
-  if (!url) return "";
-  const raw = String(url).trim();
-  if (!raw) return "";
-  return `/api/logo-proxy?url=${encodeURIComponent(raw)}`;
-}
-
 function setMessage(id, text, isError = false) {
   const el = $(id);
   el.textContent = text;
@@ -346,7 +339,7 @@ function renderChannels(channels) {
     row.className = "channel-row";
 
     const logo = channel.logo_url
-      ? `<img src="${escapeAttr(proxiedLogoUrl(channel.logo_url))}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'" />`
+      ? `<img src="${escapeAttr(channel.logo_url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'" />`
       : `<span></span>`;
 
     const tvg = channel.tvg_id ? `tvg-id: ${escapeHtml(channel.tvg_id)}` : "";
@@ -1248,7 +1241,7 @@ function renderGuide(body) {
 
   content.innerHTML = (body.channels || []).map((channel) => {
     const logo = channel.logo_url
-      ? `<img src="${escapeAttr(proxiedLogoUrl(channel.logo_url))}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'" />`
+      ? `<img src="${escapeAttr(channel.logo_url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'" />`
       : `<span></span>`;
 
     const programmes = (channel.programmes || []).length
@@ -1468,7 +1461,7 @@ function renderGuide(body) {
     ].filter(Boolean).join("\n");
 
     const logo = channel.logo_url
-      ? `<img src="${escapeAttr(proxiedLogoUrl(channel.logo_url))}" alt="${escapeAttr(channel.name || "")}" title="${escapeAttr(channelTooltip)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'" />`
+      ? `<img src="${escapeAttr(channel.logo_url)}" alt="${escapeAttr(channel.name || "")}" title="${escapeAttr(channelTooltip)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'" />`
       : `<div class="guide-channel-placeholder" title="${escapeAttr(channelTooltip)}">TV</div>`;
 
     const programmes = (channel.programmes || []).length
