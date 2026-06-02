@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import shutil
+import subprocess
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -41,6 +44,9 @@ from .settings import FILTERED_EPG, FILTERED_M3U, ensure_runtime_dirs
 
 
 app = FastAPI(title="iptv_epg", version=__version__)
+
+HLS_ROOT = Path("/tmp/iptv_epg_hls")
+HLS_PROCESSES: dict[str, subprocess.Popen] = {}
 executor = ThreadPoolExecutor(max_workers=2)
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -251,7 +257,7 @@ def watch_channel(channel_id: str):
 <head>
   <meta charset="utf-8" />
   <title>{safe_name}</title>
-  <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
   <style>
     body {{
       margin: 0;
@@ -340,12 +346,12 @@ def watch_channel(channel_id: str):
     <div id="status">Click Play to start the stream.</div>
   </main>
   <script>
-    const streamUrl = "/stream/{channel_id}";
+    const hlsUrl = "/hls/{channel_id}/index.m3u8";
     const video = document.getElementById("player");
     const statusEl = document.getElementById("status");
     const overlay = document.getElementById("play-overlay");
     const playButton = document.getElementById("play-button");
-    let player = null;
+    let hls = null;
 
     function setStatus(message) {{
       statusEl.textContent = message;
@@ -366,67 +372,165 @@ def watch_channel(channel_id: str):
       }}
     }}
 
-    function destroyPlayer() {{
-      if (!player) return;
-      try {{
-        player.unload();
-        player.detachMediaElement();
-        player.destroy();
-      }} catch (_err) {{}}
-      player = null;
-    }}
+    async function startPlayer() {{
+      setStatus("Starting HLS stream through container…");
 
-    async function startNative() {{
-      destroyPlayer();
-      setStatus("Trying browser native playback…");
-      video.src = streamUrl;
-      await playVideo();
-    }}
-
-    async function startMpegTs() {{
-      destroyPlayer();
-
-      if (!window.mpegts) {{
-        setStatus("MPEG-TS player did not load. Trying browser native playback…");
-        await startNative();
+      if (video.canPlayType("application/vnd.apple.mpegurl")) {{
+        video.src = hlsUrl;
+        await playVideo();
         return;
       }}
 
-      const features = mpegts.getFeatureList ? mpegts.getFeatureList() : {{}};
-      if (!features.mseLivePlayback) {{
-        setStatus("MPEG-TS live playback not supported here. Trying browser native playback…");
-        await startNative();
+      if (!window.Hls || !Hls.isSupported()) {{
+        setStatus("HLS player is not supported in this browser. Try the raw stream link.");
         return;
       }}
 
-      setStatus("Starting MPEG-TS player…");
-      player = mpegts.createPlayer({{
-        type: "mpegts",
-        isLive: true,
-        url: streamUrl,
-      }}, {{
-        enableWorker: true,
-        liveBufferLatencyChasing: true,
-        stashInitialSize: 384 * 1024,
+      if (hls) {{
+        hls.destroy();
+      }}
+
+      hls = new Hls({{
+        liveSyncDurationCount: 3,
+        lowLatencyMode: false,
       }});
 
-      player.on(mpegts.Events.ERROR, (type, detail) => {{
-        setStatus("Player error: " + type + " / " + detail + ". Try the raw stream link or refresh.");
+      hls.on(Hls.Events.ERROR, (_event, data) => {{
+        setStatus("HLS error: " + data.type + " / " + data.details);
       }});
 
-      player.attachMediaElement(video);
-      player.load();
-      await playVideo();
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {{
+        playVideo();
+      }});
+
+      hls.loadSource(hlsUrl);
+      hls.attachMedia(video);
     }}
 
     playButton.addEventListener("click", () => {{
-      startMpegTs().catch((err) => {{
+      startPlayer().catch((err) => {{
         setStatus("Playback failed: " + err.message);
       }});
     }});
   </script>
 </body>
 </html>"""
+
+
+def hls_channel_dir(channel_id: str) -> Path:
+    safe = "".join(ch for ch in channel_id if ch.isalnum() or ch in ("-", "_"))
+    return HLS_ROOT / safe
+
+
+def selected_channel_stream_url(channel_id: str) -> tuple[str, str]:
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT name, stream_url
+            FROM channels
+            WHERE id = ?
+              AND selected = 1
+              AND missing = 0
+            """,
+            (channel_id,),
+        ).fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Selected channel not found")
+
+    stream_url = row["stream_url"]
+    if not stream_url:
+        raise HTTPException(status_code=404, detail="Channel has no stream URL")
+
+    return str(row["name"] or "Channel"), str(stream_url)
+
+
+def ensure_hls_stream(channel_id: str) -> Path:
+    _name, stream_url = selected_channel_stream_url(channel_id)
+
+    hls_dir = hls_channel_dir(channel_id)
+    playlist = hls_dir / "index.m3u8"
+
+    proc = HLS_PROCESSES.get(channel_id)
+    if proc and proc.poll() is None and playlist.exists():
+        return playlist
+
+    if proc and proc.poll() is None:
+        proc.terminate()
+
+    if hls_dir.exists():
+        shutil.rmtree(hls_dir, ignore_errors=True)
+    hls_dir.mkdir(parents=True, exist_ok=True)
+
+    segment_pattern = str(hls_dir / "seg_%05d.ts")
+    cmd = [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "warning",
+        "-user_agent",
+        "VLC/3.0.0 LibVLC/3.0.0",
+        "-i",
+        stream_url,
+        "-c:v",
+        "copy",
+        "-c:a",
+        "copy",
+        "-f",
+        "hls",
+        "-hls_time",
+        "4",
+        "-hls_list_size",
+        "8",
+        "-hls_flags",
+        "delete_segments+append_list+omit_endlist",
+        "-hls_segment_filename",
+        segment_pattern,
+        str(playlist),
+    ]
+
+    HLS_PROCESSES[channel_id] = subprocess.Popen(
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    deadline = time.time() + 12
+    while time.time() < deadline:
+        proc = HLS_PROCESSES.get(channel_id)
+        if proc and proc.poll() is not None:
+            break
+        if playlist.exists() and playlist.stat().st_size > 0:
+            return playlist
+        time.sleep(0.25)
+
+    raise HTTPException(status_code=504, detail="Timed out waiting for HLS stream to start")
+
+
+@app.get("/hls/{channel_id}/index.m3u8")
+def hls_playlist(channel_id: str):
+    playlist = ensure_hls_stream(channel_id)
+    return FileResponse(
+        playlist,
+        media_type="application/vnd.apple.mpegurl",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/hls/{channel_id}/{segment_name}")
+def hls_segment(channel_id: str, segment_name: str):
+    if not segment_name.endswith(".ts"):
+        raise HTTPException(status_code=404, detail="Segment not found")
+
+    segment = hls_channel_dir(channel_id) / segment_name
+    if not segment.exists():
+        raise HTTPException(status_code=404, detail="Segment not found")
+
+    return FileResponse(
+        segment,
+        media_type="video/mp2t",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.get("/stream/{channel_id}")
