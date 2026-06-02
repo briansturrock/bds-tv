@@ -1417,6 +1417,15 @@ function guideWidthPx(start, stop, windowStart, windowEnd) {
   return Math.max(48, ((rightDate.getTime() - leftDate.getTime()) / 3600000) * GUIDE_HOUR_WIDTH - 6);
 }
 
+function guideStreamUrl(channelId) {
+  return `/stream/${encodeURIComponent(channelId)}`;
+}
+
+function openGuideStream(channelId) {
+  if (!channelId) return;
+  window.open(guideStreamUrl(channelId), "_blank", "noopener");
+}
+
 function renderGuide(body) {
   const windowStart = new Date(body.window_start);
   const windowEnd = new Date(body.window_end);
@@ -1460,11 +1469,11 @@ function renderGuide(body) {
       : `<div class="guide-programme" style="left:0;width:180px"><strong>No programme data</strong><div class="desc">No matching EPG entries were found.</div></div>`;
 
     return `
-      <div class="guide-channel-row">
-        <div class="guide-channel-info">
+      <div class="guide-channel-row" data-channel-id="${escapeAttr(channel.channel_id)}" title="Click to stream ${escapeAttr(channel.name || "")}">
+        <div class="guide-channel-info" data-channel-id="${escapeAttr(channel.channel_id)}">
           ${logo}
         </div>
-        <div class="guide-timeline-row" style="width:${timelineWidth}px">
+        <div class="guide-timeline-row" data-channel-id="${escapeAttr(channel.channel_id)}" style="width:${timelineWidth}px">
           ${showNow ? `<div class="guide-now-line" style="left:${nowLeft}px"></div>` : ""}
           ${programmes}
         </div>
@@ -1483,6 +1492,19 @@ function renderGuide(body) {
   `;
 
   content.scrollLeft = 0;
+
+  content.querySelectorAll(".guide-channel-row[data-channel-id]").forEach((row) => {
+    row.addEventListener("dblclick", () => {
+      openGuideStream(row.dataset.channelId);
+    });
+  });
+
+  content.querySelectorAll(".guide-channel-info[data-channel-id], .guide-timeline-row[data-channel-id] .guide-programme").forEach((el) => {
+    el.addEventListener("click", (event) => {
+      const row = event.currentTarget.closest(".guide-channel-row");
+      if (row) openGuideStream(row.dataset.channelId);
+    });
+  });
 
   const dateSelect = document.getElementById("guide-date-select");
   if (dateSelect) {

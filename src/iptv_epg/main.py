@@ -3,9 +3,11 @@ from __future__ import annotations
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, PlainTextResponse, Response
+from fastapi.responses import FileResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -216,6 +218,63 @@ def api_channels(
 @app.get("/api/selected-channels")
 def api_selected_channels() -> dict:
     return {"ok": True, "channels": get_selected_channels()}
+
+
+@app.get("/stream/{channel_id}")
+def stream_channel(channel_id: str):
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT id, name, stream_url
+            FROM channels
+            WHERE id = ?
+              AND selected = 1
+              AND missing = 0
+            """,
+            (channel_id,),
+        ).fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Selected channel not found")
+
+    stream_url = row["stream_url"]
+    if not stream_url:
+        raise HTTPException(status_code=404, detail="Channel has no stream URL")
+
+    try:
+        req = Request(
+            stream_url,
+            headers={
+                "User-Agent": "VLC/3.0.0 LibVLC/3.0.0",
+                "Accept": "*/*",
+            },
+        )
+        upstream = urlopen(req, timeout=20)
+    except HTTPError as exc:
+        raise HTTPException(status_code=exc.code, detail=f"Upstream stream error: {exc.reason}") from exc
+    except URLError as exc:
+        raise HTTPException(status_code=502, detail=f"Could not open upstream stream: {exc.reason}") from exc
+
+    content_type = upstream.headers.get("Content-Type") or "video/mp2t"
+
+    def iter_stream():
+        try:
+            while True:
+                chunk = upstream.read(1024 * 256)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            upstream.close()
+
+    return StreamingResponse(
+        iter_stream(),
+        media_type=content_type,
+        headers={
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.post("/api/channels/select")

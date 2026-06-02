@@ -1356,3 +1356,23 @@ body:has(#tab-channels.active) {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Guide streaming first pass + darker logo column */
+.guide-time-corner,
+.guide-channel-info {
+  background: #e5e7eb;
+}
+
+.guide-channel-info {
+  cursor: pointer;
+}
+
+.guide-programme {
+  cursor: pointer;
+}
+
+.guide-channel-info:hover,
+.guide-channel-row:hover .guide-channel-info {
+  background: #dbe1ea;
+}
