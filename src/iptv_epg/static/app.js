@@ -1080,9 +1080,15 @@ function renderGuide(body) {
   const nowLeft = showNow ? guideOffsetPx(now.toISOString(), windowStart) : null;
 
   const rowsHtml = (body.channels || []).map((channel) => {
+    const channelTooltip = [
+      channel.name,
+      channel.tvg_id ? `tvg-id: ${channel.tvg_id}` : "",
+      channel.group_name ? `group: ${channel.group_name}` : "",
+    ].filter(Boolean).join("\n");
+
     const logo = channel.logo_url
-      ? `<img src="${escapeAttr(channel.logo_url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'" />`
-      : `<span></span>`;
+      ? `<img src="${escapeAttr(channel.logo_url)}" alt="${escapeAttr(channel.name || "")}" title="${escapeAttr(channelTooltip)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'" />`
+      : `<div class="guide-channel-placeholder" title="${escapeAttr(channelTooltip)}">TV</div>`;
 
     const programmes = (channel.programmes || []).length
       ? channel.programmes.map((programme) => renderGuideProgramme(programme, windowStart, windowEnd)).join("")
@@ -1092,10 +1098,6 @@ function renderGuide(body) {
       <div class="guide-channel-row">
         <div class="guide-channel-info">
           ${logo}
-          <div>
-            <strong title="${escapeAttr(channel.name)}">${escapeHtml(channel.name)}</strong>
-            <div class="muted">${escapeHtml(channel.tvg_id || "")}</div>
-          </div>
         </div>
         <div class="guide-timeline-row" style="width:${timelineWidth}px">
           ${showNow ? `<div class="guide-now-line" style="left:${nowLeft}px"></div>` : ""}
@@ -1176,34 +1178,6 @@ function wireGuideEvents() {
     }).catch((err) => {
       $("guide-status").textContent = `Could not refresh guide: ${err.message}`;
     });
-  });
-
-  $("guide-prev-window").addEventListener("click", () => {
-    const start = new Date(currentGuideStart().getTime() - 2 * 3600000);
-    if (guideState.activeGroupId) {
-      loadGuideForGroup(guideState.activeGroupId, start).catch((err) => {
-        $("guide-status").textContent = `Could not load previous window: ${err.message}`;
-      });
-    }
-  });
-
-  $("guide-next-window").addEventListener("click", () => {
-    const start = new Date(currentGuideStart().getTime() + 2 * 3600000);
-    if (guideState.activeGroupId) {
-      loadGuideForGroup(guideState.activeGroupId, start).catch((err) => {
-        $("guide-status").textContent = `Could not load next window: ${err.message}`;
-      });
-    }
-  });
-
-  $("guide-today").addEventListener("click", () => {
-    guideState.selectedDate = new Date().toISOString().slice(0, 10);
-    guideState.windowStart = null;
-    if (guideState.activeGroupId) {
-      loadGuideForGroup(guideState.activeGroupId).catch((err) => {
-        $("guide-status").textContent = `Could not load today: ${err.message}`;
-      });
-    }
   });
 
   $("guide-group-filter").addEventListener("input", filterGuideGroups);

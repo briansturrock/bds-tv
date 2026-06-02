@@ -1127,3 +1127,34 @@ body:has(#tab-channels.active) {
 .guide-programme .desc {
   pointer-events: none;
 }
+
+
+/* Hotfix: Guide icon-only channel column */
+.guide-grid {
+  --channel-col-width: 96px;
+}
+
+.guide-channel-info {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  align-items: center;
+  padding: 4px 6px;
+}
+
+.guide-channel-info img {
+  width: 58px;
+  max-height: 44px;
+  object-fit: contain;
+}
+
+.guide-channel-placeholder {
+  width: 58px;
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 12px;
+  background: #fff;
+}
