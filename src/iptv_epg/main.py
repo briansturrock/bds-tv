@@ -35,6 +35,7 @@ from .epgshare_routes import router as epgshare_router
 from .epgshare_review_routes import router as epgshare_review_router
 from .guide_routes import router as guide_router
 from .m3u import fetch_and_index_m3u, generate_filtered_m3u
+from .scheduler import router as scheduler_router, start_scheduler_thread
 from .settings import FILTERED_EPG, FILTERED_M3U, ensure_runtime_dirs
 
 
@@ -47,6 +48,7 @@ app.include_router(diagnostics_router)
 app.include_router(epgshare_router)
 app.include_router(epgshare_review_router)
 app.include_router(guide_router)
+app.include_router(scheduler_router)
 
 
 class SettingsIn(BaseModel):
@@ -105,6 +107,7 @@ class EpgMappingsIn(BaseModel):
 def startup() -> None:
     ensure_runtime_dirs()
     init_db()
+    start_scheduler_thread()
 
 
 @app.get("/", response_model=None)

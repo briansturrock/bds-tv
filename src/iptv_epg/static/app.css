@@ -104,6 +104,15 @@ textarea, input[type="search"] {
   font: inherit;
 }
 
+input[type="number"],
+input[type="time"] {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  font: inherit;
+}
+
 .button-row {
   display: flex;
   flex-wrap: wrap;
@@ -531,6 +540,39 @@ a {
 
   .epg-channel-list {
     max-height: 340px;
+  }
+}
+
+
+/* Scheduler tab */
+.scheduler-shell {
+  display: grid;
+  gap: 14px;
+  max-width: 760px;
+}
+
+.scheduler-card {
+  display: grid;
+  gap: 12px;
+}
+
+.toggle-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.scheduler-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 700px) {
+  .scheduler-grid {
+    grid-template-columns: 1fr;
   }
 }
 

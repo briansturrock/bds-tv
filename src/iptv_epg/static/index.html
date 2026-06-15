@@ -16,6 +16,7 @@
       <button class="tab-button active" data-tab="settings">Settings</button>
       <button class="tab-button" data-tab="channels">Channels</button>
       <button class="tab-button" data-tab="epg">EPG</button>
+      <button class="tab-button" data-tab="scheduler">Scheduler</button>
       <button class="tab-button" data-tab="guide">Guide</button>
       <a class="tab-link" href="/dev/diagnostics" target="_blank" rel="noopener">Diagnostics</a>
     </nav>
@@ -160,6 +161,41 @@
               </section>
             </div>
           </section>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-scheduler" class="tab-panel">
+      <div class="scheduler-shell">
+        <div class="card scheduler-card">
+          <h2>Scheduler</h2>
+          <label class="toggle-row">
+            <input id="scheduler-enabled" type="checkbox" />
+            <span>Run filtered EPG automatically</span>
+          </label>
+
+          <div class="scheduler-grid">
+            <label>
+              XMLTV days
+              <input id="scheduler-days" type="number" min="1" max="14" step="1" />
+            </label>
+            <label>
+              Daily run time
+              <input id="scheduler-time" type="time" />
+            </label>
+          </div>
+
+          <div class="button-row">
+            <button id="scheduler-save">Save scheduler</button>
+            <button id="scheduler-run-now">Run now</button>
+            <a class="button" href="/filtered_epg.xml" target="_blank" rel="noopener">Open filtered_epg.xml</a>
+          </div>
+          <div id="scheduler-message" class="info-bar">Scheduler not loaded yet.</div>
+        </div>
+
+        <div class="card">
+          <h2>Last run</h2>
+          <pre id="scheduler-json" class="json-box">{}</pre>
         </div>
       </div>
     </section>

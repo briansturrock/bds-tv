@@ -10,6 +10,7 @@ const state = {
   visibleChannelIds: [],
   visibleSelectedIds: [],
   activeJobTimer: null,
+  schedulerPollTimer: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -445,7 +446,11 @@ function switchTab(tab) {
     });
   }
 
-  if (["settings", "channels", "epg", "guide"].includes(tab)) {
+  if (tab === "scheduler" && !schedulerState.loaded) {
+    loadScheduler().catch((err) => setMessage("scheduler-message", `Could not load scheduler: ${err.message}`, true));
+  }
+
+  if (["settings", "channels", "epg", "scheduler", "guide"].includes(tab)) {
     history.replaceState(null, "", `#${tab}`);
   }
 }
@@ -492,10 +497,11 @@ function wireEvents() {
 async function init() {
   wireEvents();
   wireEpgEvents();
+  wireSchedulerEvents();
   wireGuideEvents();
 
   const initialTab = window.location.hash.replace("#", "");
-  if (["settings", "channels", "epg", "guide"].includes(initialTab)) {
+  if (["settings", "channels", "epg", "scheduler", "guide"].includes(initialTab)) {
     switchTab(initialTab);
   }
 
@@ -1296,6 +1302,89 @@ function wireGuideEvents() {
   if (groupFilter) {
     groupFilter.addEventListener("input", filterGuideGroups);
   }
+}
+
+
+/* Scheduler tab integration */
+const schedulerState = {
+  loaded: false,
+  settings: null,
+};
+
+function renderScheduler(body) {
+  schedulerState.loaded = true;
+  schedulerState.settings = body;
+
+  $("scheduler-enabled").checked = Boolean(body.enabled);
+  $("scheduler-days").value = body.days || 3;
+  $("scheduler-time").value = body.run_time || "04:00";
+  renderJson("scheduler-json", body);
+
+  const lastJob = body.last_job;
+  if (lastJob) {
+    const progress =
+      lastJob.progress_total && lastJob.progress_total > 0
+        ? ` (${lastJob.progress_current || 0}/${lastJob.progress_total})`
+        : "";
+    setMessage("scheduler-message", `${lastJob.status}: ${lastJob.message || ""}${progress}`, lastJob.status === "failed");
+  } else if (body.enabled) {
+    setMessage("scheduler-message", `Enabled. Next run is daily at ${body.run_time}.`);
+  } else {
+    setMessage("scheduler-message", "Scheduler is disabled.");
+  }
+}
+
+async function loadScheduler() {
+  const body = await api("/api/scheduler");
+  renderScheduler(body);
+  scheduleSchedulerRefresh(body);
+}
+
+function scheduleSchedulerRefresh(body) {
+  if (state.schedulerPollTimer) {
+    clearInterval(state.schedulerPollTimer);
+    state.schedulerPollTimer = null;
+  }
+
+  if (body.last_job && body.last_job.status === "running") {
+    state.schedulerPollTimer = setInterval(() => {
+      loadScheduler().catch((err) => setMessage("scheduler-message", `Could not refresh scheduler: ${err.message}`, true));
+    }, 3000);
+  }
+}
+
+async function saveScheduler() {
+  const payload = {
+    enabled: $("scheduler-enabled").checked,
+    days: Number($("scheduler-days").value || 3),
+    run_time: $("scheduler-time").value || "04:00",
+  };
+
+  const body = await api("/api/scheduler", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  renderScheduler(body);
+  setMessage("scheduler-message", body.enabled ? `Saved. Daily run set for ${body.run_time}.` : "Saved. Scheduler is disabled.");
+}
+
+async function runSchedulerNow() {
+  setMessage("scheduler-message", "Starting scheduled EPG generation...");
+  const body = await api("/api/scheduler/run-now", { method: "POST" });
+  pollJob(body.job_id, "scheduler-message", async () => {
+    await loadScheduler();
+  });
+  await loadScheduler();
+}
+
+function wireSchedulerEvents() {
+  $("scheduler-save").addEventListener("click", () => {
+    saveScheduler().catch((err) => setMessage("scheduler-message", `Save failed: ${err.message}`, true));
+  });
+
+  $("scheduler-run-now").addEventListener("click", () => {
+    runSchedulerNow().catch((err) => setMessage("scheduler-message", `Run failed: ${err.message}`, true));
+  });
 }
 
 
