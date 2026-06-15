@@ -1398,3 +1398,42 @@ body:has(#tab-channels.active) {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Guide streaming first pass + darker logo column */
+.guide-time-corner,
+.guide-channel-info {
+  background: #e5e7eb;
+}
+
+.guide-channel-info {
+  cursor: pointer;
+}
+
+.guide-programme {
+  cursor: pointer;
+}
+
+.guide-channel-info:hover,
+.guide-channel-row:hover .guide-channel-info {
+  background: #dbe1ea;
+}
+
+
+/* Guide logo column contrast */
+.guide-time-corner,
+.guide-grid .guide-channel-info,
+.guide-channel-info {
+  background: #64748b;
+}
+
+.guide-channel-row:hover .guide-channel-info,
+.guide-channel-info:hover {
+  background: #56657a;
+}
+
+.guide-channel-placeholder {
+  background: #475569;
+  border-color: #94a3b8;
+  color: #f8fafc;
+}

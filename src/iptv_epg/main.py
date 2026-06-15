@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import shutil
+import subprocess
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, PlainTextResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -40,6 +45,9 @@ from .settings import FILTERED_EPG, FILTERED_M3U, ensure_runtime_dirs
 
 
 app = FastAPI(title="iptv_epg", version=__version__)
+
+HLS_ROOT = Path("/tmp/iptv_epg_hls")
+HLS_PROCESSES: dict[str, subprocess.Popen] = {}
 executor = ThreadPoolExecutor(max_workers=2)
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -219,6 +227,478 @@ def api_channels(
 @app.get("/api/selected-channels")
 def api_selected_channels() -> dict:
     return {"ok": True, "channels": get_selected_channels()}
+
+
+@app.get("/watch/{channel_id}", response_class=HTMLResponse)
+def watch_channel(channel_id: str, mode: str = Query("copy")):
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT id, name
+            FROM channels
+            WHERE id = ?
+              AND selected = 1
+              AND missing = 0
+            """,
+            (channel_id,),
+        ).fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Selected channel not found")
+
+    mode = "compatible" if mode == "compatible" else "copy"
+    alternate_mode = "copy" if mode == "compatible" else "compatible"
+    alternate_label = "Fast mode" if mode == "compatible" else "Compatible mode"
+
+    channel_name = str(row["name"] or "Channel")
+    safe_name = (
+        channel_name
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+    return f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>{safe_name}</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
+  <style>
+    html, body {{
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }}
+    body {{
+      margin: 0;
+      background: #101217;
+      color: #f8fafc;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
+    }}
+    header {{
+      flex: 0 0 38px;
+      height: 38px;
+      box-sizing: border-box;
+      padding: 6px 12px;
+      background: #171b23;
+      border-bottom: 1px solid #2b3240;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      overflow: hidden;
+    }}
+    h1 {{
+      margin: 0;
+      font-size: 15px;
+      font-weight: 600;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }}
+    main {{
+      flex: 1 1 auto;
+      min-height: 0;
+      box-sizing: border-box;
+      display: grid;
+      place-items: center;
+      position: relative;
+      overflow: hidden;
+      padding: 8px 8px 42px;
+    }}
+    video {{
+      width: 100%;
+      height: 100%;
+      max-width: 100%;
+      max-height: 100%;
+      background: #000;
+      object-fit: contain;
+      display: block;
+      box-sizing: border-box;
+    }}
+    a {{
+      color: #93c5fd;
+      white-space: nowrap;
+    }}
+    .hint, #status {{
+      font-size: 12px;
+      color: #cbd5e1;
+    }}
+    .hint {{
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }}
+    #status {{
+      position: absolute;
+      left: 14px;
+      top: 14px;
+      background: rgba(0, 0, 0, 0.72);
+      padding: 6px 8px;
+      border-radius: 6px;
+      max-width: calc(100vw - 28px);
+      z-index: 3;
+      pointer-events: none;
+    }}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>{safe_name}</h1>
+    <div class="hint">
+      <span>{mode}</span>
+      <a href="/watch/{channel_id}?mode={alternate_mode}">{alternate_label}</a>
+      <a href="/stream/{channel_id}">Raw stream</a>
+    </div>
+  </header>
+  <main>
+    <video id="player" controls playsinline preload="auto"></video>
+    <div id="status">Loading stream…</div>
+  </main>
+  <script>
+    const hlsUrl = "/hls/{channel_id}/{mode}/index.m3u8";
+    const video = document.getElementById("player");
+    const statusEl = document.getElementById("status");
+    let hls = null;
+    let sawVideoFrame = false;
+
+    function setStatus(message) {{
+      statusEl.textContent = message;
+    }}
+
+    video.addEventListener("loadedmetadata", () => {{
+      if (video.videoWidth && video.videoHeight) {{
+        sawVideoFrame = true;
+        setStatus("Stream ready. Press play in the video controls.");
+      }} else {{
+        setStatus("Audio track loaded, but no video track is visible. Try Compatible mode.");
+      }}
+    }});
+
+    video.addEventListener("playing", () => {{
+      if (sawVideoFrame || (video.videoWidth && video.videoHeight)) {{
+        setStatus("Playing.");
+      }} else {{
+        setStatus("Audio is playing, but no video frames are visible. Try Compatible mode.");
+      }}
+    }});
+
+    video.addEventListener("timeupdate", () => {{
+      if (video.videoWidth && video.videoHeight) {{
+        sawVideoFrame = true;
+      }}
+    }});
+
+    video.addEventListener("error", () => {{
+      const err = video.error;
+      setStatus("Video element error" + (err ? ` (${{err.code}})` : "") + ". Try Compatible mode.");
+    }});
+
+    async function startPlayer() {{
+      setStatus("Starting {mode} HLS stream through container…");
+
+      if (video.canPlayType("application/vnd.apple.mpegurl")) {{
+        video.src = hlsUrl;
+        setStatus("Stream ready. Press play in the video controls.");
+        return;
+      }}
+
+      if (!window.Hls || !Hls.isSupported()) {{
+        setStatus("HLS player is not supported in this browser. Try the raw stream link.");
+        return;
+      }}
+
+      hls = new Hls({{
+        liveSyncDurationCount: 3,
+        lowLatencyMode: false,
+      }});
+
+      hls.on(Hls.Events.ERROR, (_event, data) => {{
+        if (!data.fatal) {{
+          setStatus("Recovering stream: " + data.details);
+          return;
+        }}
+
+        setStatus("HLS error: " + data.type + " / " + data.details + ". Try {alternate_label}.");
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {{
+          hls.startLoad();
+        }} else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {{
+          hls.recoverMediaError();
+        }}
+      }});
+
+      let manifestLoaded = false;
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {{
+        manifestLoaded = true;
+        setStatus("Stream ready. Press play in the video controls.");
+      }});
+
+      setTimeout(() => {{
+        if (!manifestLoaded) {{
+          setStatus("Still waiting for stream. Try {alternate_label} or refresh this tab.");
+        }} else if (!sawVideoFrame) {{
+          setStatus("Stream is loaded. Press play. If you only get audio, try Compatible mode.");
+        }}
+      }}, 15000);
+
+      hls.loadSource(hlsUrl);
+      hls.attachMedia(video);
+    }}
+
+    startPlayer().catch((err) => {{
+      setStatus("Playback failed: " + err.message);
+    }});
+  </script>
+</body>
+</html>"""
+
+
+def hls_key(channel_id: str, mode: str) -> str:
+    return f"{mode}:{channel_id}"
+
+
+def hls_channel_dir(channel_id: str, mode: str = "copy") -> Path:
+    safe_channel = "".join(ch for ch in channel_id if ch.isalnum() or ch in ("-", "_"))
+    safe_mode = "compatible" if mode == "compatible" else "copy"
+    return HLS_ROOT / safe_mode / safe_channel
+
+
+def stop_hls_process(key: str) -> None:
+    proc = HLS_PROCESSES.pop(key, None)
+    if proc and proc.poll() is None:
+        proc.terminate()
+
+
+def stop_other_hls_processes(active_key: str) -> None:
+    for key in list(HLS_PROCESSES.keys()):
+        if key == active_key:
+            continue
+        stop_hls_process(key)
+
+
+def selected_channel_stream_url(channel_id: str) -> tuple[str, str]:
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT name, stream_url
+            FROM channels
+            WHERE id = ?
+              AND selected = 1
+              AND missing = 0
+            """,
+            (channel_id,),
+        ).fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Selected channel not found")
+
+    stream_url = row["stream_url"]
+    if not stream_url:
+        raise HTTPException(status_code=404, detail="Channel has no stream URL")
+
+    return str(row["name"] or "Channel"), str(stream_url)
+
+
+def ffmpeg_hls_command(stream_url: str, playlist: Path, segment_pattern: str, mode: str) -> list[str]:
+    common = [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "warning",
+        "-user_agent",
+        "VLC/3.0.0 LibVLC/3.0.0",
+        "-reconnect",
+        "1",
+        "-reconnect_streamed",
+        "1",
+        "-reconnect_delay_max",
+        "5",
+        "-fflags",
+        "+genpts",
+        "-i",
+        stream_url,
+        "-map",
+        "0:v:0?",
+        "-map",
+        "0:a:0?",
+        "-sn",
+        "-dn",
+    ]
+
+    if mode == "compatible":
+        codecs = [
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-tune",
+            "zerolatency",
+            "-profile:v",
+            "baseline",
+            "-level",
+            "3.1",
+            "-pix_fmt",
+            "yuv420p",
+            "-vf",
+            "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+            "-c:a",
+            "aac",
+            "-ac",
+            "2",
+            "-ar",
+            "48000",
+            "-b:a",
+            "128k",
+        ]
+    else:
+        codecs = [
+            "-c",
+            "copy",
+        ]
+
+    hls = [
+        "-f",
+        "hls",
+        "-hls_time",
+        "3",
+        "-hls_list_size",
+        "10",
+        "-hls_flags",
+        "delete_segments+append_list+omit_endlist+independent_segments",
+        "-hls_segment_filename",
+        segment_pattern,
+        str(playlist),
+    ]
+
+    return common + codecs + hls
+
+
+def ensure_hls_stream(channel_id: str, mode: str = "copy") -> Path:
+    mode = "compatible" if mode == "compatible" else "copy"
+    _name, stream_url = selected_channel_stream_url(channel_id)
+
+    key = hls_key(channel_id, mode)
+    stop_other_hls_processes(key)
+
+    hls_dir = hls_channel_dir(channel_id, mode)
+    playlist = hls_dir / "index.m3u8"
+
+    proc = HLS_PROCESSES.get(key)
+    if proc and proc.poll() is None and playlist.exists():
+        return playlist
+
+    stop_hls_process(key)
+
+    if hls_dir.exists():
+        shutil.rmtree(hls_dir, ignore_errors=True)
+    hls_dir.mkdir(parents=True, exist_ok=True)
+
+    segment_pattern = str(hls_dir / "seg_%05d.ts")
+    cmd = ffmpeg_hls_command(stream_url, playlist, segment_pattern, mode)
+
+    HLS_PROCESSES[key] = subprocess.Popen(
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    deadline = time.time() + (24 if mode == "compatible" else 12)
+    while time.time() < deadline:
+        proc = HLS_PROCESSES.get(key)
+        if proc and proc.poll() is not None:
+            break
+        if playlist.exists() and playlist.stat().st_size > 0:
+            return playlist
+        time.sleep(0.25)
+
+    raise HTTPException(status_code=504, detail=f"Timed out waiting for {mode} HLS stream to start")
+
+
+@app.get("/hls/{channel_id}/{mode}/index.m3u8")
+def hls_playlist(channel_id: str, mode: str):
+    playlist = ensure_hls_stream(channel_id, mode)
+    return FileResponse(
+        playlist,
+        media_type="application/vnd.apple.mpegurl",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/hls/{channel_id}/{mode}/{segment_name}")
+def hls_segment(channel_id: str, mode: str, segment_name: str):
+    if not segment_name.endswith(".ts"):
+        raise HTTPException(status_code=404, detail="Segment not found")
+
+    segment = hls_channel_dir(channel_id, mode) / segment_name
+    if not segment.exists():
+        raise HTTPException(status_code=404, detail="Segment not found")
+
+    return FileResponse(
+        segment,
+        media_type="video/mp2t",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/stream/{channel_id}")
+def stream_channel(channel_id: str):
+    with connect() as conn:
+        row = conn.execute(
+            """
+            SELECT id, name, stream_url
+            FROM channels
+            WHERE id = ?
+              AND selected = 1
+              AND missing = 0
+            """,
+            (channel_id,),
+        ).fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Selected channel not found")
+
+    stream_url = row["stream_url"]
+    if not stream_url:
+        raise HTTPException(status_code=404, detail="Channel has no stream URL")
+
+    try:
+        req = Request(
+            stream_url,
+            headers={
+                "User-Agent": "VLC/3.0.0 LibVLC/3.0.0",
+                "Accept": "*/*",
+            },
+        )
+        upstream = urlopen(req, timeout=20)
+    except HTTPError as exc:
+        raise HTTPException(status_code=exc.code, detail=f"Upstream stream error: {exc.reason}") from exc
+    except URLError as exc:
+        raise HTTPException(status_code=502, detail=f"Could not open upstream stream: {exc.reason}") from exc
+
+    content_type = upstream.headers.get("Content-Type") or "video/mp2t"
+
+    def iter_stream():
+        try:
+            while True:
+                chunk = upstream.read(1024 * 256)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            upstream.close()
+
+    return StreamingResponse(
+        iter_stream(),
+        media_type=content_type,
+        headers={
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.post("/api/channels/select")
