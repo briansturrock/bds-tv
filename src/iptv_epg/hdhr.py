@@ -33,7 +33,9 @@ SSDP_STATUS: dict[str, Any] = {
     "listening": False,
     "last_error": None,
     "last_request_from": None,
+    "last_search_target": None,
     "last_response_at": None,
+    "last_notify_at": None,
 }
 
 
@@ -626,15 +628,29 @@ def api_hdhr_catalogue(request: Request) -> dict:
     }
 
 
-def ssdp_response(location: str, settings: HdhrSettings) -> bytes:
-    usn = f"uuid:{settings.device_id}::urn:schemas-upnp-org:device:MediaServer:1"
+def ssdp_headers(message: str) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    for raw_line in message.replace("\r\n", "\n").split("\n"):
+        if ":" not in raw_line:
+            continue
+        key, value = raw_line.split(":", 1)
+        headers[key.strip().upper()] = value.strip()
+    return headers
+
+
+def ssdp_response(location: str, settings: HdhrSettings, search_target: str) -> bytes:
+    st = search_target or "ssdp:all"
+    usn = f"uuid:{settings.device_id}"
+    if st.lower() not in {"ssdp:all", "upnp:rootdevice"}:
+        usn = f"{usn}::{st}"
+
     lines = [
         "HTTP/1.1 200 OK",
         "CACHE-CONTROL: max-age=1800",
         "EXT:",
         f"LOCATION: {location}",
         "SERVER: iptv-epg/1.0 UPnP/1.0 HDHomeRun/1.0",
-        "ST: urn:schemas-upnp-org:device:MediaServer:1",
+        f"ST: {st}",
         f"USN: {usn}",
         "",
         "",
@@ -642,19 +658,52 @@ def ssdp_response(location: str, settings: HdhrSettings) -> bytes:
     return "\r\n".join(lines).encode("utf-8")
 
 
-def ssdp_should_respond(message: str) -> bool:
+def ssdp_search_target(message: str) -> str | None:
+    headers = ssdp_headers(message)
+    return headers.get("ST")
+
+
+def ssdp_should_respond(message: str, search_target: str | None) -> bool:
     upper = message.upper()
     if "M-SEARCH" not in upper:
         return False
     if "SSDP:DISCOVER" not in upper:
         return False
+    target = (search_target or "").upper()
     return (
-        "SSDP:ALL" in upper
-        or "UPNP:ROOTDEVICE" in upper
-        or "MEDIA SERVER" in upper
-        or "MEDIASERVER" in upper
-        or "HDHOMERUN" in upper
+        target in {"SSDP:ALL", "UPNP:ROOTDEVICE"}
+        or "MEDIA SERVER" in target
+        or "MEDIASERVER" in target
+        or "HDHOMERUN" in target
+        or "DIAL-MULTISCREEN" in target
     )
+
+
+def ssdp_notify_messages(location: str, settings: HdhrSettings) -> list[bytes]:
+    targets = [
+        "upnp:rootdevice",
+        "urn:schemas-upnp-org:device:MediaServer:1",
+        "urn:schemas-upnp-org:device:MediaServer:2",
+        "urn:schemas-upnp-org:device:MediaServer:3",
+        "urn:schemas-upnp-org:device:dial:1",
+    ]
+    messages = []
+    for target in targets:
+        usn = f"uuid:{settings.device_id}::{target}"
+        lines = [
+            "NOTIFY * HTTP/1.1",
+            f"HOST: {SSDP_ADDR}:{SSDP_PORT}",
+            "CACHE-CONTROL: max-age=1800",
+            f"LOCATION: {location}",
+            "SERVER: iptv-epg/1.0 UPnP/1.0 HDHomeRun/1.0",
+            f"NT: {target}",
+            "NTS: ssdp:alive",
+            f"USN: {usn}",
+            "",
+            "",
+        ]
+        messages.append("\r\n".join(lines).encode("utf-8"))
+    return messages
 
 
 def ssdp_loop() -> None:
@@ -688,9 +737,21 @@ def ssdp_loop() -> None:
             except OSError:
                 pass
 
-            payload = ssdp_response(urljoin(f"{settings.public_base_url}/", "discover.json"), settings)
+            location = urljoin(f"{settings.public_base_url}/", "discover.json")
+            notify_payloads = ssdp_notify_messages(location, settings)
+            next_notify_at = 0.0
 
             while not SSDP_STOP.is_set():
+                now = time.monotonic()
+                if now >= next_notify_at:
+                    for notify_payload in notify_payloads:
+                        try:
+                            sock.sendto(notify_payload, (SSDP_ADDR, SSDP_PORT))
+                        except OSError:
+                            pass
+                    SSDP_STATUS["last_notify_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                    next_notify_at = now + 300
+
                 try:
                     data, addr = sock.recvfrom(2048)
                 except socket.timeout:
@@ -707,9 +768,11 @@ def ssdp_loop() -> None:
 
                 try:
                     message = data.decode("utf-8", errors="ignore")
-                    if ssdp_should_respond(message):
+                    search_target = ssdp_search_target(message) or "ssdp:all"
+                    if ssdp_should_respond(message, search_target):
                         SSDP_STATUS["last_request_from"] = f"{addr[0]}:{addr[1]}"
-                        sock.sendto(payload, addr)
+                        SSDP_STATUS["last_search_target"] = search_target
+                        sock.sendto(ssdp_response(location, settings, search_target), addr)
                         SSDP_STATUS["last_response_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                 except OSError:
                     pass
