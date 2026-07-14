@@ -44,6 +44,7 @@ class HdhrSettingsIn(BaseModel):
     enabled: bool = False
     device_name: str = "iptv-epg"
     device_id: str | None = None
+    channel_limit: int = Field(default=450, ge=1, le=5000)
     tuner_count: int = Field(default=1, ge=1, le=16)
     max_upstream_streams: int = Field(default=1, ge=1, le=16)
     public_base_url: str = ""
@@ -57,6 +58,7 @@ class HdhrSettings:
     enabled: bool
     device_name: str
     device_id: str
+    channel_limit: int
     tuner_count: int
     max_upstream_streams: int
     public_base_url: str
@@ -124,6 +126,7 @@ def get_hdhr_settings() -> HdhrSettings:
         enabled=bool_setting("hdhr_enabled", False),
         device_name=(get_setting("hdhr_device_name", "iptv-epg") or "iptv-epg").strip() or "iptv-epg",
         device_id=get_or_create_device_id(),
+        channel_limit=int_setting("hdhr_channel_limit", 450, 1, 5000),
         tuner_count=int_setting("hdhr_tuner_count", 1, 1, 16),
         max_upstream_streams=int_setting("hdhr_max_upstream_streams", 1, 1, 16),
         public_base_url=normalise_base_url(get_setting("hdhr_public_base_url")),
@@ -147,6 +150,7 @@ def save_hdhr_settings(payload: HdhrSettingsIn) -> HdhrSettings:
         "hdhr_enabled": "true" if payload.enabled else "false",
         "hdhr_device_name": payload.device_name.strip() or "iptv-epg",
         "hdhr_device_id": device_id,
+        "hdhr_channel_limit": str(max(1, min(payload.channel_limit, 5000))),
         "hdhr_tuner_count": str(max(1, min(payload.tuner_count, 16))),
         "hdhr_max_upstream_streams": str(max(1, min(payload.max_upstream_streams, 16))),
         "hdhr_public_base_url": normalise_base_url(payload.public_base_url),
@@ -195,9 +199,11 @@ def selected_channel_row(channel_id: str) -> dict[str, Any]:
     return dict(row)
 
 
-def selected_catalogue_channels() -> list[dict[str, Any]]:
+def selected_catalogue_channels(limit: int | None = None) -> list[dict[str, Any]]:
     channels = []
     for index, channel in enumerate(get_selected_channels(), start=1):
+        if limit is not None and index > limit:
+            break
         channels.append(
             {
                 "number": index,
@@ -213,6 +219,11 @@ def selected_catalogue_channels() -> list[dict[str, Any]]:
             }
         )
     return channels
+
+
+def hdhr_catalogue_channels(settings: HdhrSettings | None = None) -> list[dict[str, Any]]:
+    settings = settings or get_hdhr_settings()
+    return selected_catalogue_channels(settings.channel_limit)
 
 
 def selected_catalogue_groups(channels: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
@@ -236,8 +247,8 @@ def selected_catalogue_groups(channels: list[dict[str, Any]] | None = None) -> l
     return groups
 
 
-def catalogue_payload(base_url: str) -> dict[str, Any]:
-    channels = selected_catalogue_channels()
+def catalogue_payload(base_url: str, settings: HdhrSettings | None = None) -> dict[str, Any]:
+    channels = hdhr_catalogue_channels(settings)
     groups = selected_catalogue_groups(channels)
     return {
         "containers": [
@@ -466,9 +477,9 @@ def hdhr_discovery_payload(base_url: str, settings: HdhrSettings) -> dict[str, A
     }
 
 
-def lineup_rows(base_url: str) -> list[dict[str, str]]:
+def lineup_rows(base_url: str, settings: HdhrSettings | None = None) -> list[dict[str, str]]:
     rows = []
-    for channel in selected_catalogue_channels():
+    for channel in hdhr_catalogue_channels(settings):
         guide_number = str(channel["number"])
         rows.append(
             {
@@ -488,15 +499,15 @@ def channel_id_for_guide_number(guide_number: str) -> str | None:
     if index < 1:
         return None
 
-    channels = selected_catalogue_channels()
+    channels = hdhr_catalogue_channels()
     if index > len(channels):
         return None
     return channels[index - 1]["channel_id"]
 
 
-def generate_hdhr_m3u(base_url: str) -> dict[str, Any]:
+def generate_hdhr_m3u(base_url: str, settings: HdhrSettings | None = None) -> dict[str, Any]:
     HDHR_PROXY_M3U.parent.mkdir(parents=True, exist_ok=True)
-    rows = selected_catalogue_channels()
+    rows = hdhr_catalogue_channels(settings)
 
     tmp = HDHR_PROXY_M3U.with_suffix(".m3u.tmp")
     with tmp.open("w", encoding="utf-8") as f:
@@ -515,7 +526,8 @@ def serialize_xmltv_element(elem: ET.Element) -> str:
 
 
 def hdhr_xmltv_stream() -> Iterator[str]:
-    channels = selected_catalogue_channels()
+    settings = get_hdhr_settings()
+    channels = hdhr_catalogue_channels(settings)
     by_xmltv_id: dict[str, list[dict[str, Any]]] = {}
     for channel in channels:
         xmltv_id = (channel.get("tvg_id") or channel.get("channel_id") or "").strip()
@@ -599,7 +611,7 @@ def api_save_hdhr_settings(payload: HdhrSettingsIn, request: Request) -> dict:
 @router.post("/api/hdhr/generate-m3u")
 def api_generate_hdhr_m3u(request: Request) -> dict:
     settings = get_hdhr_settings()
-    result = generate_hdhr_m3u(base_url_for_request(request, settings))
+    result = generate_hdhr_m3u(base_url_for_request(request, settings), settings)
     return {"ok": True, **result}
 
 
@@ -607,7 +619,7 @@ def api_generate_hdhr_m3u(request: Request) -> dict:
 def hdhr_m3u(request: Request) -> PlainTextResponse | FileResponse:
     if not HDHR_PROXY_M3U.exists():
         settings = get_hdhr_settings()
-        generate_hdhr_m3u(base_url_for_request(request, settings))
+        generate_hdhr_m3u(base_url_for_request(request, settings), settings)
     if not HDHR_PROXY_M3U.exists():
         return PlainTextResponse("#EXTM3U\n", media_type="application/vnd.apple.mpegurl")
     return FileResponse(HDHR_PROXY_M3U, media_type="application/vnd.apple.mpegurl", filename="hdhr.m3u")
@@ -631,7 +643,7 @@ def discover_json(request: Request) -> dict:
 @router.get("/lineup.json")
 def lineup_json(request: Request) -> list[dict[str, str]]:
     settings = get_hdhr_settings()
-    return lineup_rows(base_url_for_request(request, settings))
+    return lineup_rows(base_url_for_request(request, settings), settings)
 
 
 @router.get("/lineup_status.json")
@@ -695,7 +707,7 @@ def api_hdhr_catalogue(request: Request) -> dict:
     settings = get_hdhr_settings()
     return {
         "ok": True,
-        "catalogue": catalogue_payload(base_url_for_request(request, settings)),
+        "catalogue": catalogue_payload(base_url_for_request(request, settings), settings),
     }
 
 

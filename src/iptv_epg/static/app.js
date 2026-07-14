@@ -75,6 +75,7 @@ function setHdhrForm(settings) {
   $("hdhr-device-id").value = settings.device_id || "";
   $("hdhr-public-base-url").value = settings.public_base_url || "";
   $("hdhr-ffmpeg-path").value = settings.ffmpeg_path || "ffmpeg";
+  $("hdhr-channel-limit").value = settings.channel_limit || 450;
   $("hdhr-tuner-count").value = settings.tuner_count || 1;
   $("hdhr-max-upstream-streams").value = settings.max_upstream_streams || 1;
   $("hdhr-stream-mode").value = settings.stream_mode || "direct";
@@ -88,6 +89,7 @@ function hdhrPayloadFromForm() {
     device_id: $("hdhr-device-id").value.trim(),
     public_base_url: $("hdhr-public-base-url").value.trim(),
     ffmpeg_path: $("hdhr-ffmpeg-path").value.trim() || "ffmpeg",
+    channel_limit: Number($("hdhr-channel-limit").value || 450),
     tuner_count: Number($("hdhr-tuner-count").value || 1),
     max_upstream_streams: Number($("hdhr-max-upstream-streams").value || 1),
     stream_mode: $("hdhr-stream-mode").value,

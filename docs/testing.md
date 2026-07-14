@@ -18,6 +18,7 @@ docker compose up --build
 ```bash
 python scripts/test_m3u_parser.py
 python scripts/test_epg_unknown.py
+python scripts/test_hdhr_channel_limit.py
 ```
 
 ## Image save/load
