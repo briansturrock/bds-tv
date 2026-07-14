@@ -52,8 +52,36 @@ def parse_attrs(line: str) -> dict[str, str]:
     return dict(ATTR_RE.findall(line))
 
 
-def display_name_from_extinf(extinf: str) -> str:
-    return extinf.split(",", 1)[-1].strip() if "," in extinf else ""
+def split_extinf_name(extinf: str) -> tuple[str, str]:
+    in_quotes = False
+    escape_next = False
+
+    for index, char in enumerate(extinf):
+        if escape_next:
+            escape_next = False
+            continue
+        if char == "\\":
+            escape_next = True
+            continue
+        if char == '"':
+            in_quotes = not in_quotes
+            continue
+        if char == "," and not in_quotes:
+            return extinf[:index], extinf[index + 1 :]
+
+    return extinf, ""
+
+
+def display_name_from_extinf(extinf: str, attrs: dict[str, str] | None = None) -> str:
+    _metadata, name = split_extinf_name(extinf)
+    cleaned = name.strip()
+    if not cleaned:
+        return ""
+
+    if re.search(r'\b(?:tvg-name|tvg-id|tvg-logo|group-title)=', cleaned, flags=re.IGNORECASE):
+        return (attrs or parse_attrs(extinf)).get("tvg-name", "").strip()
+
+    return cleaned
 
 
 def short_hash(value: str, length: int = 16) -> str:
@@ -97,7 +125,7 @@ def parse_m3u_file(path: Path) -> Iterator[M3UEntry]:
                 tvg_name = attrs.get("tvg-name", "")
                 tvg_id = attrs.get("tvg-id", "")
                 logo_url = attrs.get("tvg-logo", "")
-                name = display_name_from_extinf(pending_extinf) or tvg_name or "Unnamed"
+                name = display_name_from_extinf(pending_extinf, attrs) or tvg_name or "Unnamed"
 
                 yield M3UEntry(
                     group_name=group_name,
@@ -353,9 +381,9 @@ def extinf_with_logo(extinf: str, logo_url: str | None) -> str:
     if re.search(r'tvg-logo="[^"]*"', extinf):
         return re.sub(r'tvg-logo="[^"]*"', f'tvg-logo="{logo}"', extinf, count=1)
 
-    comma_index = extinf.find(",")
-    if comma_index >= 0:
-        return f'{extinf[:comma_index]} tvg-logo="{logo}"{extinf[comma_index:]}'
+    metadata, name = split_extinf_name(extinf)
+    if name:
+        return f'{metadata} tvg-logo="{logo}",{name}'
 
     return f'{extinf} tvg-logo="{logo}"'
 

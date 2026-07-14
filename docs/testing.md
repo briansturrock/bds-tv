@@ -13,6 +13,12 @@ curl http://127.0.0.1:8088/api/status
 docker compose up --build
 ```
 
+## Parser checks
+
+```bash
+python scripts/test_m3u_parser.py
+```
+
 ## Image save/load
 
 ```bash
