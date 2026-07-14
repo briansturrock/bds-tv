@@ -1,17 +1,27 @@
 from __future__ import annotations
 
 import html
+import subprocess
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import unquote, urljoin
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import PlainTextResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from .db import get_setting, set_setting
-from .hdhr import get_hdhr_settings, selected_catalogue_channels, selected_catalogue_groups, stream_selected_channel
+from .hdhr import (
+    ffmpeg_stream_iterator,
+    get_hdhr_settings,
+    reserve_stream_session,
+    selected_catalogue_channels,
+    selected_catalogue_groups,
+    selected_channel_row,
+    stop_stream_session,
+    stream_selected_channel,
+)
 
 
 router = APIRouter(tags=["dlna"])
@@ -26,6 +36,7 @@ class DlnaSettingsIn(BaseModel):
     enabled: bool = True
     device_name: str = "iptv-epg DLNA"
     public_base_url: str = ""
+    stream_mode: str = "copy"
 
 
 @dataclass
@@ -33,6 +44,7 @@ class DlnaSettings:
     enabled: bool
     device_name: str
     public_base_url: str
+    stream_mode: str
 
 
 def bool_setting(key: str, default: bool) -> bool:
@@ -48,18 +60,26 @@ def normalise_base_url(value: str | None) -> str:
 
 def get_dlna_settings() -> DlnaSettings:
     hdhr_settings = get_hdhr_settings()
+    stream_mode = (get_setting("dlna_stream_mode", "copy") or "copy").strip().lower()
+    if stream_mode not in {"copy", "transcode"}:
+        stream_mode = "copy"
     return DlnaSettings(
         enabled=bool_setting("dlna_enabled", True),
         device_name=(get_setting("dlna_device_name", "iptv-epg DLNA") or "iptv-epg DLNA").strip() or "iptv-epg DLNA",
         public_base_url=normalise_base_url(get_setting("dlna_public_base_url") or hdhr_settings.public_base_url),
+        stream_mode=stream_mode,
     )
 
 
 def save_dlna_settings(payload: DlnaSettingsIn) -> DlnaSettings:
+    stream_mode = payload.stream_mode.strip().lower()
+    if stream_mode not in {"copy", "transcode"}:
+        stream_mode = "copy"
     values = {
         "dlna_enabled": "true" if payload.enabled else "false",
         "dlna_device_name": payload.device_name.strip() or "iptv-epg DLNA",
         "dlna_public_base_url": normalise_base_url(payload.public_base_url),
+        "dlna_stream_mode": stream_mode,
     }
     for key, value in values.items():
         set_setting(key, value)
@@ -394,13 +414,88 @@ def dlna_event() -> PlainTextResponse:
 
 @router.get("/dlna/channel/{channel_id}", response_model=None)
 def dlna_stream_channel(channel_id: str) -> StreamingResponse:
-    response = stream_selected_channel(channel_id, get_hdhr_settings())
+    clean_channel_id = channel_id[:-4] if channel_id.endswith(".mpg") else channel_id
+    settings = get_dlna_settings()
+    if settings.stream_mode == "transcode":
+        response = dlna_transcoded_stream(clean_channel_id)
+    else:
+        response = stream_selected_channel(clean_channel_id, get_hdhr_settings())
     response.media_type = DLNA_STREAM_MEDIA_TYPE
     response.headers["Content-Type"] = DLNA_STREAM_MEDIA_TYPE
-    response.headers["Content-Disposition"] = f'inline; filename="{channel_id}.mpg"'
+    response.headers["Content-Disposition"] = f'inline; filename="{clean_channel_id}.mpg"'
     return response
 
 
 @router.get("/dlna/channel/{channel_id}.mpg", response_model=None)
 def dlna_stream_channel_mpg(channel_id: str) -> StreamingResponse:
     return dlna_stream_channel(channel_id)
+
+
+def dlna_transcode_command(stream_url: str, ffmpeg_path: str) -> list[str]:
+    return [
+        ffmpeg_path,
+        "-hide_banner",
+        "-loglevel",
+        "warning",
+        "-user_agent",
+        "VLC/3.0.0 LibVLC/3.0.0",
+        "-reconnect",
+        "1",
+        "-reconnect_streamed",
+        "1",
+        "-reconnect_delay_max",
+        "5",
+        "-i",
+        stream_url,
+        "-map",
+        "0:v:0?",
+        "-map",
+        "0:a:0?",
+        "-sn",
+        "-dn",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-tune",
+        "zerolatency",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-ac",
+        "2",
+        "-ar",
+        "48000",
+        "-f",
+        "mpegts",
+        "pipe:1",
+    ]
+
+
+def dlna_transcoded_stream(channel_id: str) -> StreamingResponse:
+    hdhr_settings = get_hdhr_settings()
+    channel = selected_channel_row(channel_id)
+    session = reserve_stream_session(channel, hdhr_settings)
+    session.mode = "dlna_transcode"
+
+    try:
+        session.process = subprocess.Popen(
+            dlna_transcode_command(channel["stream_url"], hdhr_settings.ffmpeg_path),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError as exc:
+        stop_stream_session(session.session_id)
+        raise HTTPException(status_code=500, detail=f"Could not start ffmpeg: {exc}") from exc
+
+    return StreamingResponse(
+        ffmpeg_stream_iterator(session),
+        media_type=DLNA_STREAM_MEDIA_TYPE,
+        headers={
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+        },
+    )

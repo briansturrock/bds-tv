@@ -200,6 +200,7 @@ function setDlnaForm(settings) {
   $("dlna-enabled").checked = settings.enabled !== false;
   $("dlna-device-name").value = settings.device_name || "iptv-epg DLNA";
   $("dlna-public-base-url").value = settings.public_base_url || "";
+  $("dlna-stream-mode").value = settings.stream_mode || "copy";
 }
 
 function dlnaPayloadFromForm() {
@@ -207,6 +208,7 @@ function dlnaPayloadFromForm() {
     enabled: $("dlna-enabled").checked,
     device_name: $("dlna-device-name").value.trim() || "iptv-epg DLNA",
     public_base_url: $("dlna-public-base-url").value.trim(),
+    stream_mode: $("dlna-stream-mode").value,
   };
 }
 

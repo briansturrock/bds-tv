@@ -91,7 +91,7 @@ DIAGNOSTIC_ENDPOINTS: list[dict[str, Any]] = [
     endpoint(category="HDHR", name="HDHR auto stream", method="GET", path="/auto/v{guide_number}", sample_path="/auto/v1", description="HDHomeRun channel stream URL by lineup number.", expected_statuses=[200, 403, 404, 409, 502]),
 
     endpoint(category="DLNA", name="DLNA settings", method="GET", path="/api/dlna/settings", description="Returns DLNA media server settings and dynamic catalogue counts.", safe_auto_run=True),
-    endpoint(category="DLNA", name="Save DLNA settings", method="POST", path="/api/dlna/settings", description="Saves DLNA media server settings.", sample_body={"enabled": True, "device_name": "iptv-epg DLNA", "public_base_url": "http://192.168.0.185:8088"}),
+    endpoint(category="DLNA", name="Save DLNA settings", method="POST", path="/api/dlna/settings", description="Saves DLNA media server settings.", sample_body={"enabled": True, "device_name": "iptv-epg DLNA", "public_base_url": "http://192.168.0.185:8088", "stream_mode": "copy"}),
     endpoint(category="DLNA", name="DLNA device description", method="GET", path="/dlna/device.xml", description="Returns the UPnP/DLNA MediaServer device description.", safe_auto_run=True),
     endpoint(category="DLNA", name="DLNA ContentDirectory SCPD", method="GET", path="/dlna/content-directory.xml", description="Returns the ContentDirectory service description.", safe_auto_run=True),
     endpoint(category="DLNA", name="DLNA ConnectionManager SCPD", method="GET", path="/dlna/connection-manager.xml", description="Returns the ConnectionManager service description.", safe_auto_run=True),

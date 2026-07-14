@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <title>iptv_epg</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="/static/app.css?v=0.11.2" />
+  <link rel="stylesheet" href="/static/app.css?v=0.11.3" />
 </head>
 <body>
   <header class="app-header">
@@ -341,6 +341,13 @@
             Public base URL
             <input id="dlna-public-base-url" type="url" placeholder="http://192.168.0.185:8088" />
           </label>
+          <label>
+            Stream mode
+            <select id="dlna-stream-mode">
+              <option value="copy">MPEG-TS copy</option>
+              <option value="transcode">TV compatible H.264/AAC</option>
+            </select>
+          </label>
         </div>
         <div class="button-row">
           <button id="dlna-save">Save DLNA settings</button>
@@ -400,6 +407,6 @@
 
   </main>
 
-  <script src="/static/app.js?v=0.11.2"></script>
+  <script src="/static/app.js?v=0.11.3"></script>
 </body>
 </html>

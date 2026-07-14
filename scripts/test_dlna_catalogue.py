@@ -75,6 +75,10 @@ def main() -> None:
         paged, returned, total = dlna.browse_result("group:1", "http://example", starting_index=1, requested_count=1)
         check(returned == 1 and total == 2, "DLNA browse paging should report returned and total counts")
         check("BBC Two" in paged and "BBC One" not in paged, "DLNA browse paging should return the requested slice")
+
+        command = dlna.dlna_transcode_command("http://upstream", "ffmpeg")
+        check("libx264" in command and "aac" in command, "DLNA transcode command should target TV-compatible codecs")
+        check(command[-2:] == ["mpegts", "pipe:1"], "DLNA transcode command should stream MPEG-TS to stdout")
     finally:
         dlna.selected_catalogue_channels = original
 
