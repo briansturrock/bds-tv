@@ -66,7 +66,8 @@ def main() -> None:
         uk, returned, total = dlna.browse_result("group%3A1", "http://example")
         check(returned == 2 and total == 2, "DLNA group should expose its channels")
         check("BBC One" in uk and "BBC Two" in uk, "DLNA group should include channel titles")
-        check("http://example/dlna/channel/bbc1" in uk, "DLNA channel URL should use the local stream endpoint")
+        check("http://example/dlna/channel/bbc1.mpg" in uk, "DLNA channel URL should look like a TV-playable MPEG file")
+        check("video/vnd.dlna.mpeg-tts" in uk, "DLNA channel should advertise MPEG-TS video protocol info")
 
         legacy, returned, total = dlna.browse_result("group:uk", "http://example")
         check(returned == 2 and total == 2 and "BBC One" in legacy, "legacy raw group IDs should still browse")

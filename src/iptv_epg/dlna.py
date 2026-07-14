@@ -18,6 +18,8 @@ router = APIRouter(tags=["dlna"])
 
 CONTENT_DIRECTORY_SERVICE = "urn:schemas-upnp-org:service:ContentDirectory:1"
 CONNECTION_MANAGER_SERVICE = "urn:schemas-upnp-org:service:ConnectionManager:1"
+DLNA_VIDEO_PROTOCOL = "http-get:*:video/vnd.dlna.mpeg-tts:DLNA.ORG_PN=MPEG_TS_SD_NA;DLNA.ORG_OP=01;DLNA.ORG_CI=0"
+DLNA_STREAM_MEDIA_TYPE = "video/vnd.dlna.mpeg-tts"
 
 
 class DlnaSettingsIn(BaseModel):
@@ -184,7 +186,7 @@ def didl_container(container_id: str, parent_id: str, title: str, child_count: i
 
 
 def didl_channel(channel: dict[str, Any], parent_id: str, base_url: str) -> str:
-    url = urljoin(f"{base_url}/", f"dlna/channel/{channel['channel_id']}")
+    url = urljoin(f"{base_url}/", f"dlna/channel/{channel['channel_id']}.mpg")
     logo = channel.get("logo_url") or ""
     icon = f'<upnp:albumArtURI>{html.escape(logo)}</upnp:albumArtURI>' if logo else ""
     return (
@@ -192,7 +194,7 @@ def didl_channel(channel: dict[str, Any], parent_id: str, base_url: str) -> str:
         f"<dc:title>{html.escape(channel['name'])}</dc:title>"
         "<upnp:class>object.item.videoItem</upnp:class>"
         f"{icon}"
-        f'<res protocolInfo="http-get:*:video/mpeg:DLNA.ORG_OP=01;DLNA.ORG_CI=0">{html.escape(url)}</res>'
+        f'<res protocolInfo="{DLNA_VIDEO_PROTOCOL}">{html.escape(url)}</res>'
         "</item>"
     )
 
@@ -380,7 +382,7 @@ async def content_directory_control(request: Request) -> Response:
 
 @router.post("/dlna/control/connection-manager")
 async def connection_manager_control(request: Request) -> Response:
-    payload = "<Source>http-get:*:video/mpeg:DLNA.ORG_OP=01;DLNA.ORG_CI=0</Source><Sink></Sink>"
+    payload = f"<Source>{DLNA_VIDEO_PROTOCOL}</Source><Sink></Sink>"
     return Response(soap_response("GetProtocolInfo", CONNECTION_MANAGER_SERVICE, payload), media_type="text/xml; charset=utf-8")
 
 
@@ -392,4 +394,13 @@ def dlna_event() -> PlainTextResponse:
 
 @router.get("/dlna/channel/{channel_id}", response_model=None)
 def dlna_stream_channel(channel_id: str) -> StreamingResponse:
-    return stream_selected_channel(channel_id, get_hdhr_settings())
+    response = stream_selected_channel(channel_id, get_hdhr_settings())
+    response.media_type = DLNA_STREAM_MEDIA_TYPE
+    response.headers["Content-Type"] = DLNA_STREAM_MEDIA_TYPE
+    response.headers["Content-Disposition"] = f'inline; filename="{channel_id}.mpg"'
+    return response
+
+
+@router.get("/dlna/channel/{channel_id}.mpg", response_model=None)
+def dlna_stream_channel_mpg(channel_id: str) -> StreamingResponse:
+    return dlna_stream_channel(channel_id)
