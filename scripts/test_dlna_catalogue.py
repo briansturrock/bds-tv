@@ -17,6 +17,7 @@ class _DummyRouter:
         return decorator
 
     post = get
+    head = get
 
 
 fastapi = types.ModuleType("fastapi")
@@ -79,6 +80,8 @@ def main() -> None:
         command = dlna.dlna_transcode_command("http://upstream", "ffmpeg")
         check("libx264" in command and "aac" in command, "DLNA transcode command should target TV-compatible codecs")
         check(command[-2:] == ["mpegts", "pipe:1"], "DLNA transcode command should stream MPEG-TS to stdout")
+        check(dlna.DLNA_STREAM_HEADERS["Accept-Ranges"] == "none", "DLNA streams should advertise non-seekable live output")
+        check(dlna.DLNA_STREAM_HEADERS["Connection"] == "close", "DLNA streams should use TV-friendly connection headers")
     finally:
         dlna.selected_catalogue_channels = original
 

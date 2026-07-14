@@ -30,6 +30,12 @@ CONTENT_DIRECTORY_SERVICE = "urn:schemas-upnp-org:service:ContentDirectory:1"
 CONNECTION_MANAGER_SERVICE = "urn:schemas-upnp-org:service:ConnectionManager:1"
 DLNA_VIDEO_PROTOCOL = "http-get:*:video/vnd.dlna.mpeg-tts:DLNA.ORG_PN=MPEG_TS_SD_NA;DLNA.ORG_OP=01;DLNA.ORG_CI=0"
 DLNA_STREAM_MEDIA_TYPE = "video/vnd.dlna.mpeg-tts"
+DLNA_STREAM_HEADERS = {
+    "Accept-Ranges": "none",
+    "Cache-Control": "no-store",
+    "Connection": "close",
+    "X-Accel-Buffering": "no",
+}
 
 
 class DlnaSettingsIn(BaseModel):
@@ -423,12 +429,27 @@ def dlna_stream_channel(channel_id: str) -> StreamingResponse:
     response.media_type = DLNA_STREAM_MEDIA_TYPE
     response.headers["Content-Type"] = DLNA_STREAM_MEDIA_TYPE
     response.headers["Content-Disposition"] = f'inline; filename="{clean_channel_id}.mpg"'
+    for key, value in DLNA_STREAM_HEADERS.items():
+        response.headers[key] = value
     return response
 
 
 @router.get("/dlna/channel/{channel_id}.mpg", response_model=None)
 def dlna_stream_channel_mpg(channel_id: str) -> StreamingResponse:
     return dlna_stream_channel(channel_id)
+
+
+@router.head("/dlna/channel/{channel_id}", response_model=None)
+@router.head("/dlna/channel/{channel_id}.mpg", response_model=None)
+def dlna_stream_head(channel_id: str) -> Response:
+    clean_channel_id = channel_id[:-4] if channel_id.endswith(".mpg") else channel_id
+    selected_channel_row(clean_channel_id)
+    headers = {
+        **DLNA_STREAM_HEADERS,
+        "Content-Type": DLNA_STREAM_MEDIA_TYPE,
+        "Content-Disposition": f'inline; filename="{clean_channel_id}.mpg"',
+    }
+    return Response(status_code=200, headers=headers, media_type=DLNA_STREAM_MEDIA_TYPE)
 
 
 def dlna_transcode_command(stream_url: str, ffmpeg_path: str) -> list[str]:
@@ -494,8 +515,5 @@ def dlna_transcoded_stream(channel_id: str) -> StreamingResponse:
     return StreamingResponse(
         ffmpeg_stream_iterator(session),
         media_type=DLNA_STREAM_MEDIA_TYPE,
-        headers={
-            "Cache-Control": "no-store",
-            "X-Accel-Buffering": "no",
-        },
+        headers=DLNA_STREAM_HEADERS,
     )

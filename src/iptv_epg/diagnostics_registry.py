@@ -97,6 +97,7 @@ DIAGNOSTIC_ENDPOINTS: list[dict[str, Any]] = [
     endpoint(category="DLNA", name="DLNA ConnectionManager SCPD", method="GET", path="/dlna/connection-manager.xml", description="Returns the ConnectionManager service description.", safe_auto_run=True),
     endpoint(category="DLNA", name="DLNA channel stream", method="GET", path="/dlna/channel/{channel_id}", sample_path="/dlna/channel/PASTE_CHANNEL_ID_HERE", description="Streams one selected channel through the shared proxy for DLNA clients.", expected_statuses=[200, 404, 409, 502]),
     endpoint(category="DLNA", name="DLNA channel MPG stream", method="GET", path="/dlna/channel/{channel_id}.mpg", sample_path="/dlna/channel/PASTE_CHANNEL_ID_HERE.mpg", description="Streams one selected channel through a TV-friendly MPEG file URL.", expected_statuses=[200, 404, 409, 502]),
+    endpoint(category="DLNA", name="DLNA channel stream HEAD", method="HEAD", path="/dlna/channel/{channel_id}.mpg", sample_path="/dlna/channel/PASTE_CHANNEL_ID_HERE.mpg", description="Lets strict DLNA clients validate stream headers without opening the upstream provider stream.", expected_statuses=[200, 404]),
 
     endpoint(category="Scheduler", name="Scheduler settings", method="GET", path="/api/scheduler", description="Returns scheduler settings and last scheduled EPG job.", safe_auto_run=True),
     endpoint(category="Scheduler", name="Save scheduler settings", method="POST", path="/api/scheduler", description="Saves the scheduled EPG generation settings.", sample_body={"enabled": True, "days": 5, "run_time": "04:00"}),
