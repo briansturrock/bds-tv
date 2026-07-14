@@ -86,6 +86,7 @@ DIAGNOSTIC_ENDPOINTS: list[dict[str, Any]] = [
     endpoint(category="HDHR", name="HDHR lineup.json", method="GET", path="/lineup.json", description="Returns selected channels as an HDHomeRun lineup.", safe_auto_run=True),
     endpoint(category="HDHR", name="HDHR lineup status", method="GET", path="/lineup_status.json", description="Returns HDHomeRun lineup scan status.", safe_auto_run=True),
     endpoint(category="HDHR", name="HDHR proxy M3U", method="GET", path="/hdhr.m3u", description="Returns the optional generated proxy M3U."),
+    endpoint(category="HDHR", name="HDHR XMLTV", method="GET", path="/hdhr_epg.xml", description="Returns XMLTV with channel IDs rewritten to HDHR lineup numbers."),
     endpoint(category="HDHR", name="HDHR channel stream", method="GET", path="/hdhr/channel/{channel_id}", sample_path="/hdhr/channel/PASTE_CHANNEL_ID_HERE", description="Streams one selected channel through the HDHR proxy.", expected_statuses=[200, 403, 404, 409, 502]),
     endpoint(category="HDHR", name="HDHR auto stream", method="GET", path="/auto/v{guide_number}", sample_path="/auto/v1", description="HDHomeRun channel stream URL by lineup number.", expected_statuses=[200, 403, 404, 409, 502]),
 

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <title>iptv_epg</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="/static/app.css?v=0.10.1" />
+  <link rel="stylesheet" href="/static/app.css?v=0.10.2" />
 </head>
 <body>
   <header class="app-header">
@@ -267,6 +267,7 @@
             <a class="button" id="hdhr-lineup-status-link" href="/lineup_status.json" target="_blank" rel="noopener">lineup_status.json</a>
             <a class="button" id="hdhr-catalogue-link" href="/api/hdhr/catalogue" target="_blank" rel="noopener">Catalogue</a>
             <a class="button" id="hdhr-m3u-link" href="/hdhr.m3u" target="_blank" rel="noopener">Download proxy M3U</a>
+            <a class="button" id="hdhr-epg-link" href="/hdhr_epg.xml" target="_blank" rel="noopener">HDHR XMLTV</a>
           </div>
           <p class="muted">Automatic tuner discovery uses SSDP on the network. Docker host networking may be needed for Plex to discover this without manual entry.</p>
         </div>
@@ -314,6 +315,6 @@
 
   </main>
 
-  <script src="/static/app.js?v=0.10.1"></script>
+  <script src="/static/app.js?v=0.10.2"></script>
 </body>
 </html>

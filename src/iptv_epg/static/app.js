@@ -102,6 +102,7 @@ function updateHdhrLinks(settings) {
   $("hdhr-lineup-status-link").href = `${base}/lineup_status.json`;
   $("hdhr-catalogue-link").href = `${base}/api/hdhr/catalogue`;
   $("hdhr-m3u-link").href = `${base}/hdhr.m3u`;
+  $("hdhr-epg-link").href = `${base}/hdhr_epg.xml`;
 }
 
 async function loadHdhr() {

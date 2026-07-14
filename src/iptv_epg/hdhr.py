@@ -11,6 +11,7 @@ from typing import Any, Iterator
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
+from xml.etree import ElementTree as ET
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
@@ -18,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from .db import connect, get_selected_channels, get_setting, set_setting
 from .m3u import extinf_with_logo
-from .settings import DATA_DIR
+from .settings import DATA_DIR, FILTERED_EPG
 
 
 router = APIRouter(tags=["hdhr"])
@@ -460,6 +461,7 @@ def hdhr_discovery_payload(base_url: str, settings: HdhrSettings) -> dict[str, A
         "DeviceAuth": "iptv-epg",
         "BaseURL": base_url,
         "LineupURL": urljoin(f"{base_url}/", "lineup.json"),
+        "GuideURL": urljoin(f"{base_url}/", "hdhr_epg.xml"),
         "TunerCount": settings.tuner_count,
     }
 
@@ -508,6 +510,66 @@ def generate_hdhr_m3u(base_url: str) -> dict[str, Any]:
     return {"path": str(HDHR_PROXY_M3U), "selected_count": len(rows)}
 
 
+def serialize_xmltv_element(elem: ET.Element) -> str:
+    return ET.tostring(elem, encoding="unicode", short_empty_elements=True)
+
+
+def hdhr_xmltv_stream() -> Iterator[str]:
+    channels = selected_catalogue_channels()
+    by_tvg_id: dict[str, list[dict[str, Any]]] = {}
+    for channel in channels:
+        tvg_id = (channel.get("tvg_id") or "").strip()
+        if not tvg_id:
+            continue
+        by_tvg_id.setdefault(tvg_id, []).append(channel)
+
+    yield '<?xml version="1.0" encoding="UTF-8"?>\n'
+    yield '<tv generator-info-name="iptv_epg HDHR filtered">\n'
+
+    for channel in channels:
+        channel_elem = ET.Element("channel", {"id": str(channel["number"])})
+        display_number = ET.SubElement(channel_elem, "display-name")
+        display_number.text = str(channel["number"])
+        display_name = ET.SubElement(channel_elem, "display-name")
+        display_name.text = channel["name"]
+        if channel.get("tvg_id"):
+            display_tvg = ET.SubElement(channel_elem, "display-name")
+            display_tvg.text = channel["tvg_id"]
+        if channel.get("logo_url"):
+            ET.SubElement(channel_elem, "icon", {"src": channel["logo_url"]})
+        yield serialize_xmltv_element(channel_elem)
+        yield "\n"
+
+    if not FILTERED_EPG.exists() or not by_tvg_id:
+        yield "</tv>\n"
+        return
+
+    try:
+        context = ET.iterparse(FILTERED_EPG, events=("end",))
+        for _event, elem in context:
+            if elem.tag != "programme":
+                continue
+
+            source_channel = elem.attrib.get("channel") or ""
+            target_channels = by_tvg_id.get(source_channel, [])
+            if not target_channels:
+                elem.clear()
+                continue
+
+            original_channel = elem.attrib.get("channel")
+            for target in target_channels:
+                elem.attrib["channel"] = str(target["number"])
+                yield serialize_xmltv_element(elem)
+                yield "\n"
+            if original_channel is not None:
+                elem.attrib["channel"] = original_channel
+            elem.clear()
+    except ET.ParseError:
+        pass
+
+    yield "</tv>\n"
+
+
 @router.get("/api/hdhr/settings")
 def api_hdhr_settings(request: Request) -> dict:
     settings = get_hdhr_settings()
@@ -549,6 +611,15 @@ def hdhr_m3u(request: Request) -> PlainTextResponse | FileResponse:
     if not HDHR_PROXY_M3U.exists():
         return PlainTextResponse("#EXTM3U\n", media_type="application/vnd.apple.mpegurl")
     return FileResponse(HDHR_PROXY_M3U, media_type="application/vnd.apple.mpegurl", filename="hdhr.m3u")
+
+
+@router.get("/hdhr_epg.xml", response_model=None)
+def hdhr_epg() -> StreamingResponse:
+    return StreamingResponse(
+        hdhr_xmltv_stream(),
+        media_type="application/xml",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.get("/discover.json")
