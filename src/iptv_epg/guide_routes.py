@@ -108,7 +108,7 @@ def selected_tvg_ids() -> set[str]:
     with connect() as conn:
         rows = conn.execute(
             """
-            SELECT channels.tvg_id
+            SELECT channels.id AS channel_id, channels.tvg_id
             FROM channels
             JOIN groups ON groups.id = channels.group_id
             WHERE groups.missing = 0
@@ -119,7 +119,7 @@ def selected_tvg_ids() -> set[str]:
             """
         ).fetchall()
 
-    return {row["tvg_id"] for row in rows}
+    return {(row["tvg_id"] or row["channel_id"]) for row in rows}
 
 
 def guide_date_label(date_value: str) -> str:
@@ -359,12 +359,12 @@ def api_guide(
 
     window_end = window_start + timedelta(hours=max(1, min(float(hours), 24)))
 
-    tvg_ids = {channel["tvg_id"] for channel in channels if channel.get("tvg_id")}
+    tvg_ids = {(channel.get("tvg_id") or channel["channel_id"]) for channel in channels}
     programmes_by_channel = programmes_for_tvg_ids(tvg_ids, window_start, window_end)
 
     programme_count = 0
     for channel in channels:
-        programmes = programmes_by_channel.get(channel.get("tvg_id") or "", [])
+        programmes = programmes_by_channel.get(channel.get("tvg_id") or channel["channel_id"], [])
         channel["programmes"] = programmes
         programme_count += len(programmes)
 

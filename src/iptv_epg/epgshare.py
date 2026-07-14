@@ -1153,8 +1153,59 @@ def rewrite_channel_element(mapping: dict[str, Any]) -> ET.Element:
     return channel
 
 
+def selected_channel_xmltv_id(channel: dict[str, Any]) -> str:
+    return (channel.get("tvg_id") or channel.get("channel_id") or "").strip()
+
+
+def selected_channel_element(channel: dict[str, Any]) -> ET.Element:
+    target_id = selected_channel_xmltv_id(channel)
+    elem = ET.Element("channel", {"id": target_id})
+
+    display = ET.SubElement(elem, "display-name")
+    display.text = channel.get("tvg_name") or channel.get("name") or target_id
+
+    if channel.get("name") and channel.get("name") != display.text:
+        alt = ET.SubElement(elem, "display-name")
+        alt.text = channel["name"]
+
+    logo_url = channel.get("effective_logo_url") or channel.get("logo_url")
+    if logo_url:
+        ET.SubElement(elem, "icon", {"src": logo_url})
+
+    return elem
+
+
 def serialize_element(elem: ET.Element) -> str:
     return ET.tostring(elem, encoding="unicode", short_empty_elements=True)
+
+
+def xmltv_time(value: datetime) -> str:
+    return value.astimezone(timezone.utc).strftime("%Y%m%d%H%M%S +0000")
+
+
+def unknown_programmes_for_xmltv_id(channel_id: str, window_start: datetime, window_end: datetime) -> list[ET.Element]:
+    programmes: list[ET.Element] = []
+    current = window_start.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    end = window_end.astimezone(timezone.utc)
+
+    while current < end:
+        next_time = min(current + timedelta(hours=6), end)
+        programme = ET.Element(
+            "programme",
+            {
+                "channel": channel_id,
+                "start": xmltv_time(current),
+                "stop": xmltv_time(next_time),
+            },
+        )
+        title = ET.SubElement(programme, "title")
+        title.text = "Unknown"
+        desc = ET.SubElement(programme, "desc")
+        desc.text = "No programme data is available for this channel."
+        programmes.append(programme)
+        current = next_time
+
+    return programmes
 
 
 def generate_filtered_epgshare(job_id: str | None = None, days: int = 3) -> dict[str, Any]:
@@ -1162,6 +1213,7 @@ def generate_filtered_epgshare(job_id: str | None = None, days: int = 3) -> dict
 
     days = max(1, min(int(days), 14))
     mappings = epgshare_active_mappings()
+    selected_channels = selected_channels_for_epgshare()
 
     if not mappings:
         raise RuntimeError("No saved EPGShare mappings found. Review and save mappings before generating EPG.")
@@ -1193,6 +1245,7 @@ def generate_filtered_epgshare(job_id: str | None = None, days: int = 3) -> dict
     channel_count = 0
     downloaded_sources = []
     missing_channel_ids: list[dict[str, Any]] = []
+    channels_with_programmes: set[str] = set()
 
     if job_id:
         update_job(
@@ -1208,11 +1261,11 @@ def generate_filtered_epgshare(job_id: str | None = None, days: int = 3) -> dict
 
         # Emit channel definitions that match the IPTV M3U tvg-id values.
         emitted_channel_ids: set[str] = set()
-        for mapping in mappings:
-            target_id = mapping.get("tvg_id") or mapping.get("xmltv_id")
+        for channel in selected_channels:
+            target_id = selected_channel_xmltv_id(channel)
             if not target_id or target_id in emitted_channel_ids:
                 continue
-            out.write(serialize_element(rewrite_channel_element(mapping)))
+            out.write(serialize_element(selected_channel_element(channel)))
             out.write("\n")
             emitted_channel_ids.add(target_id)
             channel_count += 1
@@ -1275,6 +1328,7 @@ def generate_filtered_epgshare(job_id: str | None = None, days: int = 3) -> dict
                         elem.attrib["channel"] = target_by_xmltv_id[source_channel_id]
                         out.write(serialize_element(elem))
                         out.write("\n")
+                        channels_with_programmes.add(elem.attrib["channel"])
                         programme_count += 1
                         elem.clear()
 
@@ -1293,6 +1347,12 @@ def generate_filtered_epgshare(job_id: str | None = None, days: int = 3) -> dict
                     progress_current=index,
                     progress_total=source_total,
                 )
+
+        for channel_id in sorted(emitted_channel_ids - channels_with_programmes):
+            for elem in unknown_programmes_for_xmltv_id(channel_id, window_start, window_end):
+                out.write(serialize_element(elem))
+                out.write("\n")
+                programme_count += 1
 
         out.write("</tv>\n")
 
