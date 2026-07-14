@@ -35,6 +35,26 @@ def main() -> None:
         "polluted name did not fall back to a stable attribute",
     )
 
+    provider_samples = [
+        (
+            '#EXTINF:-1 tvg-id="ca.CTV (CFTO) Toronto, ON HD" tvg-name="CA| CTV HD" '
+            'tvg-logo="http://example/ctv.png" group-title="CA| ENGLISH",CA| CTV HD',
+            "CA| CTV HD",
+        ),
+        (
+            '#EXTINF:-1 tvg-id="ca.ABC (WCVB) Boston, MA HD" tvg-name="CA| ABC EAST HD" '
+            'tvg-logo="http://example/abc.png" group-title="CA| ENGLISH",CA| ABC EAST HD',
+            "CA| ABC EAST HD",
+        ),
+        (
+            '#EXTINF:-1 tvg-id="ca.FOX (WFXT) Boston, MA" tvg-name="CA| FOX EAST HD" '
+            'tvg-logo="http://example/fox.png" group-title="CA| ENGLISH",CA| FOX EAST HD',
+            "CA| FOX EAST HD",
+        ),
+    ]
+    for extinf, expected in provider_samples:
+        check(display_name_from_extinf(extinf, parse_attrs(extinf)) == expected, f"{expected} parsed incorrectly")
+
     logo_added = extinf_with_logo(quoted_comma, "http://example/new,logo.png")
     check('tvg-logo="http://example/new,logo.png"' in logo_added, "logo injection missing")
     check(logo_added.endswith(",ABC 13"), "logo injection moved display name")
