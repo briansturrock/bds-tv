@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <title>iptv_epg</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="/static/app.css?v=0.9.6" />
+  <link rel="stylesheet" href="/static/app.css?v=0.10.0" />
 </head>
 <body>
   <header class="app-header">
@@ -17,6 +17,7 @@
       <button class="tab-button" data-tab="channels">Channels</button>
       <button class="tab-button" data-tab="epg">EPG</button>
       <button class="tab-button" data-tab="scheduler">Scheduler</button>
+      <button class="tab-button" data-tab="hdhr">HDHR</button>
       <button class="tab-button" data-tab="guide">Guide</button>
       <a class="tab-link" href="/dev/diagnostics" target="_blank" rel="noopener">Diagnostics</a>
     </nav>
@@ -200,6 +201,83 @@
       </div>
     </section>
 
+    <section id="tab-hdhr" class="tab-panel">
+      <div class="hdhr-shell">
+        <div class="card">
+          <h2>HDHomeRun tuner</h2>
+          <label class="toggle-row">
+            <input id="hdhr-enabled" type="checkbox" />
+            <span>Enable HDHR emulation</span>
+          </label>
+
+          <div class="hdhr-grid">
+            <label>
+              Device name
+              <input id="hdhr-device-name" type="text" />
+            </label>
+            <label>
+              Device ID
+              <input id="hdhr-device-id" type="text" />
+            </label>
+            <label>
+              Public base URL
+              <input id="hdhr-public-base-url" type="url" placeholder="http://192.168.0.185:8088" />
+            </label>
+            <label>
+              ffmpeg path
+              <input id="hdhr-ffmpeg-path" type="text" />
+            </label>
+            <label>
+              Tuners
+              <input id="hdhr-tuner-count" type="number" min="1" max="16" step="1" />
+            </label>
+            <label>
+              Max upstream streams
+              <input id="hdhr-max-upstream-streams" type="number" min="1" max="16" step="1" />
+            </label>
+            <label>
+              Stream mode
+              <select id="hdhr-stream-mode">
+                <option value="direct">Direct proxy</option>
+                <option value="ffmpeg">ffmpeg remux</option>
+              </select>
+            </label>
+            <label>
+              When busy
+              <select id="hdhr-conflict-policy">
+                <option value="reject_new">Reject new stream</option>
+                <option value="stop_existing">Stop existing stream</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="button-row">
+            <button id="hdhr-save">Save HDHR settings</button>
+            <button id="hdhr-generate-m3u">Generate proxy M3U</button>
+            <button id="hdhr-stop-streams">Stop active streams</button>
+          </div>
+          <div id="hdhr-message" class="info-bar">HDHR settings not loaded yet.</div>
+        </div>
+
+        <div class="card">
+          <h2>Endpoints</h2>
+          <div class="hdhr-links">
+            <a class="button" id="hdhr-discover-link" href="/discover.json" target="_blank" rel="noopener">discover.json</a>
+            <a class="button" id="hdhr-lineup-link" href="/lineup.json" target="_blank" rel="noopener">lineup.json</a>
+            <a class="button" id="hdhr-lineup-status-link" href="/lineup_status.json" target="_blank" rel="noopener">lineup_status.json</a>
+            <a class="button" id="hdhr-catalogue-link" href="/api/hdhr/catalogue" target="_blank" rel="noopener">Catalogue</a>
+            <a class="button" id="hdhr-m3u-link" href="/hdhr.m3u" target="_blank" rel="noopener">Download proxy M3U</a>
+          </div>
+          <p class="muted">Automatic tuner discovery uses SSDP on the network. Docker host networking may be needed for Plex to discover this without manual entry.</p>
+        </div>
+
+        <div class="card">
+          <h2>Status</h2>
+          <pre id="hdhr-json" class="json-box">{}</pre>
+        </div>
+      </div>
+    </section>
+
 
     <section id="tab-guide" class="tab-panel">
       <div class="guide-shell">
@@ -236,6 +314,6 @@
 
   </main>
 
-  <script src="/static/app.js?v=0.9.6"></script>
+  <script src="/static/app.js?v=0.10.0"></script>
 </body>
 </html>

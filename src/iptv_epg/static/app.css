@@ -96,12 +96,17 @@ label {
   margin: 8px 0 6px;
 }
 
-textarea, input[type="search"] {
+textarea,
+input[type="search"],
+input[type="text"],
+input[type="url"],
+select {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px;
   font: inherit;
+  background: #fff;
 }
 
 input[type="number"],
@@ -1409,6 +1414,23 @@ body:has(#tab-channels.active) {
 .guide-channel-info:hover,
 .guide-channel-row:hover .guide-channel-info {
   background: #dbe1ea;
+}
+
+.hdhr-shell {
+  max-width: 980px;
+}
+
+.hdhr-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 10px 14px;
+}
+
+.hdhr-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 

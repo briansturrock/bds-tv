@@ -11,6 +11,7 @@ const state = {
   visibleSelectedIds: [],
   activeJobTimer: null,
   schedulerPollTimer: null,
+  hdhrPollTimer: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -62,6 +63,102 @@ async function loadStatus() {
 async function loadSettings() {
   const settings = await api("/api/settings");
   $("m3u-url").value = settings.m3u_url || "";
+}
+
+const hdhrState = {
+  loaded: false,
+};
+
+function setHdhrForm(settings) {
+  $("hdhr-enabled").checked = !!settings.enabled;
+  $("hdhr-device-name").value = settings.device_name || "iptv-epg";
+  $("hdhr-device-id").value = settings.device_id || "";
+  $("hdhr-public-base-url").value = settings.public_base_url || "";
+  $("hdhr-ffmpeg-path").value = settings.ffmpeg_path || "ffmpeg";
+  $("hdhr-tuner-count").value = settings.tuner_count || 1;
+  $("hdhr-max-upstream-streams").value = settings.max_upstream_streams || 1;
+  $("hdhr-stream-mode").value = settings.stream_mode || "direct";
+  $("hdhr-conflict-policy").value = settings.conflict_policy || "reject_new";
+}
+
+function hdhrPayloadFromForm() {
+  return {
+    enabled: $("hdhr-enabled").checked,
+    device_name: $("hdhr-device-name").value.trim() || "iptv-epg",
+    device_id: $("hdhr-device-id").value.trim(),
+    public_base_url: $("hdhr-public-base-url").value.trim(),
+    ffmpeg_path: $("hdhr-ffmpeg-path").value.trim() || "ffmpeg",
+    tuner_count: Number($("hdhr-tuner-count").value || 1),
+    max_upstream_streams: Number($("hdhr-max-upstream-streams").value || 1),
+    stream_mode: $("hdhr-stream-mode").value,
+    conflict_policy: $("hdhr-conflict-policy").value,
+  };
+}
+
+function updateHdhrLinks(settings) {
+  const base = (settings.public_base_url || settings.resolved_base_url || window.location.origin).replace(/\/$/, "");
+  $("hdhr-discover-link").href = `${base}/discover.json`;
+  $("hdhr-lineup-link").href = `${base}/lineup.json`;
+  $("hdhr-lineup-status-link").href = `${base}/lineup_status.json`;
+  $("hdhr-catalogue-link").href = `${base}/api/hdhr/catalogue`;
+  $("hdhr-m3u-link").href = `${base}/hdhr.m3u`;
+}
+
+async function loadHdhr() {
+  const body = await api("/api/hdhr/settings");
+  setHdhrForm(body.settings || {});
+  updateHdhrLinks(body.settings || {});
+  renderJson("hdhr-json", body);
+  hdhrState.loaded = true;
+  setMessage("hdhr-message", body.settings?.enabled ? "HDHR enabled." : "HDHR disabled.");
+  return body;
+}
+
+async function saveHdhr() {
+  setMessage("hdhr-message", "Saving HDHR settings...");
+  const body = await api("/api/hdhr/settings", {
+    method: "POST",
+    body: JSON.stringify(hdhrPayloadFromForm()),
+  });
+  setHdhrForm(body.settings || {});
+  updateHdhrLinks(body.settings || {});
+  renderJson("hdhr-json", body);
+  setMessage("hdhr-message", "HDHR settings saved.");
+  return body;
+}
+
+async function generateHdhrM3u() {
+  setMessage("hdhr-message", "Generating proxy M3U...");
+  const body = await api("/api/hdhr/generate-m3u", { method: "POST" });
+  setMessage("hdhr-message", `Generated proxy M3U with ${body.selected_count || 0} channels.`);
+  await loadHdhr();
+}
+
+async function stopHdhrStreams() {
+  const body = await api("/api/hdhr/streams/stop", { method: "POST" });
+  renderJson("hdhr-json", body);
+  setMessage("hdhr-message", "Stopped active HDHR streams.");
+}
+
+function startHdhrPolling() {
+  if (state.hdhrPollTimer) return;
+  state.hdhrPollTimer = setInterval(async () => {
+    try {
+      const body = await api("/api/hdhr/status");
+      renderJson("hdhr-json", {
+        settings: hdhrPayloadFromForm(),
+        ...body,
+      });
+    } catch (_err) {
+      // Keep the tab quiet if the app is restarting.
+    }
+  }, 5000);
+}
+
+function stopHdhrPolling() {
+  if (!state.hdhrPollTimer) return;
+  clearInterval(state.hdhrPollTimer);
+  state.hdhrPollTimer = null;
 }
 
 async function saveSettings() {
@@ -439,6 +536,12 @@ function switchTab(tab) {
     stopGuideAutoRefresh();
   }
 
+  if (tab === "hdhr") {
+    startHdhrPolling();
+  } else {
+    stopHdhrPolling();
+  }
+
   if (tab === "channels" && !state.groups.length) {
     loadGroups(true).catch((err) => setMessage("channels-info", `Could not load groups: ${err.message}`, true));
   }
@@ -459,7 +562,11 @@ function switchTab(tab) {
     loadScheduler().catch((err) => setMessage("scheduler-message", `Could not load scheduler: ${err.message}`, true));
   }
 
-  if (["settings", "channels", "epg", "scheduler", "guide"].includes(tab)) {
+  if (tab === "hdhr" && !hdhrState.loaded) {
+    loadHdhr().catch((err) => setMessage("hdhr-message", `Could not load HDHR settings: ${err.message}`, true));
+  }
+
+  if (["settings", "channels", "epg", "scheduler", "hdhr", "guide"].includes(tab)) {
     history.replaceState(null, "", `#${tab}`);
   }
 }
@@ -501,6 +608,18 @@ function wireEvents() {
   $("select-shown-checkbox").addEventListener("change", (event) => setShownChannelsSelected(event.target.checked));
   $("next-page").addEventListener("click", nextPage);
   $("prev-page").addEventListener("click", prevPage);
+
+  $("hdhr-save").addEventListener("click", () => {
+    saveHdhr().catch((err) => setMessage("hdhr-message", `Save failed: ${err.message}`, true));
+  });
+
+  $("hdhr-generate-m3u").addEventListener("click", () => {
+    generateHdhrM3u().catch((err) => setMessage("hdhr-message", `Generate failed: ${err.message}`, true));
+  });
+
+  $("hdhr-stop-streams").addEventListener("click", () => {
+    stopHdhrStreams().catch((err) => setMessage("hdhr-message", `Stop failed: ${err.message}`, true));
+  });
 }
 
 async function init() {
@@ -510,7 +629,7 @@ async function init() {
   wireGuideEvents();
 
   const initialTab = window.location.hash.replace("#", "");
-  if (["settings", "channels", "epg", "scheduler", "guide"].includes(initialTab)) {
+  if (["settings", "channels", "epg", "scheduler", "hdhr", "guide"].includes(initialTab)) {
     switchTab(initialTab);
   }
 
