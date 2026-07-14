@@ -290,8 +290,11 @@ function updateSelectShownCheckbox() {
 }
 
 
-async function loadChannels() {
+async function loadChannels(options = {}) {
   if (!state.selectedGroupId) return;
+
+  const preserveScroll = Boolean(options.preserveScroll);
+  const previousScrollTop = preserveScroll ? ($("channels-list")?.scrollTop || 0) : 0;
 
   $("selected-group-title").textContent = state.selectedGroup?.name || "Channels";
   $("selected-group-meta").textContent = "Loading channels…";
@@ -314,7 +317,7 @@ async function loadChannels() {
   try {
     renderChannels(result.channels || []);
     const channelsList = $("channels-list");
-    if (channelsList) channelsList.scrollTop = 0;
+    if (channelsList) channelsList.scrollTop = preserveScroll ? previousScrollTop : 0;
     updateSelectShownCheckbox();
   } catch (err) {
     $("selected-group-meta").textContent = "Could not render channels.";
@@ -367,7 +370,7 @@ function renderChannels(channels) {
         setMessage("channels-info", `Saved: ${channel.name} ${checkbox.checked ? "selected" : "unselected"}.`);
         await loadStatus();
         await loadGroups(false);
-        await loadChannels();
+        await loadChannels({ preserveScroll: true });
       } catch (err) {
         checkbox.checked = !checkbox.checked;
         setMessage("channels-info", `Save failed: ${err.message}`, true);
@@ -407,7 +410,7 @@ async function setShownChannelsSelected(selected) {
 
     await loadStatus();
     await loadGroups(false);
-    await loadChannels();
+    await loadChannels({ preserveScroll: true });
     setMessage("channels-info", selected ? "Saved: shown channels selected." : "Saved: shown channels unselected.");
   } catch (err) {
     setMessage("channels-info", `Selection failed: ${err.message}`, true);
@@ -429,6 +432,12 @@ function prevPage() {
 function switchTab(tab) {
   document.querySelectorAll(".tab-button").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${tab}`));
+
+  if (tab === "guide") {
+    startGuideAutoRefresh();
+  } else {
+    stopGuideAutoRefresh();
+  }
 
   if (tab === "channels" && !state.groups.length) {
     loadGroups(true).catch((err) => setMessage("channels-info", `Could not load groups: ${err.message}`, true));
@@ -1153,6 +1162,7 @@ const guideState = {
   dates: [],
   activeGroupId: null,
   selectedDate: null,
+  autoRefreshTimer: null,
   loaded: false,
 };
 
@@ -1431,14 +1441,27 @@ function currentGuideStart() {
 
 function guideStartForSelectedDate() {
   const selected = selectedGuideDate();
-  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
 
   if (selected === today) {
-    return floorDateToHalfHour(new Date());
+    return floorDateToHalfHour(now);
   }
 
-  const start = new Date(`${selected}T00:00:00`);
-  return Number.isNaN(start.getTime()) ? floorDateToHalfHour(new Date()) : start;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(selected);
+  if (!match) return floorDateToHalfHour(now);
+
+  const start = new Date(Date.UTC(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    now.getUTCHours(),
+    now.getUTCMinutes(),
+    0,
+    0
+  ));
+
+  return floorDateToHalfHour(start);
 }
 
 function guideHoursUntilEndOfDay(startDate) {
@@ -1454,13 +1477,18 @@ function guideHoursUntilEndOfDay(startDate) {
 }
 
 
-async function loadGuideForGroup(groupId, startDate = null) {
+async function loadGuideForGroup(groupId, startDate = null, options = {}) {
   initialiseGuideDate();
 
-  $("guide-status").textContent = "Loading guide…";
-  $("guide-content").classList.add("hidden");
-  $("guide-empty").classList.remove("hidden");
-  $("guide-empty").textContent = "Loading guide…";
+  const quiet = Boolean(options.quiet);
+  const preserveScroll = Boolean(options.preserveScroll);
+
+  if (!quiet) {
+    $("guide-status").textContent = "Loading guide…";
+    $("guide-content").classList.add("hidden");
+    $("guide-empty").classList.remove("hidden");
+    $("guide-empty").textContent = "Loading guide…";
+  }
 
   const windowStart = startDate || guideStartForSelectedDate();
   const guideHours = guideHoursUntilEndOfDay(windowStart);
@@ -1482,7 +1510,7 @@ async function loadGuideForGroup(groupId, startDate = null) {
     return;
   }
 
-  renderGuide(body);
+  renderGuide(body, { preserveScroll });
 }
 
 function formatGuideTime(value) {
@@ -1515,7 +1543,7 @@ function openGuideStream(channelId) {
   window.open(guideStreamUrl(channelId), "_blank", "noopener");
 }
 
-function renderGuide(body) {
+function renderGuide(body, options = {}) {
   const windowStart = new Date(body.window_start);
   const windowEnd = new Date(body.window_end);
   const guideHours = Number(body.hours || GUIDE_HOURS);
@@ -1526,6 +1554,8 @@ function renderGuide(body) {
     `${body.group.name}: ${body.channel_count} selected channels · ${body.programme_count} programmes · ${formatGuideTime(body.window_start)} – ${formatGuideTime(body.window_end)}`;
 
   const content = $("guide-content");
+  const previousScrollLeft = options.preserveScroll ? content.scrollLeft : 0;
+  const previousScrollTop = options.preserveScroll ? content.scrollTop : 0;
   content.classList.remove("hidden");
   $("guide-empty").classList.add("hidden");
 
@@ -1580,7 +1610,8 @@ function renderGuide(body) {
     </div>
   `;
 
-  content.scrollLeft = 0;
+  content.scrollLeft = options.preserveScroll ? previousScrollLeft : 0;
+  content.scrollTop = options.preserveScroll ? previousScrollTop : content.scrollTop;
 
   content.querySelectorAll(".guide-preview-button[data-channel-id]").forEach((button) => {
     button.addEventListener("click", (event) => {
@@ -1652,6 +1683,35 @@ function renderGuideProgramme(programme, windowStart, windowEnd, channel = null)
       </div>
     </div>
   `;
+}
+
+function stopGuideAutoRefresh() {
+  if (guideState.autoRefreshTimer) {
+    clearInterval(guideState.autoRefreshTimer);
+    guideState.autoRefreshTimer = null;
+  }
+}
+
+function startGuideAutoRefresh() {
+  stopGuideAutoRefresh();
+
+  guideState.autoRefreshTimer = setInterval(() => {
+    if (document.visibilityState !== "visible") return;
+    if (!document.getElementById("tab-guide")?.classList.contains("active")) return;
+    if (!guideState.activeGroupId) return;
+
+    const today = new Date().toISOString().slice(0, 10);
+    if (selectedGuideDate() !== today) return;
+
+    guideState.windowStart = null;
+
+    loadGuideForGroup(guideState.activeGroupId, guideStartForSelectedDate(), {
+      quiet: true,
+      preserveScroll: true,
+    }).catch((err) => {
+      $("guide-status").textContent = `Could not auto-refresh guide: ${err.message}`;
+    });
+  }, 60000);
 }
 
 function wireGuideEvents() {

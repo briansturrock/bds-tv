@@ -8,7 +8,7 @@ services:
       - "8088:8080"
     environment:
       - TZ=UTC
-      - IPTV_EPG_VERSION=0.9.3
+      - IPTV_EPG_VERSION=0.9.4
       - CONFIG_DIR=/config
       - DATA_DIR=/data
       - DB_PATH=/db/iptv_epg.db
