@@ -1406,14 +1406,6 @@ body:has(#tab-channels.active) {
   background: #e5e7eb;
 }
 
-.guide-channel-info {
-  cursor: pointer;
-}
-
-.guide-programme {
-  cursor: pointer;
-}
-
 .guide-channel-info:hover,
 .guide-channel-row:hover .guide-channel-info {
   background: #dbe1ea;
@@ -1436,4 +1428,38 @@ body:has(#tab-channels.active) {
   background: #475569;
   border-color: #94a3b8;
   color: #f8fafc;
+}
+
+.guide-preview-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 3px 7px 3px 4px;
+  border-radius: 999px;
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.guide-preview-button:hover {
+  border-color: #fff;
+  background: #fff;
+  color: var(--accent);
+}
+
+.guide-preview-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  background: var(--accent);
+  color: #fff;
+  font-size: 8px;
+  line-height: 1;
+  padding-left: 1px;
 }

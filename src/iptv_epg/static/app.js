@@ -1558,9 +1558,13 @@ function renderGuide(body) {
       : `<div class="guide-programme" style="left:0;width:180px"><strong>No programme data</strong><div class="desc">No matching EPG entries were found.</div></div>`;
 
     return `
-      <div class="guide-channel-row" data-channel-id="${escapeAttr(channel.channel_id)}" title="Click to stream ${escapeAttr(channel.name || "")}">
+      <div class="guide-channel-row" data-channel-id="${escapeAttr(channel.channel_id)}">
         <div class="guide-channel-info" data-channel-id="${escapeAttr(channel.channel_id)}">
           ${logo}
+          <button class="guide-preview-button" type="button" data-channel-id="${escapeAttr(channel.channel_id)}" aria-label="Preview ${escapeAttr(channel.name || "channel")}">
+            <span class="guide-preview-icon" aria-hidden="true">▶</span>
+            <span>Preview</span>
+          </button>
         </div>
         <div class="guide-timeline-row" data-channel-id="${escapeAttr(channel.channel_id)}" style="width:${timelineWidth}px">
           ${showNow ? `<div class="guide-now-line" style="left:${nowLeft}px"></div>` : ""}
@@ -1582,16 +1586,10 @@ function renderGuide(body) {
 
   content.scrollLeft = 0;
 
-  content.querySelectorAll(".guide-channel-row[data-channel-id]").forEach((row) => {
-    row.addEventListener("dblclick", () => {
-      openGuideStream(row.dataset.channelId);
-    });
-  });
-
-  content.querySelectorAll(".guide-channel-info[data-channel-id], .guide-timeline-row[data-channel-id] .guide-programme").forEach((el) => {
-    el.addEventListener("click", (event) => {
-      const row = event.currentTarget.closest(".guide-channel-row");
-      if (row) openGuideStream(row.dataset.channelId);
+  content.querySelectorAll(".guide-preview-button[data-channel-id]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openGuideStream(button.dataset.channelId);
     });
   });
 

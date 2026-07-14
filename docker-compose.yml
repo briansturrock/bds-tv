@@ -2,13 +2,13 @@ services:
   iptv_epg:
     build: .
     image: iptv_epg:dev
-    container_name: iptv_epg
+    container_name: iptv-epg
     restart: unless-stopped
     ports:
       - "8088:8080"
     environment:
       - TZ=UTC
-      - IPTV_EPG_VERSION=0.8-dev
+      - IPTV_EPG_VERSION=0.9.1
       - CONFIG_DIR=/config
       - DATA_DIR=/data
       - DB_PATH=/db/iptv_epg.db

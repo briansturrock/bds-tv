@@ -80,6 +80,15 @@ DIAGNOSTIC_ENDPOINTS: list[dict[str, Any]] = [
     endpoint(category="Guide", name="Guide groups", method="GET", path="/api/guide/groups", description="Lists only groups that contain selected channels.", safe_auto_run=True),
     endpoint(category="Guide", name="Guide for group", method="GET", path="/api/guide", sample_path="/api/guide?group_id=PASTE_GROUP_ID_HERE", description="Returns selected channels and programme data for one selected group.", safe_auto_run=False),
     endpoint(category="Guide", name="Guide dates", method="GET", path="/api/guide/dates", description="Lists available guide dates from the generated filtered EPG for selected channels.", safe_auto_run=True),
+    endpoint(category="Guide Streaming", name="Watch channel preview", method="GET", path="/watch/{channel_id}", sample_path="/watch/PASTE_CHANNEL_ID_HERE", description="Opens the browser preview player for one selected channel.", expected_statuses=[200, 404]),
+    endpoint(category="Guide Streaming", name="HLS playlist", method="GET", path="/hls/{channel_id}/{mode}/index.m3u8", sample_path="/hls/PASTE_CHANNEL_ID_HERE/copy/index.m3u8", description="Starts or returns the local HLS preview playlist.", expected_statuses=[200, 404, 504]),
+    endpoint(category="Guide Streaming", name="HLS segment", method="GET", path="/hls/{channel_id}/{mode}/{segment_name}", sample_path="/hls/PASTE_CHANNEL_ID_HERE/copy/seg_00000.ts", description="Returns one generated HLS preview segment.", expected_statuses=[200, 404]),
+    endpoint(category="Guide Streaming", name="Stop HLS preview", method="POST", path="/api/hls/{channel_id}/{mode}/stop", sample_path="/api/hls/PASTE_CHANNEL_ID_HERE/copy/stop", description="Stops the FFmpeg process for a channel preview.", expected_statuses=[200]),
+    endpoint(category="Guide Streaming", name="Raw stream proxy", method="GET", path="/stream/{channel_id}", sample_path="/stream/PASTE_CHANNEL_ID_HERE", description="Proxies a selected channel stream directly through the app.", expected_statuses=[200, 404, 502]),
+
+    endpoint(category="Scheduler", name="Scheduler settings", method="GET", path="/api/scheduler", description="Returns scheduler settings and last scheduled EPG job.", safe_auto_run=True),
+    endpoint(category="Scheduler", name="Save scheduler settings", method="POST", path="/api/scheduler", description="Saves the scheduled EPG generation settings.", sample_body={"enabled": True, "days": 5, "run_time": "04:00"}),
+    endpoint(category="Scheduler", name="Run scheduler now", method="POST", path="/api/scheduler/run-now", description="Starts scheduled EPG generation immediately.", expected_statuses=[200, 409]),
 
     endpoint(category="Diagnostics", name="Diagnostics console", method="GET", path="/dev/diagnostics", description="Serves this diagnostics console."),
     endpoint(category="Diagnostics", name="Diagnostics endpoint registry", method="GET", path="/dev/diagnostics/endpoints", description="Returns registered diagnostics endpoint definitions.", safe_auto_run=True),

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import os
+import signal
 import shutil
 import subprocess
+import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -48,6 +51,7 @@ app = FastAPI(title="iptv_epg", version=__version__)
 
 HLS_ROOT = Path("/tmp/iptv_epg_hls")
 HLS_PROCESSES: dict[str, subprocess.Popen] = {}
+HLS_LOCK = threading.Lock()
 executor = ThreadPoolExecutor(max_workers=2)
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -116,6 +120,11 @@ def startup() -> None:
     ensure_runtime_dirs()
     init_db()
     start_scheduler_thread()
+
+
+@app.on_event("shutdown")
+def shutdown() -> None:
+    stop_all_hls_processes()
 
 
 @app.get("/", response_model=None)
@@ -324,6 +333,21 @@ def watch_channel(channel_id: str, mode: str = Query("copy")):
       color: #93c5fd;
       white-space: nowrap;
     }}
+    button {{
+      border: 1px solid #475569;
+      background: #253044;
+      color: #f8fafc;
+      border-radius: 6px;
+      padding: 4px 8px;
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+    }}
+    button:hover {{
+      border-color: #93c5fd;
+      color: #93c5fd;
+    }}
     .hint, #status {{
       font-size: 12px;
       color: #cbd5e1;
@@ -353,6 +377,7 @@ def watch_channel(channel_id: str, mode: str = Query("copy")):
       <span>{mode}</span>
       <a href="/watch/{channel_id}?mode={alternate_mode}">{alternate_label}</a>
       <a href="/stream/{channel_id}">Raw stream</a>
+      <button id="stop-preview" type="button">Stop preview</button>
     </div>
   </header>
   <main>
@@ -361,13 +386,41 @@ def watch_channel(channel_id: str, mode: str = Query("copy")):
   </main>
   <script>
     const hlsUrl = "/hls/{channel_id}/{mode}/index.m3u8";
+    const hlsStopUrl = "/api/hls/{channel_id}/{mode}/stop";
     const video = document.getElementById("player");
     const statusEl = document.getElementById("status");
+    const stopButton = document.getElementById("stop-preview");
     let hls = null;
     let sawVideoFrame = false;
+    let releaseStarted = false;
 
     function setStatus(message) {{
       statusEl.textContent = message;
+    }}
+
+    function releasePreview(useBeacon = false) {{
+      if (releaseStarted) return;
+      releaseStarted = true;
+
+      if (hls) {{
+        hls.destroy();
+        hls = null;
+      }}
+
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      setStatus("Preview stopped. Provider stream released.");
+
+      if (useBeacon && navigator.sendBeacon) {{
+        navigator.sendBeacon(hlsStopUrl, new Blob([], {{ type: "text/plain" }}));
+        return;
+      }}
+
+      fetch(hlsStopUrl, {{
+        method: "POST",
+        keepalive: true,
+      }}).catch(() => {{}});
     }}
 
     video.addEventListener("loadedmetadata", () => {{
@@ -398,7 +451,36 @@ def watch_channel(channel_id: str, mode: str = Query("copy")):
       setStatus("Video element error" + (err ? ` (${{err.code}})` : "") + ". Try Compatible mode.");
     }});
 
+    video.addEventListener("pause", () => {{
+      if (!releaseStarted && !video.ended) {{
+        releasePreview();
+      }}
+    }});
+
+    video.addEventListener("ended", () => {{
+      releasePreview();
+    }});
+
+    stopButton.addEventListener("click", () => {{
+      releasePreview();
+    }});
+
+    window.addEventListener("pagehide", () => {{
+      releasePreview(true);
+    }});
+
+    window.addEventListener("beforeunload", () => {{
+      releasePreview(true);
+    }});
+
+    document.addEventListener("visibilitychange", () => {{
+      if (document.visibilityState === "hidden") {{
+        releasePreview(true);
+      }}
+    }});
+
     async function startPlayer() {{
+      releaseStarted = false;
       setStatus("Starting {mode} HLS stream through container…");
 
       if (video.canPlayType("application/vnd.apple.mpegurl")) {{
@@ -468,15 +550,45 @@ def hls_channel_dir(channel_id: str, mode: str = "copy") -> Path:
 
 
 def stop_hls_process(key: str) -> None:
-    proc = HLS_PROCESSES.pop(key, None)
-    if proc and proc.poll() is None:
-        proc.terminate()
+    with HLS_LOCK:
+        proc = HLS_PROCESSES.pop(key, None)
+
+    if not proc or proc.poll() is not None:
+        return
+
+    try:
+        if hasattr(os, "killpg"):
+            os.killpg(proc.pid, signal.SIGTERM)
+        else:
+            proc.terminate()
+        proc.wait(timeout=2)
+    except Exception:
+        try:
+            if hasattr(os, "killpg"):
+                os.killpg(proc.pid, signal.SIGKILL)
+            else:
+                proc.kill()
+        except Exception:
+            pass
+        try:
+            proc.wait(timeout=1)
+        except Exception:
+            pass
 
 
 def stop_other_hls_processes(active_key: str) -> None:
-    for key in list(HLS_PROCESSES.keys()):
+    with HLS_LOCK:
+        keys = list(HLS_PROCESSES.keys())
+    for key in keys:
         if key == active_key:
             continue
+        stop_hls_process(key)
+
+
+def stop_all_hls_processes() -> None:
+    with HLS_LOCK:
+        keys = list(HLS_PROCESSES.keys())
+    for key in keys:
         stop_hls_process(key)
 
 
@@ -587,7 +699,8 @@ def ensure_hls_stream(channel_id: str, mode: str = "copy") -> Path:
     hls_dir = hls_channel_dir(channel_id, mode)
     playlist = hls_dir / "index.m3u8"
 
-    proc = HLS_PROCESSES.get(key)
+    with HLS_LOCK:
+        proc = HLS_PROCESSES.get(key)
     if proc and proc.poll() is None and playlist.exists():
         return playlist
 
@@ -600,15 +713,20 @@ def ensure_hls_stream(channel_id: str, mode: str = "copy") -> Path:
     segment_pattern = str(hls_dir / "seg_%05d.ts")
     cmd = ffmpeg_hls_command(stream_url, playlist, segment_pattern, mode)
 
-    HLS_PROCESSES[key] = subprocess.Popen(
+    proc = subprocess.Popen(
         cmd,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        start_new_session=True,
     )
+
+    with HLS_LOCK:
+        HLS_PROCESSES[key] = proc
 
     deadline = time.time() + (24 if mode == "compatible" else 12)
     while time.time() < deadline:
-        proc = HLS_PROCESSES.get(key)
+        with HLS_LOCK:
+            proc = HLS_PROCESSES.get(key)
         if proc and proc.poll() is not None:
             break
         if playlist.exists() and playlist.stat().st_size > 0:
@@ -644,8 +762,17 @@ def hls_segment(channel_id: str, mode: str, segment_name: str):
     )
 
 
+@app.post("/api/hls/{channel_id}/{mode}/stop")
+def api_stop_hls(channel_id: str, mode: str) -> dict:
+    mode = "compatible" if mode == "compatible" else "copy"
+    stop_hls_process(hls_key(channel_id, mode))
+    return {"ok": True, "channel_id": channel_id, "mode": mode, "stopped": True}
+
+
 @app.get("/stream/{channel_id}")
 def stream_channel(channel_id: str):
+    stop_all_hls_processes()
+
     with connect() as conn:
         row = conn.execute(
             """
