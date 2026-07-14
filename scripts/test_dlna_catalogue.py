@@ -58,14 +58,20 @@ def main() -> None:
 
         root, returned, total = dlna.browse_result("0", "http://example")
         check(returned == 2 and total == 2, "DLNA root should expose group containers")
-        check('id="group:uk"' in root and 'id="group:news"' in root, "DLNA root should contain group IDs")
+        check('id="group:1"' in root and 'id="group:2"' in root, "DLNA root should contain TV-safe group IDs")
 
-        uk, returned, total = dlna.browse_result("group:uk", "http://example")
+        metadata, returned, total = dlna.browse_result("group:1", "http://example", browse_flag="BrowseMetadata")
+        check(returned == 1 and total == 1 and "UK" in metadata, "DLNA group metadata should describe the selected folder")
+
+        uk, returned, total = dlna.browse_result("group%3A1", "http://example")
         check(returned == 2 and total == 2, "DLNA group should expose its channels")
         check("BBC One" in uk and "BBC Two" in uk, "DLNA group should include channel titles")
         check("http://example/dlna/channel/bbc1" in uk, "DLNA channel URL should use the local stream endpoint")
 
-        paged, returned, total = dlna.browse_result("group:uk", "http://example", starting_index=1, requested_count=1)
+        legacy, returned, total = dlna.browse_result("group:uk", "http://example")
+        check(returned == 2 and total == 2 and "BBC One" in legacy, "legacy raw group IDs should still browse")
+
+        paged, returned, total = dlna.browse_result("group:1", "http://example", starting_index=1, requested_count=1)
         check(returned == 1 and total == 2, "DLNA browse paging should report returned and total counts")
         check("BBC Two" in paged and "BBC One" not in paged, "DLNA browse paging should return the requested slice")
     finally:

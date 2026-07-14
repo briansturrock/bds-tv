@@ -4,7 +4,7 @@ import html
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import unquote, urljoin
 
 from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse, Response, StreamingResponse
@@ -178,7 +178,7 @@ def didl_container(container_id: str, parent_id: str, title: str, child_count: i
     return (
         f'<container id="{html.escape(container_id)}" parentID="{html.escape(parent_id)}" restricted="1" childCount="{child_count}">'
         f"<dc:title>{html.escape(title)}</dc:title>"
-        "<upnp:class>object.container</upnp:class>"
+        "<upnp:class>object.container.storageFolder</upnp:class>"
         "</container>"
     )
 
@@ -210,7 +210,8 @@ def didl_wrap(children: list[str]) -> str:
 def dlna_catalogue(base_url: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     channels = selected_catalogue_channels(limit=None)
     groups = selected_catalogue_groups(channels)
-    for group in groups:
+    for index, group in enumerate(groups, start=1):
+        group["object_id"] = f"group:{index}"
         for channel in group["channels"]:
             channel["url"] = urljoin(f"{base_url}/", f"dlna/channel/{channel['channel_id']}")
     return channels, groups
@@ -223,21 +224,43 @@ def page_children(children: list[str], starting_index: int, requested_count: int
     return children[starting_index : starting_index + requested_count]
 
 
-def browse_result(object_id: str, base_url: str, starting_index: int = 0, requested_count: int = 0) -> tuple[str, int, int]:
+def find_group_for_object_id(groups: list[dict[str, Any]], object_id: str) -> dict[str, Any] | None:
+    decoded = unquote(object_id or "")
+    if not decoded.startswith("group:"):
+        return None
+    group_key = decoded.split(":", 1)[1]
+    if group_key.isdigit():
+        index = int(group_key)
+        if 1 <= index <= len(groups):
+            return groups[index - 1]
+    return next((item for item in groups if item["group_id"] == group_key or item.get("object_id") == decoded), None)
+
+
+def browse_result(
+    object_id: str,
+    base_url: str,
+    starting_index: int = 0,
+    requested_count: int = 0,
+    browse_flag: str = "BrowseDirectChildren",
+) -> tuple[str, int, int]:
     channels, groups = dlna_catalogue(base_url)
+    object_id = unquote(object_id or "0")
     if object_id in {"", "0"}:
         children = [
-            didl_container(f"group:{group['group_id']}", "0", group["name"], len(group["channels"]))
+            didl_container(group["object_id"], "0", group["name"], len(group["channels"]))
             for group in groups
         ]
+        if browse_flag == "BrowseMetadata":
+            return didl_wrap([didl_container("0", "-1", "iptv-epg", len(children))]), 1, 1
         paged = page_children(children, starting_index, requested_count)
         return didl_wrap(paged), len(paged), len(children)
 
     if object_id.startswith("group:"):
-        group_id = object_id.split(":", 1)[1]
-        group = next((item for item in groups if item["group_id"] == group_id), None)
+        group = find_group_for_object_id(groups, object_id)
         if not group:
             return didl_wrap([]), 0, 0
+        if browse_flag == "BrowseMetadata":
+            return didl_wrap([didl_container(group["object_id"], "0", group["name"], len(group["channels"]))]), 1, 1
         children = [didl_channel(channel, object_id, base_url) for channel in group["channels"]]
         paged = page_children(children, starting_index, requested_count)
         return didl_wrap(paged), len(paged), len(children)
@@ -344,6 +367,7 @@ async def content_directory_control(request: Request) -> Response:
             base_url_for_request(request),
             xml_int(root, "StartingIndex", 0),
             xml_int(root, "RequestedCount", 0),
+            xml_text(root, "BrowseFlag", "BrowseDirectChildren"),
         )
         payload = (
             f"<Result>{html.escape(result)}</Result>"
