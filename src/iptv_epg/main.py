@@ -38,6 +38,7 @@ from .db import (
     update_job,
 )
 from .diagnostics_routes import router as diagnostics_router
+from .dlna import router as dlna_router
 from .epgshare_routes import router as epgshare_router
 from .epgshare_review_routes import router as epgshare_review_router
 from .guide_routes import router as guide_router
@@ -57,6 +58,7 @@ executor = ThreadPoolExecutor(max_workers=2)
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.include_router(diagnostics_router)
+app.include_router(dlna_router)
 app.include_router(epgshare_router)
 app.include_router(epgshare_review_router)
 app.include_router(guide_router)

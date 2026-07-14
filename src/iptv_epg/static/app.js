@@ -71,6 +71,10 @@ const hdhrState = {
   groupFilter: "",
 };
 
+const dlnaState = {
+  loaded: false,
+};
+
 function setHdhrForm(settings) {
   $("hdhr-enabled").checked = !!settings.enabled;
   $("hdhr-device-name").value = settings.device_name || "iptv-epg";
@@ -190,6 +194,50 @@ async function stopHdhrStreams() {
   const body = await api("/api/hdhr/streams/stop", { method: "POST" });
   renderJson("hdhr-json", body);
   setMessage("hdhr-message", "Stopped active HDHR streams.");
+}
+
+function setDlnaForm(settings) {
+  $("dlna-enabled").checked = settings.enabled !== false;
+  $("dlna-device-name").value = settings.device_name || "iptv-epg DLNA";
+  $("dlna-public-base-url").value = settings.public_base_url || "";
+}
+
+function dlnaPayloadFromForm() {
+  return {
+    enabled: $("dlna-enabled").checked,
+    device_name: $("dlna-device-name").value.trim() || "iptv-epg DLNA",
+    public_base_url: $("dlna-public-base-url").value.trim(),
+  };
+}
+
+function updateDlnaLinks(settings) {
+  const base = (settings.public_base_url || settings.resolved_base_url || window.location.origin).replace(/\/$/, "");
+  $("dlna-device-link").href = `${base}/dlna/device.xml`;
+  $("dlna-content-directory-link").href = `${base}/dlna/content-directory.xml`;
+  $("dlna-connection-manager-link").href = `${base}/dlna/connection-manager.xml`;
+}
+
+async function loadDlna() {
+  const body = await api("/api/dlna/settings");
+  setDlnaForm(body.settings || {});
+  updateDlnaLinks(body.settings || {});
+  renderJson("dlna-json", body);
+  dlnaState.loaded = true;
+  setMessage("dlna-message", body.settings?.enabled ? "DLNA enabled." : "DLNA disabled.");
+  return body;
+}
+
+async function saveDlna() {
+  setMessage("dlna-message", "Saving DLNA settings...");
+  const body = await api("/api/dlna/settings", {
+    method: "POST",
+    body: JSON.stringify(dlnaPayloadFromForm()),
+  });
+  setDlnaForm(body.settings || {});
+  updateDlnaLinks(body.settings || {});
+  renderJson("dlna-json", body);
+  setMessage("dlna-message", "DLNA settings saved.");
+  return body;
 }
 
 function startHdhrPolling() {
@@ -618,7 +666,11 @@ function switchTab(tab) {
     loadHdhr().catch((err) => setMessage("hdhr-message", `Could not load HDHR settings: ${err.message}`, true));
   }
 
-  if (["settings", "channels", "epg", "scheduler", "hdhr", "guide"].includes(tab)) {
+  if (tab === "dlna" && !dlnaState.loaded) {
+    loadDlna().catch((err) => setMessage("dlna-message", `Could not load DLNA settings: ${err.message}`, true));
+  }
+
+  if (["settings", "channels", "epg", "scheduler", "hdhr", "dlna", "guide"].includes(tab)) {
     history.replaceState(null, "", `#${tab}`);
   }
 }
@@ -676,6 +728,10 @@ function wireEvents() {
     hdhrState.groupFilter = event.target.value;
     renderHdhrGroups();
   });
+
+  $("dlna-save").addEventListener("click", () => {
+    saveDlna().catch((err) => setMessage("dlna-message", `Save failed: ${err.message}`, true));
+  });
 }
 
 async function init() {
@@ -685,7 +741,7 @@ async function init() {
   wireGuideEvents();
 
   const initialTab = window.location.hash.replace("#", "");
-  if (["settings", "channels", "epg", "scheduler", "hdhr", "guide"].includes(initialTab)) {
+  if (["settings", "channels", "epg", "scheduler", "hdhr", "dlna", "guide"].includes(initialTab)) {
     switchTab(initialTab);
   }
 

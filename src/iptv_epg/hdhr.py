@@ -928,6 +928,10 @@ def hdhr_stream_channel(channel_id: str) -> StreamingResponse:
     if not settings.enabled:
         raise HTTPException(status_code=403, detail="HDHR is disabled")
 
+    return stream_selected_channel(channel_id, settings)
+
+
+def stream_selected_channel(channel_id: str, settings: HdhrSettings) -> StreamingResponse:
     channel = selected_channel_row(channel_id)
     session = reserve_stream_session(channel, settings)
 
@@ -1017,6 +1021,8 @@ def ssdp_should_respond(message: str, search_target: str | None) -> bool:
         target in {"SSDP:ALL", "UPNP:ROOTDEVICE"}
         or "MEDIA SERVER" in target
         or "MEDIASERVER" in target
+        or "CONTENTDIRECTORY" in target
+        or "CONNECTIONMANAGER" in target
         or "HDHOMERUN" in target
         or "DIAL-MULTISCREEN" in target
     )
@@ -1053,7 +1059,16 @@ def ssdp_loop() -> None:
     SSDP_STATUS["running"] = True
     while not SSDP_STOP.is_set():
         settings = get_hdhr_settings()
-        if not settings.enabled or not settings.public_base_url:
+        get_dlna_settings_func = None
+        try:
+            from .dlna import dlna_location, dlna_ssdp_notify_messages, dlna_ssdp_response, get_dlna_settings
+
+            get_dlna_settings_func = get_dlna_settings
+            dlna_settings = get_dlna_settings()
+        except Exception:
+            dlna_settings = None
+        dlna_base_url = dlna_settings.public_base_url if dlna_settings else ""
+        if (not settings.enabled or not settings.public_base_url) and (not dlna_settings or not dlna_settings.enabled or not dlna_base_url):
             SSDP_STATUS["listening"] = False
             SSDP_STOP.wait(2)
             continue
@@ -1080,8 +1095,11 @@ def ssdp_loop() -> None:
             except OSError:
                 pass
 
-            location = urljoin(f"{settings.public_base_url}/", "discover.json")
-            notify_payloads = ssdp_notify_messages(location, settings)
+            location = urljoin(f"{settings.public_base_url}/", "discover.json") if settings.enabled and settings.public_base_url else ""
+            dlna_device_location = dlna_location(dlna_base_url) if dlna_settings and dlna_settings.enabled and dlna_base_url else ""
+            notify_payloads = ssdp_notify_messages(location, settings) if location else []
+            if dlna_device_location:
+                notify_payloads.extend(dlna_ssdp_notify_messages(dlna_device_location))
             next_notify_at = 0.0
 
             while not SSDP_STOP.is_set():
@@ -1099,10 +1117,15 @@ def ssdp_loop() -> None:
                     data, addr = sock.recvfrom(2048)
                 except socket.timeout:
                     next_settings = get_hdhr_settings()
+                    try:
+                        next_dlna_settings = get_dlna_settings_func() if get_dlna_settings_func else None
+                    except Exception:
+                        next_dlna_settings = None
                     if (
-                        not next_settings.enabled
+                        (not next_settings.enabled and (not next_dlna_settings or not next_dlna_settings.enabled))
                         or next_settings.public_base_url != settings.public_base_url
                         or next_settings.device_id != settings.device_id
+                        or (next_dlna_settings and next_dlna_settings.public_base_url != dlna_base_url)
                     ):
                         break
                     continue
@@ -1115,7 +1138,16 @@ def ssdp_loop() -> None:
                     if ssdp_should_respond(message, search_target):
                         SSDP_STATUS["last_request_from"] = f"{addr[0]}:{addr[1]}"
                         SSDP_STATUS["last_search_target"] = search_target
-                        sock.sendto(ssdp_response(location, settings, search_target), addr)
+                        if settings.enabled and settings.public_base_url:
+                            sock.sendto(ssdp_response(location, settings, search_target), addr)
+                        if dlna_device_location and (
+                            search_target.lower() in {"ssdp:all", "upnp:rootdevice"}
+                            or "mediaserver" in search_target.lower()
+                            or "media server" in search_target.lower()
+                            or "contentdirectory" in search_target.lower()
+                            or "connectionmanager" in search_target.lower()
+                        ):
+                            sock.sendto(dlna_ssdp_response(dlna_device_location, search_target), addr)
                         SSDP_STATUS["last_response_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                 except OSError:
                     pass

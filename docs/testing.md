@@ -21,6 +21,7 @@ python scripts/test_epg_unknown.py
 python scripts/test_hdhr_channel_limit.py
 python scripts/test_hdhr_stream_safety.py
 python scripts/test_hdhr_buffered_stream.py
+python scripts/test_dlna_catalogue.py
 ```
 
 ## Image save/load
