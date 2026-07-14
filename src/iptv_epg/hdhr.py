@@ -556,6 +556,7 @@ def ffmpeg_stream_iterator(session: StreamSession) -> Iterator[bytes]:
 def buffered_ffmpeg_stream_iterator(session: StreamSession, buffer_seconds: int, buffer_max_mb: int) -> Iterator[bytes]:
     chunks: Deque[BufferedChunk] = deque()
     max_buffer_bytes = buffer_max_mb * 1024 * 1024
+    startup_delay_seconds = min(buffer_seconds, 2)
     buffered_bytes = 0
     done = False
     condition = threading.Condition()
@@ -595,7 +596,7 @@ def buffered_ffmpeg_stream_iterator(session: StreamSession, buffer_seconds: int,
                     break
                 item = chunks[0]
 
-            release_at = item.read_at + buffer_seconds
+            release_at = item.read_at + startup_delay_seconds
             wait_for = release_at - time.monotonic()
             if wait_for > 0:
                 time.sleep(min(wait_for, 0.25))

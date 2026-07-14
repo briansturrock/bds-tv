@@ -70,6 +70,19 @@ class FakeProcess:
         self.stopped = True
 
 
+class FakeClock:
+    def __init__(self):
+        self.now = 1_000.0
+        self.sleeps: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+
 def check(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(message)
@@ -98,6 +111,32 @@ def main() -> None:
         check(session.buffer_bytes == 0, "buffer should be empty after stream ends")
     finally:
         hdhr.ACTIVE_STREAMS = original_streams
+
+    clock = FakeClock()
+    delayed_session = hdhr.StreamSession(
+        session_id="delayed-buffered",
+        channel_id="abc",
+        channel_name="ABC",
+        mode="buffered",
+        started_at=now,
+        last_activity_at=now,
+        buffer_target_seconds=30,
+        process=FakeProcess([b"hello"]),
+    )
+
+    original_monotonic = hdhr.time.monotonic
+    original_sleep = hdhr.time.sleep
+    try:
+        hdhr.ACTIVE_STREAMS = {delayed_session.session_id: delayed_session}
+        hdhr.time.monotonic = clock.monotonic
+        hdhr.time.sleep = clock.sleep
+        output = b"".join(hdhr.buffered_ffmpeg_stream_iterator(delayed_session, buffer_seconds=30, buffer_max_mb=16))
+        check(output == b"hello", "buffered iterator should still yield data with a large configured buffer")
+        check(sum(clock.sleeps) <= 2.25, "large configured buffer should not delay first bytes long enough for Plex to time out")
+    finally:
+        hdhr.ACTIVE_STREAMS = original_streams
+        hdhr.time.monotonic = original_monotonic
+        hdhr.time.sleep = original_sleep
 
 
 if __name__ == "__main__":
