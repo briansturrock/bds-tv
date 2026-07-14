@@ -1450,6 +1450,17 @@ body:has(#tab-channels.active) {
   right: 6px;
   bottom: 6px;
   z-index: 4;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(3px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.guide-programme.now:hover .guide-preview-button,
+.guide-programme.now:focus-within .guide-preview-button {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
 }
 
 .guide-preview-button:hover {
