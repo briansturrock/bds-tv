@@ -177,6 +177,57 @@ def row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
+def normalise_tvg_id(value: str | None) -> str:
+    return "".join(str(value or "").strip().lower().split())
+
+
+def apply_inherited_preferred_logos(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    preferred_by_tvg_id: dict[str, str] = {}
+    keys_needing_lookup: set[str] = set()
+
+    for row in rows:
+        key = normalise_tvg_id(row.get("tvg_id"))
+        preferred = (row.get("preferred_logo_url") or "").strip()
+        if key and preferred and key not in preferred_by_tvg_id:
+            preferred_by_tvg_id[key] = preferred
+        elif key:
+            keys_needing_lookup.add(key)
+
+    missing_keys = sorted(keys_needing_lookup - set(preferred_by_tvg_id.keys()))
+    if missing_keys:
+        placeholders = ",".join("?" for _ in missing_keys)
+        with connect() as conn:
+            lookup_rows = conn.execute(
+                f"""
+                SELECT tvg_id, preferred_logo_url
+                FROM channels
+                WHERE missing = 0
+                  AND preferred_logo_url IS NOT NULL
+                  AND preferred_logo_url != ''
+                  AND LOWER(REPLACE(tvg_id, ' ', '')) IN ({placeholders})
+                """,
+                missing_keys,
+            ).fetchall()
+
+        for lookup in lookup_rows:
+            key = normalise_tvg_id(lookup["tvg_id"])
+            preferred = (lookup["preferred_logo_url"] or "").strip()
+            if key and preferred and key not in preferred_by_tvg_id:
+                preferred_by_tvg_id[key] = preferred
+
+    for row in rows:
+        key = normalise_tvg_id(row.get("tvg_id"))
+        inherited = preferred_by_tvg_id.get(key)
+        if not inherited or row.get("preferred_logo_url"):
+            continue
+
+        row["preferred_logo_url"] = inherited
+        row["logo_url"] = inherited
+        row["effective_logo_url"] = inherited
+
+    return rows
+
+
 def get_setting(key: str, default: str | None = None) -> str | None:
     with connect() as conn:
         row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
@@ -373,12 +424,14 @@ def get_channels(group_id: str, offset: int = 0, limit: int = 200) -> dict[str, 
             (group_id, limit, offset),
         ).fetchall()
 
+    rows = apply_inherited_preferred_logos([dict(r) for r in rows])
+
     return {
         "group_id": group_id,
         "offset": offset,
         "limit": limit,
         "total": int(total),
-        "channels": [dict(r) for r in rows],
+        "channels": rows,
     }
 
 
@@ -550,19 +603,55 @@ def set_channel_preferred_logo(channel_id: str, preferred_logo_url: str | None) 
     with connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
         try:
-            conn.execute(
+            source = conn.execute(
                 """
-                UPDATE channels
-                SET preferred_logo_url = ?
+                SELECT id, tvg_id
+                FROM channels
                 WHERE id = ?
                   AND missing = 0
                 """,
-                (cleaned, channel_id),
-            )
+                (channel_id,),
+            ).fetchone()
+
+            if not source:
+                conn.commit()
+                return {"updated": 0, "channel_id": channel_id}
+
+            tvg_id_key = normalise_tvg_id(source["tvg_id"])
+            before = conn.total_changes
+            if tvg_id_key:
+                channel_rows = conn.execute(
+                    """
+                    SELECT id, tvg_id
+                    FROM channels
+                    WHERE missing = 0
+                    """,
+                ).fetchall()
+                target_channel_ids = [
+                    row["id"]
+                    for row in channel_rows
+                    if normalise_tvg_id(row["tvg_id"]) == tvg_id_key
+                ]
+            else:
+                target_channel_ids = [channel_id]
+
+            if target_channel_ids:
+                placeholders = ",".join("?" for _ in target_channel_ids)
+                conn.execute(
+                    f"""
+                    UPDATE channels
+                    SET preferred_logo_url = ?
+                    WHERE id IN ({placeholders})
+                      AND missing = 0
+                    """,
+                    (cleaned, *target_channel_ids),
+                )
+
             row = conn.execute(
                 """
                 SELECT
                     id AS channel_id,
+                    tvg_id,
                     logo_url AS default_logo_url,
                     preferred_logo_url,
                     COALESCE(NULLIF(preferred_logo_url, ''), logo_url) AS effective_logo_url
@@ -572,6 +661,7 @@ def set_channel_preferred_logo(channel_id: str, preferred_logo_url: str | None) 
                 """,
                 (channel_id,),
             ).fetchone()
+            updated = conn.total_changes - before
             conn.commit()
         except Exception:
             conn.rollback()
@@ -581,7 +671,7 @@ def set_channel_preferred_logo(channel_id: str, preferred_logo_url: str | None) 
         return {"updated": 0, "channel_id": channel_id}
 
     result = dict(row)
-    result["updated"] = 1
+    result["updated"] = int(updated)
     return result
 
 
@@ -623,4 +713,4 @@ def get_selected_channels() -> list[dict[str, Any]]:
             """
         ).fetchall()
 
-    return [dict(r) for r in rows]
+    return apply_inherited_preferred_logos([dict(r) for r in rows])

@@ -10,7 +10,7 @@ from xml.etree import ElementTree as ET
 
 from fastapi import APIRouter, Query
 
-from .db import connect
+from .db import apply_inherited_preferred_logos, connect
 
 
 router = APIRouter(prefix="/api/guide", tags=["guide"])
@@ -101,7 +101,7 @@ def selected_channels_for_group(group_id: str) -> list[dict[str, Any]]:
             (group_id,),
         ).fetchall()
 
-    return [dict(row) for row in rows]
+    return apply_inherited_preferred_logos([dict(row) for row in rows])
 
 
 def selected_tvg_ids() -> set[str]:

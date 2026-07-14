@@ -861,10 +861,16 @@ async function saveEpgLogo(channelId, preferredLogoUrl) {
 
   const row = epgState.rows.find((item) => item.channel_id === channelId);
   if (row) {
-    row.default_logo_url = body.default_logo_url || row.default_logo_url || row.logo_url || "";
-    row.preferred_logo_url = body.preferred_logo_url || "";
-    row.effective_logo_url = body.effective_logo_url || row.default_logo_url || "";
-    row.logo_url = row.effective_logo_url;
+    const tvgId = row.tvg_id || "";
+    for (const item of epgState.rows) {
+      if (tvgId && item.tvg_id !== tvgId) continue;
+      if (!tvgId && item.channel_id !== channelId) continue;
+
+      item.default_logo_url = body.default_logo_url || item.default_logo_url || item.logo_url || "";
+      item.preferred_logo_url = body.preferred_logo_url || "";
+      item.effective_logo_url = body.effective_logo_url || item.default_logo_url || "";
+      item.logo_url = item.effective_logo_url;
+    }
   }
 
   $("epg-logo-state").textContent = "Saved";
@@ -1003,33 +1009,40 @@ function applySavedEpgMappingsLocally(mappings) {
   for (const mapping of mappings) {
     const row = epgState.rows.find((item) => item.channel_id === mapping.channel_id);
     if (!row) continue;
+    const matchingRows = epgState.rows.filter((item) =>
+      row.tvg_id ? item.tvg_id === row.tvg_id : item.channel_id === row.channel_id
+    );
 
     if (mapping.ignored) {
-      row.saved_mapping = {
-        ignored: true,
-        mapping_type: "ignored",
-        updated_at: nowText,
-      };
-      row.status = "saved";
+      for (const item of matchingRows) {
+        item.saved_mapping = {
+          ignored: true,
+          mapping_type: "ignored",
+          updated_at: nowText,
+        };
+        item.status = "saved";
+      }
       continue;
     }
 
-    row.saved_mapping = {
-      channel_id: mapping.channel_id,
-      xmltv_id: mapping.xmltv_id,
-      source_key: mapping.source_key,
-      mapping_type: mapping.mapping_type || "manual",
-      confidence: mapping.confidence ?? 1,
-      ignored: false,
-      updated_at: nowText,
-    };
-    row.status = "saved";
-    row.recommended = {
-      xmltv_id: mapping.xmltv_id,
-      source_key: mapping.source_key,
-      confidence: mapping.confidence ?? 1,
-      reason: "saved mapping",
-    };
+    for (const item of matchingRows) {
+      item.saved_mapping = {
+        channel_id: item.channel_id,
+        xmltv_id: mapping.xmltv_id,
+        source_key: mapping.source_key,
+        mapping_type: mapping.mapping_type || "manual",
+        confidence: mapping.confidence ?? 1,
+        ignored: false,
+        updated_at: nowText,
+      };
+      item.status = "saved";
+      item.recommended = {
+        xmltv_id: mapping.xmltv_id,
+        source_key: mapping.source_key,
+        confidence: mapping.confidence ?? 1,
+        reason: "saved mapping",
+      };
+    }
   }
 
   epgState.groups = buildEpgGroups(epgState.rows);

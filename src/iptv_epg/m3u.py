@@ -11,7 +11,7 @@ from typing import Iterator
 
 import requests
 
-from .db import connect, refresh_group_selected_counts, update_job
+from .db import connect, get_selected_channels, refresh_group_selected_counts, update_job
 from .settings import FILTERED_M3U, SOURCE_M3U
 
 
@@ -366,29 +366,7 @@ def extinf_with_logo(extinf: str, logo_url: str | None) -> str:
 
 def generate_filtered_m3u(job_id: str | None = None) -> dict[str, int | str]:
     FILTERED_M3U.parent.mkdir(parents=True, exist_ok=True)
-
-    with connect() as conn:
-        rows = conn.execute(
-            """
-            SELECT
-                groups.name AS group_name,
-                channels.extinf,
-                channels.stream_url,
-                COALESCE(NULLIF(channels.preferred_logo_url, ''), channels.logo_url) AS effective_logo_url
-            FROM channels
-            JOIN groups ON groups.id = channels.group_id
-            WHERE channels.selected = 1
-              AND channels.missing = 0
-              AND groups.missing = 0
-            ORDER BY
-                CASE WHEN groups.user_order IS NULL THEN 1 ELSE 0 END,
-                groups.user_order ASC,
-                groups.provider_order ASC,
-                CASE WHEN channels.user_order IS NULL THEN 1 ELSE 0 END,
-                channels.user_order ASC,
-                channels.provider_order ASC
-            """
-        ).fetchall()
+    rows = get_selected_channels()
 
     if job_id:
         update_job(job_id, message=f"Writing filtered M3U ({len(rows):,} channels)")

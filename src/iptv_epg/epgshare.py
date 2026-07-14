@@ -14,7 +14,7 @@ from xml.etree import ElementTree as ET
 
 import requests
 
-from .db import connect, update_job
+from .db import apply_inherited_preferred_logos, connect, normalise_tvg_id, update_job
 
 
 EPGSHARE_BASE_URL = "https://epgshare01.online/epgshare01"
@@ -423,7 +423,7 @@ def selected_channels_for_epgshare() -> list[dict[str, Any]]:
             """
         ).fetchall()
 
-    return [dict(r) for r in rows]
+    return apply_inherited_preferred_logos([dict(r) for r in rows])
 
 
 def tokenize_epg_id(value: str | None) -> list[str]:
@@ -787,6 +787,36 @@ def save_epgshare_mappings(mappings: list[dict[str, Any]]) -> dict[str, Any]:
                 if not channel_id:
                     continue
 
+                channel = conn.execute(
+                    """
+                    SELECT tvg_id
+                    FROM channels
+                    WHERE id = ?
+                      AND missing = 0
+                    """,
+                    (channel_id,),
+                ).fetchone()
+
+                if not channel:
+                    continue
+
+                tvg_id_key = normalise_tvg_id(channel["tvg_id"])
+                if tvg_id_key:
+                    target_rows = conn.execute(
+                        """
+                        SELECT id, tvg_id
+                        FROM channels
+                        WHERE missing = 0
+                        """
+                    ).fetchall()
+                    target_channel_ids = [
+                        str(row["id"])
+                        for row in target_rows
+                        if normalise_tvg_id(row["tvg_id"]) == tvg_id_key
+                    ]
+                else:
+                    target_channel_ids = [channel_id]
+
                 is_ignored = 1 if item.get("ignored") else 0
                 xmltv_id = item.get("xmltv_id")
                 source_key = item.get("source_key")
@@ -797,44 +827,45 @@ def save_epgshare_mappings(mappings: list[dict[str, Any]]) -> dict[str, Any]:
                 if is_ignored:
                     xmltv_id = None
                     source_key = None
-                    ignored += 1
+                    ignored += len(target_channel_ids)
                 else:
                     if not xmltv_id or not source_key:
                         continue
-                    saved += 1
+                    saved += len(target_channel_ids)
 
-                conn.execute(
-                    """
-                    INSERT INTO epgshare_mappings(
-                        channel_id,
-                        xmltv_id,
-                        source_key,
-                        mapping_type,
-                        confidence,
-                        ignored,
-                        notes,
-                        updated_at
+                for target_channel_id in target_channel_ids:
+                    conn.execute(
+                        """
+                        INSERT INTO epgshare_mappings(
+                            channel_id,
+                            xmltv_id,
+                            source_key,
+                            mapping_type,
+                            confidence,
+                            ignored,
+                            notes,
+                            updated_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                        ON CONFLICT(channel_id) DO UPDATE SET
+                            xmltv_id = excluded.xmltv_id,
+                            source_key = excluded.source_key,
+                            mapping_type = excluded.mapping_type,
+                            confidence = excluded.confidence,
+                            ignored = excluded.ignored,
+                            notes = excluded.notes,
+                            updated_at = CURRENT_TIMESTAMP
+                        """,
+                        (
+                            target_channel_id,
+                            xmltv_id,
+                            source_key,
+                            mapping_type,
+                            confidence,
+                            is_ignored,
+                            notes,
+                        ),
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                    ON CONFLICT(channel_id) DO UPDATE SET
-                        xmltv_id = excluded.xmltv_id,
-                        source_key = excluded.source_key,
-                        mapping_type = excluded.mapping_type,
-                        confidence = excluded.confidence,
-                        ignored = excluded.ignored,
-                        notes = excluded.notes,
-                        updated_at = CURRENT_TIMESTAMP
-                    """,
-                    (
-                        channel_id,
-                        xmltv_id,
-                        source_key,
-                        mapping_type,
-                        confidence,
-                        is_ignored,
-                        notes,
-                    ),
-                )
 
             conn.commit()
         except Exception:
@@ -853,14 +884,20 @@ def epgshare_mapping_review() -> dict[str, Any]:
     ensure_epgshare_tables()
 
     matches = epgshare_matches()
-    saved = {row["channel_id"]: row for row in epgshare_saved_mappings()}
+    saved_rows = epgshare_saved_mappings()
+    saved = {row["channel_id"]: row for row in saved_rows}
+    saved_by_tvg_id = {
+        normalize_xmltv_id(row.get("tvg_id")): row
+        for row in saved_rows
+        if row.get("tvg_id")
+    }
 
     rows = []
 
     for item in matches["matches"]:
         channel_id = item["channel_id"]
         exact = item.get("epgshare_matches", [])
-        selected = saved.get(channel_id)
+        selected = saved.get(channel_id) or saved_by_tvg_id.get(normalize_xmltv_id(item.get("tvg_id")))
 
         rows.append({
             "channel_id": channel_id,
@@ -887,7 +924,7 @@ def epgshare_mapping_review() -> dict[str, Any]:
     for item in matches["suggestions"]:
         channel_id = item["channel_id"]
         suggestions = item.get("suggestions", [])
-        selected = saved.get(channel_id)
+        selected = saved.get(channel_id) or saved_by_tvg_id.get(normalize_xmltv_id(item.get("tvg_id")))
 
         rows.append({
             "channel_id": channel_id,
@@ -913,7 +950,7 @@ def epgshare_mapping_review() -> dict[str, Any]:
 
     for item in matches["unmatched"]:
         channel_id = item["channel_id"]
-        selected = saved.get(channel_id)
+        selected = saved.get(channel_id) or saved_by_tvg_id.get(normalize_xmltv_id(item.get("tvg_id")))
 
         rows.append({
             "channel_id": channel_id,
@@ -955,6 +992,7 @@ def epgshare_mapping_review() -> dict[str, Any]:
 
 def epgshare_active_mappings() -> list[dict[str, Any]]:
     ensure_epgshare_tables()
+    selected_channels = selected_channels_for_epgshare()
 
     with connect() as conn:
         rows = conn.execute(
@@ -986,7 +1024,63 @@ def epgshare_active_mappings() -> list[dict[str, Any]]:
             """
         ).fetchall()
 
-    return [dict(r) for r in rows]
+        inherited_rows = conn.execute(
+            """
+            SELECT
+                epgshare_mappings.channel_id,
+                epgshare_mappings.xmltv_id,
+                epgshare_mappings.source_key,
+                epgshare_mappings.mapping_type,
+                epgshare_mappings.confidence,
+                epgshare_mappings.updated_at,
+                channels.tvg_id,
+                epgshare_sources.xml_url,
+                epgshare_sources.txt_url
+            FROM epgshare_mappings
+            JOIN channels ON channels.id = epgshare_mappings.channel_id
+            JOIN epgshare_sources ON epgshare_sources.source_key = epgshare_mappings.source_key
+            WHERE epgshare_mappings.ignored = 0
+              AND epgshare_mappings.xmltv_id IS NOT NULL
+              AND epgshare_mappings.source_key IS NOT NULL
+              AND channels.tvg_id IS NOT NULL
+              AND channels.tvg_id != ''
+            ORDER BY epgshare_mappings.updated_at DESC
+            """
+        ).fetchall()
+
+    active = [dict(r) for r in rows]
+    active_channel_ids = {row["channel_id"] for row in active}
+    saved_by_tvg_id = {
+        normalize_xmltv_id(row["tvg_id"]): dict(row)
+        for row in inherited_rows
+        if row["tvg_id"]
+    }
+
+    for channel in selected_channels:
+        if channel["channel_id"] in active_channel_ids:
+            continue
+
+        saved = saved_by_tvg_id.get(normalize_xmltv_id(channel.get("tvg_id")))
+        if not saved:
+            continue
+
+        active.append({
+            "channel_id": channel["channel_id"],
+            "xmltv_id": saved["xmltv_id"],
+            "source_key": saved["source_key"],
+            "mapping_type": saved["mapping_type"],
+            "confidence": saved["confidence"],
+            "updated_at": saved["updated_at"],
+            "name": channel["name"],
+            "tvg_name": channel["tvg_name"],
+            "tvg_id": channel["tvg_id"],
+            "group_name": channel["group_name"],
+            "xml_url": saved["xml_url"],
+            "txt_url": saved["txt_url"],
+        })
+
+    active.sort(key=lambda row: (row["source_key"], row.get("name") or ""))
+    return active
 
 
 def xmltv_time_to_datetime(value: str | None) -> datetime | None:
@@ -1113,9 +1207,14 @@ def generate_filtered_epgshare(job_id: str | None = None, days: int = 3) -> dict
         out.write('<tv generator-info-name="iptv_epg EPGShare filtered">\n')
 
         # Emit channel definitions that match the IPTV M3U tvg-id values.
+        emitted_channel_ids: set[str] = set()
         for mapping in mappings:
+            target_id = mapping.get("tvg_id") or mapping.get("xmltv_id")
+            if not target_id or target_id in emitted_channel_ids:
+                continue
             out.write(serialize_element(rewrite_channel_element(mapping)))
             out.write("\n")
+            emitted_channel_ids.add(target_id)
             channel_count += 1
 
         for index, source in enumerate(sorted(by_source.values(), key=lambda s: s["source_key"]), start=1):
