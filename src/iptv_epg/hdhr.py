@@ -7,6 +7,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterator
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
@@ -514,6 +515,32 @@ def serialize_xmltv_element(elem: ET.Element) -> str:
     return ET.tostring(elem, encoding="unicode", short_empty_elements=True)
 
 
+def xmltv_time(value: datetime) -> str:
+    return value.astimezone(timezone.utc).strftime("%Y%m%d%H%M%S +0000")
+
+
+def unknown_programmes_for_channel(channel_number: int, days: int = 7) -> Iterator[ET.Element]:
+    now = datetime.now(timezone.utc)
+    start = now.replace(minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=max(1, days))
+    current = start
+
+    while current < end:
+        next_time = min(current + timedelta(hours=6), end)
+        programme_elem = ET.Element(
+            "programme",
+            {
+                "channel": str(channel_number),
+                "start": xmltv_time(current),
+                "stop": xmltv_time(next_time),
+            },
+        )
+        title = ET.SubElement(programme_elem, "title")
+        title.text = "Unknown"
+        yield programme_elem
+        current = next_time
+
+
 def hdhr_xmltv_stream() -> Iterator[str]:
     channels = selected_catalogue_channels()
     by_tvg_id: dict[str, list[dict[str, Any]]] = {}
@@ -540,7 +567,13 @@ def hdhr_xmltv_stream() -> Iterator[str]:
         yield serialize_xmltv_element(channel_elem)
         yield "\n"
 
+    channels_with_programmes: set[int] = set()
+
     if not FILTERED_EPG.exists() or not by_tvg_id:
+        for channel in channels:
+            for programme_elem in unknown_programmes_for_channel(int(channel["number"])):
+                yield serialize_xmltv_element(programme_elem)
+                yield "\n"
         yield "</tv>\n"
         return
 
@@ -559,6 +592,7 @@ def hdhr_xmltv_stream() -> Iterator[str]:
             original_channel = elem.attrib.get("channel")
             for target in target_channels:
                 elem.attrib["channel"] = str(target["number"])
+                channels_with_programmes.add(int(target["number"]))
                 yield serialize_xmltv_element(elem)
                 yield "\n"
             if original_channel is not None:
@@ -566,6 +600,14 @@ def hdhr_xmltv_stream() -> Iterator[str]:
             elem.clear()
     except ET.ParseError:
         pass
+
+    for channel in channels:
+        channel_number = int(channel["number"])
+        if channel_number in channels_with_programmes:
+            continue
+        for programme_elem in unknown_programmes_for_channel(channel_number):
+            yield serialize_xmltv_element(programme_elem)
+            yield "\n"
 
     yield "</tv>\n"
 

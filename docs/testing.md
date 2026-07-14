@@ -17,6 +17,7 @@ docker compose up --build
 
 ```bash
 python scripts/test_m3u_parser.py
+python scripts/test_hdhr_epg.py
 ```
 
 ## Image save/load
