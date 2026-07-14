@@ -1554,17 +1554,13 @@ function renderGuide(body) {
       : `<div class="guide-channel-placeholder" title="${escapeAttr(channelTooltip)}">TV</div>`;
 
     const programmes = (channel.programmes || []).length
-      ? channel.programmes.map((programme) => renderGuideProgramme(programme, windowStart, windowEnd)).join("")
+      ? channel.programmes.map((programme) => renderGuideProgramme(programme, windowStart, windowEnd, channel)).join("")
       : `<div class="guide-programme" style="left:0;width:180px"><strong>No programme data</strong><div class="desc">No matching EPG entries were found.</div></div>`;
 
     return `
       <div class="guide-channel-row" data-channel-id="${escapeAttr(channel.channel_id)}">
         <div class="guide-channel-info" data-channel-id="${escapeAttr(channel.channel_id)}">
           ${logo}
-          <button class="guide-preview-button" type="button" data-channel-id="${escapeAttr(channel.channel_id)}" aria-label="Preview ${escapeAttr(channel.name || "channel")}">
-            <span class="guide-preview-icon" aria-hidden="true">▶</span>
-            <span>Preview</span>
-          </button>
         </div>
         <div class="guide-timeline-row" data-channel-id="${escapeAttr(channel.channel_id)}" style="width:${timelineWidth}px">
           ${showNow ? `<div class="guide-now-line" style="left:${nowLeft}px"></div>` : ""}
@@ -1623,7 +1619,7 @@ function renderGuideDateSelect(selectedDate) {
   `;
 }
 
-function renderGuideProgramme(programme, windowStart, windowEnd) {
+function renderGuideProgramme(programme, windowStart, windowEnd, channel = null) {
   const title = programme.title || "Untitled";
   const desc = programme.desc || "";
   const time = `${formatGuideTime(programme.start)} – ${formatGuideTime(programme.stop)}`;
@@ -1631,6 +1627,15 @@ function renderGuideProgramme(programme, windowStart, windowEnd) {
   const startDate = new Date(programme.start);
   const left = guideOffsetPx((startDate < windowStart ? windowStart : startDate).toISOString(), windowStart);
   const width = guideWidthPx(programme.start, programme.stop, windowStart, windowEnd);
+  const channelId = channel?.channel_id || programme.channel || "";
+  const preview = programme.is_now && channelId
+    ? `
+      <button class="guide-preview-button" type="button" data-channel-id="${escapeAttr(channelId)}" aria-label="Preview ${escapeAttr(channel?.name || title)}">
+        <span class="guide-preview-icon" aria-hidden="true">▶</span>
+        <span>Preview</span>
+      </button>
+    `
+    : "";
 
   return `
     <div class="guide-programme ${programme.is_now ? "now" : ""}" style="left:${left}px;width:${width}px">
@@ -1639,6 +1644,7 @@ function renderGuideProgramme(programme, windowStart, windowEnd) {
         <div class="time">${escapeHtml(time)}${programme.is_now ? " · Now" : ""}</div>
         ${desc ? `<div class="desc">${escapeHtml(desc)}</div>` : ""}
       </div>
+      ${preview}
       <div class="guide-programme-hover">
         <strong>${escapeHtml(title)}</strong>
         <div>${escapeHtml(time)}</div>

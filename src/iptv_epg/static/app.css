@@ -1445,6 +1445,13 @@ body:has(#tab-channels.active) {
   white-space: nowrap;
 }
 
+.guide-programme .guide-preview-button {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  z-index: 4;
+}
+
 .guide-preview-button:hover {
   border-color: #fff;
   background: #fff;
