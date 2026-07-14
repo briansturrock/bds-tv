@@ -1426,6 +1426,11 @@ body:has(#tab-channels.active) {
   gap: 10px 14px;
 }
 
+.hdhr-grid .inline-toggle {
+  min-height: 68px;
+  align-self: end;
+}
+
 .hdhr-links {
   display: flex;
   flex-wrap: wrap;

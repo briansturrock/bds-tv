@@ -80,6 +80,12 @@ function setHdhrForm(settings) {
   $("hdhr-max-upstream-streams").value = settings.max_upstream_streams || 1;
   $("hdhr-stream-mode").value = settings.stream_mode || "direct";
   $("hdhr-conflict-policy").value = settings.conflict_policy || "reject_new";
+  $("hdhr-stream-cleanup-enabled").checked = settings.stream_cleanup_enabled !== false;
+  $("hdhr-max-stream-age-minutes").value = settings.max_stream_age_minutes || 240;
+  $("hdhr-idle-timeout-seconds").value = settings.idle_timeout_seconds ?? 120;
+  $("hdhr-cleanup-interval-seconds").value = settings.cleanup_interval_seconds || 30;
+  $("hdhr-scheduled-drop-enabled").checked = !!settings.scheduled_drop_enabled;
+  $("hdhr-scheduled-drop-time").value = settings.scheduled_drop_time || "04:00";
 }
 
 function hdhrPayloadFromForm() {
@@ -94,6 +100,12 @@ function hdhrPayloadFromForm() {
     max_upstream_streams: Number($("hdhr-max-upstream-streams").value || 1),
     stream_mode: $("hdhr-stream-mode").value,
     conflict_policy: $("hdhr-conflict-policy").value,
+    stream_cleanup_enabled: $("hdhr-stream-cleanup-enabled").checked,
+    max_stream_age_minutes: Number($("hdhr-max-stream-age-minutes").value || 240),
+    idle_timeout_seconds: Number($("hdhr-idle-timeout-seconds").value || 0),
+    cleanup_interval_seconds: Number($("hdhr-cleanup-interval-seconds").value || 30),
+    scheduled_drop_enabled: $("hdhr-scheduled-drop-enabled").checked,
+    scheduled_drop_time: $("hdhr-scheduled-drop-time").value || "04:00",
   };
 }
 

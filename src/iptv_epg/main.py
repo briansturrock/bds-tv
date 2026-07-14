@@ -41,7 +41,7 @@ from .diagnostics_routes import router as diagnostics_router
 from .epgshare_routes import router as epgshare_router
 from .epgshare_review_routes import router as epgshare_review_router
 from .guide_routes import router as guide_router
-from .hdhr import router as hdhr_router, start_ssdp_service, stop_ssdp_service
+from .hdhr import router as hdhr_router, start_ssdp_service, start_stream_safety_service, stop_ssdp_service
 from .m3u import fetch_and_index_m3u, generate_filtered_m3u
 from .scheduler import router as scheduler_router, start_scheduler_thread
 from .settings import FILTERED_EPG, FILTERED_M3U, ensure_runtime_dirs
@@ -99,6 +99,7 @@ def startup() -> None:
     ensure_runtime_dirs()
     init_db()
     start_ssdp_service()
+    start_stream_safety_service()
     start_scheduler_thread()
 
 

@@ -51,6 +51,12 @@ class HdhrSettingsIn(BaseModel):
     stream_mode: str = "direct"
     conflict_policy: str = "reject_new"
     ffmpeg_path: str = "ffmpeg"
+    stream_cleanup_enabled: bool = True
+    max_stream_age_minutes: int = Field(default=240, ge=1, le=1440)
+    idle_timeout_seconds: int = Field(default=120, ge=0, le=3600)
+    cleanup_interval_seconds: int = Field(default=30, ge=5, le=300)
+    scheduled_drop_enabled: bool = False
+    scheduled_drop_time: str = "04:00"
 
 
 @dataclass
@@ -65,6 +71,12 @@ class HdhrSettings:
     stream_mode: str
     conflict_policy: str
     ffmpeg_path: str
+    stream_cleanup_enabled: bool
+    max_stream_age_minutes: int
+    idle_timeout_seconds: int
+    cleanup_interval_seconds: int
+    scheduled_drop_enabled: bool
+    scheduled_drop_time: str
 
 
 @dataclass
@@ -74,12 +86,22 @@ class StreamSession:
     channel_name: str
     mode: str
     started_at: float
+    last_activity_at: float
+    bytes_sent: int = 0
     upstream: Any = None
     process: subprocess.Popen | None = None
 
 
 STREAM_LOCK = threading.Lock()
 ACTIVE_STREAMS: dict[str, StreamSession] = {}
+STREAM_SAFETY_THREAD: threading.Thread | None = None
+STREAM_SAFETY_STOP = threading.Event()
+STREAM_SAFETY_STATUS: dict[str, Any] = {
+    "running": False,
+    "last_cleanup_at": None,
+    "last_cleanup_reason": None,
+    "last_drop_at": None,
+}
 
 
 def bool_setting(key: str, default: bool) -> bool:
@@ -101,6 +123,19 @@ def int_setting(key: str, default: int, min_value: int, max_value: int) -> int:
 def normalise_base_url(value: str | None) -> str:
     cleaned = (value or "").strip().rstrip("/")
     return cleaned
+
+
+def normalise_hhmm(value: str | None, default: str = "04:00") -> str:
+    cleaned = (value or "").strip()
+    try:
+        hour_text, minute_text = cleaned.split(":", 1)
+        hour = int(hour_text)
+        minute = int(minute_text)
+    except ValueError:
+        return default
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        return default
+    return f"{hour:02d}:{minute:02d}"
 
 
 def get_or_create_device_id() -> str:
@@ -133,6 +168,12 @@ def get_hdhr_settings() -> HdhrSettings:
         stream_mode=stream_mode,
         conflict_policy=conflict_policy,
         ffmpeg_path=(get_setting("hdhr_ffmpeg_path", "ffmpeg") or "ffmpeg").strip() or "ffmpeg",
+        stream_cleanup_enabled=bool_setting("hdhr_stream_cleanup_enabled", True),
+        max_stream_age_minutes=int_setting("hdhr_max_stream_age_minutes", 240, 1, 1440),
+        idle_timeout_seconds=int_setting("hdhr_idle_timeout_seconds", 120, 0, 3600),
+        cleanup_interval_seconds=int_setting("hdhr_cleanup_interval_seconds", 30, 5, 300),
+        scheduled_drop_enabled=bool_setting("hdhr_scheduled_drop_enabled", False),
+        scheduled_drop_time=normalise_hhmm(get_setting("hdhr_scheduled_drop_time"), "04:00"),
     )
 
 
@@ -157,11 +198,18 @@ def save_hdhr_settings(payload: HdhrSettingsIn) -> HdhrSettings:
         "hdhr_stream_mode": stream_mode,
         "hdhr_conflict_policy": conflict_policy,
         "hdhr_ffmpeg_path": payload.ffmpeg_path.strip() or "ffmpeg",
+        "hdhr_stream_cleanup_enabled": "true" if payload.stream_cleanup_enabled else "false",
+        "hdhr_max_stream_age_minutes": str(max(1, min(payload.max_stream_age_minutes, 1440))),
+        "hdhr_idle_timeout_seconds": str(max(0, min(payload.idle_timeout_seconds, 3600))),
+        "hdhr_cleanup_interval_seconds": str(max(5, min(payload.cleanup_interval_seconds, 300))),
+        "hdhr_scheduled_drop_enabled": "true" if payload.scheduled_drop_enabled else "false",
+        "hdhr_scheduled_drop_time": normalise_hhmm(payload.scheduled_drop_time, "04:00"),
     }
     for key, value in values.items():
         set_setting(key, value)
 
     start_ssdp_service()
+    start_stream_safety_service()
     return get_hdhr_settings()
 
 
@@ -302,6 +350,8 @@ def active_status() -> dict[str, Any]:
                 "channel_name": session.channel_name,
                 "mode": session.mode,
                 "seconds": int(now - session.started_at),
+                "idle_seconds": int(now - session.last_activity_at),
+                "bytes_sent": session.bytes_sent,
             }
             for session in ACTIVE_STREAMS.values()
         ]
@@ -311,6 +361,7 @@ def active_status() -> dict[str, Any]:
         "active_upstream_count": len(sessions),
         "streams": sessions,
         "ssdp": dict(SSDP_STATUS),
+        "stream_safety": dict(STREAM_SAFETY_STATUS),
     }
 
 
@@ -345,13 +396,25 @@ def stop_all_proxy_streams() -> None:
         stop_stream_session(session_id)
 
 
+def record_stream_chunk(session: StreamSession, chunk: bytes) -> None:
+    now = time.time()
+    with STREAM_LOCK:
+        active = ACTIVE_STREAMS.get(session.session_id)
+        if not active:
+            return
+        active.last_activity_at = now
+        active.bytes_sent += len(chunk)
+
+
 def reserve_stream_session(channel: dict[str, Any], settings: HdhrSettings) -> StreamSession:
+    now = time.time()
     session = StreamSession(
         session_id=str(uuid.uuid4()),
         channel_id=channel["channel_id"],
         channel_name=str(channel["name"] or "Channel"),
         mode=settings.stream_mode,
-        started_at=time.time(),
+        started_at=now,
+        last_activity_at=now,
     )
 
     stream_limit = min(settings.tuner_count, settings.max_upstream_streams)
@@ -382,6 +445,7 @@ def direct_stream_iterator(session: StreamSession) -> Iterator[bytes]:
             chunk = session.upstream.read(1024 * 256)
             if not chunk:
                 break
+            record_stream_chunk(session, chunk)
             yield chunk
     finally:
         stop_stream_session(session.session_id)
@@ -456,9 +520,64 @@ def ffmpeg_stream_iterator(session: StreamSession) -> Iterator[bytes]:
             chunk = session.process.stdout.read(1024 * 256)
             if not chunk:
                 break
+            record_stream_chunk(session, chunk)
             yield chunk
     finally:
         stop_stream_session(session.session_id)
+
+
+def stream_safety_cleanup(settings: HdhrSettings) -> None:
+    if not settings.stream_cleanup_enabled:
+        return
+
+    now = time.time()
+    max_age_seconds = settings.max_stream_age_minutes * 60
+    idle_timeout = settings.idle_timeout_seconds
+    stale_sessions: list[tuple[str, str]] = []
+
+    with STREAM_LOCK:
+        for session in ACTIVE_STREAMS.values():
+            if now - session.started_at >= max_age_seconds:
+                stale_sessions.append((session.session_id, "max_age"))
+                continue
+            if idle_timeout and now - session.last_activity_at >= idle_timeout:
+                stale_sessions.append((session.session_id, "idle_timeout"))
+
+    for session_id, reason in stale_sessions:
+        stop_stream_session(session_id)
+        STREAM_SAFETY_STATUS["last_cleanup_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        STREAM_SAFETY_STATUS["last_cleanup_reason"] = reason
+
+
+def scheduled_drop_due(settings: HdhrSettings, last_drop_day: str | None) -> tuple[bool, str | None]:
+    if not settings.scheduled_drop_enabled:
+        return False, last_drop_day
+
+    now = time.localtime()
+    today = time.strftime("%Y-%m-%d", now)
+    if today == last_drop_day:
+        return False, last_drop_day
+
+    if time.strftime("%H:%M", now) == settings.scheduled_drop_time:
+        return True, today
+    return False, last_drop_day
+
+
+def stream_safety_loop() -> None:
+    last_drop_day: str | None = None
+    STREAM_SAFETY_STATUS["running"] = True
+    while not STREAM_SAFETY_STOP.is_set():
+        settings = get_hdhr_settings()
+        try:
+            stream_safety_cleanup(settings)
+            should_drop, last_drop_day = scheduled_drop_due(settings, last_drop_day)
+            if should_drop:
+                stop_all_proxy_streams()
+                STREAM_SAFETY_STATUS["last_drop_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        except Exception as exc:
+            STREAM_SAFETY_STATUS["last_cleanup_reason"] = f"error: {exc}"
+        STREAM_SAFETY_STOP.wait(settings.cleanup_interval_seconds)
+    STREAM_SAFETY_STATUS["running"] = False
 
 
 def hdhr_discovery_payload(base_url: str, settings: HdhrSettings) -> dict[str, Any]:
@@ -878,6 +997,20 @@ def start_ssdp_service() -> None:
     SSDP_THREAD.start()
 
 
+def start_stream_safety_service() -> None:
+    global STREAM_SAFETY_THREAD
+    if STREAM_SAFETY_THREAD and STREAM_SAFETY_THREAD.is_alive():
+        return
+    STREAM_SAFETY_STOP.clear()
+    STREAM_SAFETY_THREAD = threading.Thread(target=stream_safety_loop, name="hdhr-stream-safety", daemon=True)
+    STREAM_SAFETY_THREAD.start()
+
+
+def stop_stream_safety_service() -> None:
+    STREAM_SAFETY_STOP.set()
+
+
 def stop_ssdp_service() -> None:
     SSDP_STOP.set()
+    stop_stream_safety_service()
     stop_all_proxy_streams()
