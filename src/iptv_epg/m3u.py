@@ -177,13 +177,12 @@ def index_m3u(source_path: Path = SOURCE_M3U, job_id: str | None = None) -> dict
                 channel_id = channel_id_for_stable_key(stable_key)
 
                 existing = conn.execute(
-                    "SELECT selected, user_order, epg_xmltv_id FROM channels WHERE stable_key = ?",
+                    "SELECT selected, user_order FROM channels WHERE stable_key = ?",
                     (stable_key,),
                 ).fetchone()
 
                 selected = int(existing["selected"]) if existing else 0
                 user_order = existing["user_order"] if existing else None
-                epg_xmltv_id = existing["epg_xmltv_id"] if existing else None
 
                 conn.execute(
                     """
@@ -213,11 +212,10 @@ def index_m3u(source_path: Path = SOURCE_M3U, job_id: str | None = None) -> dict
                         provider_order,
                         user_order,
                         selected,
-                        epg_xmltv_id,
                         missing,
                         last_seen_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
                     ON CONFLICT(stable_key) DO UPDATE SET
                         group_id = excluded.group_id,
                         name = excluded.name,
@@ -229,7 +227,6 @@ def index_m3u(source_path: Path = SOURCE_M3U, job_id: str | None = None) -> dict
                         provider_order = excluded.provider_order,
                         user_order = COALESCE(channels.user_order, excluded.user_order),
                         selected = channels.selected,
-                        epg_xmltv_id = COALESCE(channels.epg_xmltv_id, excluded.epg_xmltv_id),
                         missing = 0,
                         last_seen_at = CURRENT_TIMESTAMP
                     """,
@@ -246,7 +243,6 @@ def index_m3u(source_path: Path = SOURCE_M3U, job_id: str | None = None) -> dict
                         entry.provider_order,
                         user_order,
                         selected,
-                        epg_xmltv_id,
                     ),
                 )
 

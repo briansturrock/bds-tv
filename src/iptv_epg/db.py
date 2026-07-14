@@ -72,7 +72,6 @@ SCHEMA: tuple[str, ...] = (
         provider_order INTEGER NOT NULL,
         user_order INTEGER,
         selected INTEGER NOT NULL DEFAULT 0,
-        epg_xmltv_id TEXT,
         first_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         missing INTEGER NOT NULL DEFAULT 0
@@ -85,38 +84,6 @@ SCHEMA: tuple[str, ...] = (
     """
     CREATE INDEX IF NOT EXISTS idx_channels_selected
     ON channels(selected, missing)
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS epg_sources (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        url TEXT NOT NULL,
-        enabled INTEGER NOT NULL DEFAULT 1,
-        source_type TEXT NOT NULL DEFAULT 'manual',
-        last_tested_at TEXT,
-        last_channel_count INTEGER,
-        last_match_count INTEGER,
-        last_error TEXT
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS epg_channels (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        source_id INTEGER NOT NULL REFERENCES epg_sources(id) ON DELETE CASCADE,
-        xmltv_id TEXT NOT NULL,
-        display_name TEXT NOT NULL,
-        last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(source_id, xmltv_id)
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS epg_mappings (
-        channel_id TEXT PRIMARY KEY REFERENCES channels(id) ON DELETE CASCADE,
-        source_id INTEGER REFERENCES epg_sources(id) ON DELETE SET NULL,
-        xmltv_id TEXT,
-        mapping_type TEXT NOT NULL DEFAULT 'auto',
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
     """,
     """
     CREATE TABLE IF NOT EXISTS jobs (
@@ -410,8 +377,7 @@ def get_channels(group_id: str, offset: int = 0, limit: int = 200) -> dict[str, 
                 COALESCE(NULLIF(preferred_logo_url, ''), logo_url) AS effective_logo_url,
                 provider_order,
                 user_order,
-                selected,
-                epg_xmltv_id
+                selected
             FROM channels
             WHERE group_id = ? AND missing = 0
             ORDER BY
@@ -696,8 +662,7 @@ def get_selected_channels() -> list[dict[str, Any]]:
                 groups.provider_order AS group_provider_order,
                 groups.user_order AS group_user_order,
                 channels.provider_order,
-                channels.user_order,
-                channels.epg_xmltv_id
+                channels.user_order
             FROM channels
             JOIN groups ON groups.id = channels.group_id
             WHERE channels.selected = 1

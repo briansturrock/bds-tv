@@ -54,17 +54,6 @@ DIAGNOSTIC_ENDPOINTS: list[dict[str, Any]] = [
     endpoint(category="Groups", name="Select group", method="POST", path="/api/groups/{group_id}/select", sample_path="/api/groups/PASTE_GROUP_ID_HERE/select", description="Selects or unselects every channel in one group.", sample_body={"selected": True}),
     endpoint(category="Groups", name="Order selected groups", method="POST", path="/api/groups/order", description="Saves manual selected-group order.", sample_body={"group_ids": ["PASTE_GROUP_ID_HERE"]}),
 
-    endpoint(category="EPG", name="List EPG sources", method="GET", path="/api/epg/sources", description="Lists configured EPG sources.", safe_auto_run=True),
-    endpoint(category="EPG", name="Add EPG source", method="POST", path="/api/epg/sources", description="Adds an EPG source.", sample_body={"name": "Manual XMLTV", "url": "https://example.com/epg.xml", "enabled": True, "source_type": "manual"}),
-    endpoint(category="EPG", name="Enable EPG source", method="POST", path="/api/epg/sources/{source_id}/enable", sample_path="/api/epg/sources/1/enable", description="Enables or disables an EPG source.", sample_body={"enabled": True}),
-    endpoint(category="EPG", name="Detect EPG sources", method="POST", path="/api/epg/detect", description="Attempts to detect EPG sources from the configured M3U/source."),
-    endpoint(category="EPG", name="Test EPG source", method="POST", path="/api/epg/test", description="Starts a backend EPG source test job."),
-    endpoint(category="EPG", name="Search EPG channels", method="GET", path="/api/epg/channels/search", sample_path="/api/epg/channels/search?q=bbc&limit=50", description="Searches scanned EPG channels."),
-    endpoint(category="EPG", name="Get EPG mappings", method="GET", path="/api/epg/mappings", description="Lists selected IPTV channels and their EPG mappings.", safe_auto_run=True),
-    endpoint(category="EPG", name="Save EPG mappings", method="POST", path="/api/epg/mappings", description="Saves manual EPG mappings.", sample_body={"mappings": [{"channel_id": "PASTE_CHANNEL_ID_HERE", "source_id": 1, "xmltv_id": "PASTE_XMLTV_ID_HERE", "mapping_type": "manual"}]}),
-    endpoint(category="EPG", name="Generate filtered EPG", method="POST", path="/api/epg/generate-filtered", sample_path="/api/epg/generate-filtered?days=3", description="Starts a backend job to generate filtered_epg.xml."),
-    endpoint(category="EPG", name="Open filtered EPG", method="GET", path="/filtered_epg.xml", description="Returns generated filtered_epg.xml."),
-
     endpoint(category="EPGShare", name="EPGShare status", method="GET", path="/api/epgshare/status", description="Shows EPGShare index status and indexed channel/source counts.", safe_auto_run=True),
     endpoint(category="EPGShare", name="Import EPGShare index", method="POST", path="/api/epgshare/index", description="Starts a backend job to import epg_ripper_ALL_SOURCES1.txt into SQLite."),
     endpoint(category="EPGShare", name="Search EPGShare index", method="GET", path="/api/epgshare/search", sample_path="/api/epgshare/search?q=BBC&limit=50", description="Searches the imported EPGShare channel index."),
@@ -76,6 +65,7 @@ DIAGNOSTIC_ENDPOINTS: list[dict[str, Any]] = [
     endpoint(category="EPGShare", name="EPGShare matching review UI", method="GET", path="/dev/epgshare-matching", description="Developer UI for reviewing and saving EPGShare channel mappings.", safe_auto_run=False),
 
     endpoint(category="EPGShare", name="Generate EPGShare filtered EPG", method="POST", path="/api/epgshare/generate-filtered", sample_path="/api/epgshare/generate-filtered?days=3", description="Generates filtered_epg.xml from saved EPGShare mappings only."),
+    endpoint(category="EPGShare", name="Open filtered EPG", method="GET", path="/filtered_epg.xml", description="Returns generated filtered_epg.xml."),
 
     endpoint(category="Guide", name="Guide groups", method="GET", path="/api/guide/groups", description="Lists only groups that contain selected channels.", safe_auto_run=True),
     endpoint(category="Guide", name="Guide for group", method="GET", path="/api/guide", sample_path="/api/guide?group_id=PASTE_GROUP_ID_HERE", description="Returns selected channels and programme data for one selected group.", safe_auto_run=False),
