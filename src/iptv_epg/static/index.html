@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <title>iptv_epg</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="/static/app.css?v=0.10.9" />
+  <link rel="stylesheet" href="/static/app.css?v=0.10.10" />
 </head>
 <body>
   <header class="app-header">
@@ -297,6 +297,13 @@
         </div>
 
         <div class="card">
+          <h2>HDHR group exclusions</h2>
+          <input id="hdhr-group-filter" type="search" placeholder="Filter groups" />
+          <div id="hdhr-groups-list" class="hdhr-groups-list"></div>
+          <p class="muted">Excluded groups stay selected everywhere else, but are hidden from Plex/HDHR.</p>
+        </div>
+
+        <div class="card">
           <h2>Endpoints</h2>
           <div class="hdhr-links">
             <a class="button" id="hdhr-discover-link" href="/discover.json" target="_blank" rel="noopener">discover.json</a>
@@ -352,6 +359,6 @@
 
   </main>
 
-  <script src="/static/app.js?v=0.10.9"></script>
+  <script src="/static/app.js?v=0.10.10"></script>
 </body>
 </html>

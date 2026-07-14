@@ -1438,6 +1438,35 @@ body:has(#tab-channels.active) {
   margin-bottom: 8px;
 }
 
+.hdhr-groups-list {
+  display: grid;
+  gap: 6px;
+  max-height: 360px;
+  overflow: auto;
+  margin-top: 10px;
+}
+
+.hdhr-group-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.hdhr-group-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hdhr-group-row small {
+  color: var(--muted);
+}
+
 
 /* Guide logo column contrast */
 .guide-time-corner,

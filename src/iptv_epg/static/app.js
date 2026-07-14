@@ -67,6 +67,8 @@ async function loadSettings() {
 
 const hdhrState = {
   loaded: false,
+  groups: [],
+  groupFilter: "",
 };
 
 function setHdhrForm(settings) {
@@ -90,6 +92,32 @@ function setHdhrForm(settings) {
   $("hdhr-scheduled-drop-time").value = settings.scheduled_drop_time || "04:00";
 }
 
+function renderHdhrGroups() {
+  const list = $("hdhr-groups-list");
+  if (!list) return;
+  const q = hdhrState.groupFilter.trim().toLowerCase();
+  const groups = hdhrState.groups.filter((group) => !q || group.name.toLowerCase().includes(q));
+  if (!groups.length) {
+    list.innerHTML = `<div class="hdhr-group-row muted">No selected groups found.</div>`;
+    return;
+  }
+  list.innerHTML = groups
+    .map(
+      (group) => `
+        <label class="hdhr-group-row">
+          <input type="checkbox" class="hdhr-group-exclude" data-group-id="${group.id}" ${group.excluded ? "checked" : ""} />
+          <span>${group.name}</span>
+          <small>${group.selected_count || 0}</small>
+        </label>
+      `
+    )
+    .join("");
+}
+
+function hdhrExcludedGroupIdsFromForm() {
+  return [...document.querySelectorAll(".hdhr-group-exclude:checked")].map((input) => input.dataset.groupId);
+}
+
 function hdhrPayloadFromForm() {
   return {
     enabled: $("hdhr-enabled").checked,
@@ -98,6 +126,7 @@ function hdhrPayloadFromForm() {
     public_base_url: $("hdhr-public-base-url").value.trim(),
     ffmpeg_path: $("hdhr-ffmpeg-path").value.trim() || "ffmpeg",
     channel_limit: Number($("hdhr-channel-limit").value || 450),
+    excluded_group_ids: hdhrExcludedGroupIdsFromForm(),
     tuner_count: Number($("hdhr-tuner-count").value || 1),
     max_upstream_streams: Number($("hdhr-max-upstream-streams").value || 1),
     stream_mode: $("hdhr-stream-mode").value,
@@ -126,6 +155,8 @@ function updateHdhrLinks(settings) {
 async function loadHdhr() {
   const body = await api("/api/hdhr/settings");
   setHdhrForm(body.settings || {});
+  hdhrState.groups = body.groups || [];
+  renderHdhrGroups();
   updateHdhrLinks(body.settings || {});
   renderJson("hdhr-json", body);
   hdhrState.loaded = true;
@@ -140,6 +171,8 @@ async function saveHdhr() {
     body: JSON.stringify(hdhrPayloadFromForm()),
   });
   setHdhrForm(body.settings || {});
+  hdhrState.groups = body.groups || [];
+  renderHdhrGroups();
   updateHdhrLinks(body.settings || {});
   renderJson("hdhr-json", body);
   setMessage("hdhr-message", "HDHR settings saved.");
@@ -638,6 +671,10 @@ function wireEvents() {
 
   $("hdhr-stop-streams").addEventListener("click", () => {
     stopHdhrStreams().catch((err) => setMessage("hdhr-message", `Stop failed: ${err.message}`, true));
+  });
+  $("hdhr-group-filter").addEventListener("input", (event) => {
+    hdhrState.groupFilter = event.target.value;
+    renderHdhrGroups();
   });
 }
 

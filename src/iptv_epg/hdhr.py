@@ -8,6 +8,7 @@ import time
 import uuid
 from collections import deque
 from dataclasses import dataclass
+import json
 from typing import Any, Deque, Iterator
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
@@ -18,7 +19,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from .db import connect, get_selected_channels, get_setting, set_setting
+from .db import connect, get_groups, get_selected_channels, get_setting, set_setting
 from .m3u import extinf_with_logo
 from .settings import DATA_DIR, FILTERED_EPG
 
@@ -46,6 +47,7 @@ class HdhrSettingsIn(BaseModel):
     device_name: str = "iptv-epg"
     device_id: str | None = None
     channel_limit: int = Field(default=450, ge=1, le=5000)
+    excluded_group_ids: list[str] = Field(default_factory=list)
     tuner_count: int = Field(default=1, ge=1, le=16)
     max_upstream_streams: int = Field(default=1, ge=1, le=16)
     public_base_url: str = ""
@@ -68,6 +70,7 @@ class HdhrSettings:
     device_name: str
     device_id: str
     channel_limit: int
+    excluded_group_ids: list[str]
     tuner_count: int
     max_upstream_streams: int
     public_base_url: str
@@ -133,6 +136,19 @@ def int_setting(key: str, default: int, min_value: int, max_value: int) -> int:
     return max(min_value, min(parsed, max_value))
 
 
+def list_setting(key: str) -> list[str]:
+    value = get_setting(key)
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [str(item) for item in parsed if str(item).strip()]
+
+
 def normalise_base_url(value: str | None) -> str:
     cleaned = (value or "").strip().rstrip("/")
     return cleaned
@@ -175,6 +191,7 @@ def get_hdhr_settings() -> HdhrSettings:
         device_name=(get_setting("hdhr_device_name", "iptv-epg") or "iptv-epg").strip() or "iptv-epg",
         device_id=get_or_create_device_id(),
         channel_limit=int_setting("hdhr_channel_limit", 450, 1, 5000),
+        excluded_group_ids=list_setting("hdhr_excluded_group_ids"),
         tuner_count=int_setting("hdhr_tuner_count", 1, 1, 16),
         max_upstream_streams=int_setting("hdhr_max_upstream_streams", 1, 1, 16),
         public_base_url=normalise_base_url(get_setting("hdhr_public_base_url")),
@@ -207,6 +224,7 @@ def save_hdhr_settings(payload: HdhrSettingsIn) -> HdhrSettings:
         "hdhr_device_name": payload.device_name.strip() or "iptv-epg",
         "hdhr_device_id": device_id,
         "hdhr_channel_limit": str(max(1, min(payload.channel_limit, 5000))),
+        "hdhr_excluded_group_ids": json.dumps(sorted({gid for gid in payload.excluded_group_ids if gid})),
         "hdhr_tuner_count": str(max(1, min(payload.tuner_count, 16))),
         "hdhr_max_upstream_streams": str(max(1, min(payload.max_upstream_streams, 16))),
         "hdhr_public_base_url": normalise_base_url(payload.public_base_url),
@@ -264,16 +282,20 @@ def selected_channel_row(channel_id: str) -> dict[str, Any]:
     return dict(row)
 
 
-def selected_catalogue_channels(limit: int | None = None) -> list[dict[str, Any]]:
+def selected_catalogue_channels(limit: int | None = None, excluded_group_ids: set[str] | None = None) -> list[dict[str, Any]]:
     channels = []
-    for index, channel in enumerate(get_selected_channels(), start=1):
-        if limit is not None and index > limit:
+    excluded_group_ids = excluded_group_ids or set()
+    for channel in get_selected_channels():
+        if str(channel.get("group_id") or "") in excluded_group_ids:
+            continue
+        number = len(channels) + 1
+        if limit is not None and number > limit:
             break
         channels.append(
             {
-                "number": index,
+                "number": number,
                 "channel_id": channel["id"],
-                "name": channel.get("name") or channel.get("tvg_name") or f"Channel {index}",
+                "name": channel.get("name") or channel.get("tvg_name") or f"Channel {number}",
                 "tvg_name": channel.get("tvg_name") or "",
                 "tvg_id": channel.get("tvg_id") or "",
                 "group_id": channel.get("group_id") or "",
@@ -288,7 +310,7 @@ def selected_catalogue_channels(limit: int | None = None) -> list[dict[str, Any]
 
 def hdhr_catalogue_channels(settings: HdhrSettings | None = None) -> list[dict[str, Any]]:
     settings = settings or get_hdhr_settings()
-    return selected_catalogue_channels(settings.channel_limit)
+    return selected_catalogue_channels(settings.channel_limit, set(settings.excluded_group_ids))
 
 
 def selected_catalogue_groups(channels: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
@@ -736,6 +758,24 @@ def generate_hdhr_m3u(base_url: str, settings: HdhrSettings | None = None) -> di
     return {"path": str(HDHR_PROXY_M3U), "selected_count": len(rows)}
 
 
+def hdhr_group_options(settings: HdhrSettings | None = None) -> list[dict[str, Any]]:
+    settings = settings or get_hdhr_settings()
+    excluded = set(settings.excluded_group_ids)
+    groups = []
+    for group in get_groups():
+        if int(group.get("selected_count") or 0) <= 0:
+            continue
+        groups.append(
+            {
+                "id": group["id"],
+                "name": group["name"],
+                "selected_count": int(group.get("selected_count") or 0),
+                "excluded": group["id"] in excluded,
+            }
+        )
+    return groups
+
+
 def serialize_xmltv_element(elem: ET.Element) -> str:
     return ET.tostring(elem, encoding="unicode", short_empty_elements=True)
 
@@ -806,6 +846,7 @@ def api_hdhr_settings(request: Request) -> dict:
             **settings.__dict__,
             "resolved_base_url": base_url_for_request(request, settings),
         },
+        "groups": hdhr_group_options(settings),
         "status": active_status(),
     }
 
@@ -819,6 +860,7 @@ def api_save_hdhr_settings(payload: HdhrSettingsIn, request: Request) -> dict:
             **settings.__dict__,
             "resolved_base_url": base_url_for_request(request, settings),
         },
+        "groups": hdhr_group_options(settings),
         "status": active_status(),
     }
 

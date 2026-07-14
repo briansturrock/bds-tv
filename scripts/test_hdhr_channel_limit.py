@@ -50,14 +50,18 @@ def main() -> None:
     original = hdhr.get_selected_channels
     try:
         hdhr.get_selected_channels = lambda: [
-            {"id": "a", "name": "A", "tvg_id": "A.tv", "group_id": "g", "group_name": "Group", "stream_url": "http://a"},
-            {"id": "b", "name": "B", "tvg_id": "B.tv", "group_id": "g", "group_name": "Group", "stream_url": "http://b"},
-            {"id": "c", "name": "C", "tvg_id": "C.tv", "group_id": "g", "group_name": "Group", "stream_url": "http://c"},
+            {"id": "a", "name": "A", "tvg_id": "A.tv", "group_id": "g1", "group_name": "Group 1", "stream_url": "http://a"},
+            {"id": "b", "name": "B", "tvg_id": "B.tv", "group_id": "skip", "group_name": "Skip", "stream_url": "http://b"},
+            {"id": "c", "name": "C", "tvg_id": "C.tv", "group_id": "g2", "group_name": "Group 2", "stream_url": "http://c"},
+            {"id": "d", "name": "D", "tvg_id": "D.tv", "group_id": "g2", "group_name": "Group 2", "stream_url": "http://d"},
         ]
         channels = hdhr.selected_catalogue_channels(limit=2)
         check([channel["number"] for channel in channels] == [1, 2], "limited channel numbers should be contiguous")
         check([channel["channel_id"] for channel in channels] == ["a", "b"], "channel limit should keep the first selected channels")
-        rows = hdhr.lineup_rows("http://example", types.SimpleNamespace(channel_limit=2))
+        filtered = hdhr.selected_catalogue_channels(limit=2, excluded_group_ids={"skip"})
+        check([channel["channel_id"] for channel in filtered] == ["a", "c"], "excluded groups should be removed before HDHR limit")
+        check([channel["number"] for channel in filtered] == [1, 2], "filtered channel numbers should stay contiguous")
+        rows = hdhr.lineup_rows("http://example", types.SimpleNamespace(channel_limit=2, excluded_group_ids=["skip"]))
         check([row["GuideNumber"] for row in rows] == ["1", "2"], "lineup should respect the channel limit")
         check(rows[-1]["URL"] == "http://example/auto/v2", "lineup URL should use limited numbering")
     finally:
