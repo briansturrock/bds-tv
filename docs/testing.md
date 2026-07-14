@@ -20,6 +20,7 @@ python scripts/test_m3u_parser.py
 python scripts/test_epg_unknown.py
 python scripts/test_hdhr_channel_limit.py
 python scripts/test_hdhr_stream_safety.py
+python scripts/test_hdhr_buffered_stream.py
 ```
 
 ## Image save/load

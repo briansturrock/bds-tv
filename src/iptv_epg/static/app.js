@@ -79,6 +79,8 @@ function setHdhrForm(settings) {
   $("hdhr-tuner-count").value = settings.tuner_count || 1;
   $("hdhr-max-upstream-streams").value = settings.max_upstream_streams || 1;
   $("hdhr-stream-mode").value = settings.stream_mode || "direct";
+  $("hdhr-buffer-seconds").value = settings.buffer_seconds ?? 30;
+  $("hdhr-buffer-max-mb").value = settings.buffer_max_mb || 256;
   $("hdhr-conflict-policy").value = settings.conflict_policy || "reject_new";
   $("hdhr-stream-cleanup-enabled").checked = settings.stream_cleanup_enabled !== false;
   $("hdhr-max-stream-age-minutes").value = settings.max_stream_age_minutes || 240;
@@ -99,6 +101,8 @@ function hdhrPayloadFromForm() {
     tuner_count: Number($("hdhr-tuner-count").value || 1),
     max_upstream_streams: Number($("hdhr-max-upstream-streams").value || 1),
     stream_mode: $("hdhr-stream-mode").value,
+    buffer_seconds: Number($("hdhr-buffer-seconds").value || 0),
+    buffer_max_mb: Number($("hdhr-buffer-max-mb").value || 256),
     conflict_policy: $("hdhr-conflict-policy").value,
     stream_cleanup_enabled: $("hdhr-stream-cleanup-enabled").checked,
     max_stream_age_minutes: Number($("hdhr-max-stream-age-minutes").value || 240),

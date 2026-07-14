@@ -6,8 +6,9 @@ import subprocess
 import threading
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass
-from typing import Any, Iterator
+from typing import Any, Deque, Iterator
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
@@ -51,6 +52,8 @@ class HdhrSettingsIn(BaseModel):
     stream_mode: str = "direct"
     conflict_policy: str = "reject_new"
     ffmpeg_path: str = "ffmpeg"
+    buffer_seconds: int = Field(default=30, ge=0, le=120)
+    buffer_max_mb: int = Field(default=256, ge=16, le=2048)
     stream_cleanup_enabled: bool = True
     max_stream_age_minutes: int = Field(default=240, ge=1, le=1440)
     idle_timeout_seconds: int = Field(default=120, ge=0, le=3600)
@@ -71,6 +74,8 @@ class HdhrSettings:
     stream_mode: str
     conflict_policy: str
     ffmpeg_path: str
+    buffer_seconds: int
+    buffer_max_mb: int
     stream_cleanup_enabled: bool
     max_stream_age_minutes: int
     idle_timeout_seconds: int
@@ -88,8 +93,16 @@ class StreamSession:
     started_at: float
     last_activity_at: float
     bytes_sent: int = 0
+    buffer_bytes: int = 0
+    buffer_target_seconds: int = 0
     upstream: Any = None
     process: subprocess.Popen | None = None
+
+
+@dataclass
+class BufferedChunk:
+    data: bytes
+    read_at: float
 
 
 STREAM_LOCK = threading.Lock()
@@ -150,7 +163,7 @@ def get_or_create_device_id() -> str:
 
 def get_hdhr_settings() -> HdhrSettings:
     stream_mode = (get_setting("hdhr_stream_mode", "direct") or "direct").strip().lower()
-    if stream_mode not in {"direct", "ffmpeg"}:
+    if stream_mode not in {"direct", "ffmpeg", "buffered"}:
         stream_mode = "direct"
 
     conflict_policy = (get_setting("hdhr_conflict_policy", "reject_new") or "reject_new").strip().lower()
@@ -168,6 +181,8 @@ def get_hdhr_settings() -> HdhrSettings:
         stream_mode=stream_mode,
         conflict_policy=conflict_policy,
         ffmpeg_path=(get_setting("hdhr_ffmpeg_path", "ffmpeg") or "ffmpeg").strip() or "ffmpeg",
+        buffer_seconds=int_setting("hdhr_buffer_seconds", 30, 0, 120),
+        buffer_max_mb=int_setting("hdhr_buffer_max_mb", 256, 16, 2048),
         stream_cleanup_enabled=bool_setting("hdhr_stream_cleanup_enabled", True),
         max_stream_age_minutes=int_setting("hdhr_max_stream_age_minutes", 240, 1, 1440),
         idle_timeout_seconds=int_setting("hdhr_idle_timeout_seconds", 120, 0, 3600),
@@ -180,7 +195,7 @@ def get_hdhr_settings() -> HdhrSettings:
 def save_hdhr_settings(payload: HdhrSettingsIn) -> HdhrSettings:
     device_id = (payload.device_id or "").strip().upper() or get_or_create_device_id()
     stream_mode = payload.stream_mode.strip().lower()
-    if stream_mode not in {"direct", "ffmpeg"}:
+    if stream_mode not in {"direct", "ffmpeg", "buffered"}:
         stream_mode = "direct"
 
     conflict_policy = payload.conflict_policy.strip().lower()
@@ -198,6 +213,8 @@ def save_hdhr_settings(payload: HdhrSettingsIn) -> HdhrSettings:
         "hdhr_stream_mode": stream_mode,
         "hdhr_conflict_policy": conflict_policy,
         "hdhr_ffmpeg_path": payload.ffmpeg_path.strip() or "ffmpeg",
+        "hdhr_buffer_seconds": str(max(0, min(payload.buffer_seconds, 120))),
+        "hdhr_buffer_max_mb": str(max(16, min(payload.buffer_max_mb, 2048))),
         "hdhr_stream_cleanup_enabled": "true" if payload.stream_cleanup_enabled else "false",
         "hdhr_max_stream_age_minutes": str(max(1, min(payload.max_stream_age_minutes, 1440))),
         "hdhr_idle_timeout_seconds": str(max(0, min(payload.idle_timeout_seconds, 3600))),
@@ -352,6 +369,8 @@ def active_status() -> dict[str, Any]:
                 "seconds": int(now - session.started_at),
                 "idle_seconds": int(now - session.last_activity_at),
                 "bytes_sent": session.bytes_sent,
+                "buffer_bytes": session.buffer_bytes,
+                "buffer_target_seconds": session.buffer_target_seconds,
             }
             for session in ACTIVE_STREAMS.values()
         ]
@@ -406,6 +425,13 @@ def record_stream_chunk(session: StreamSession, chunk: bytes) -> None:
         active.bytes_sent += len(chunk)
 
 
+def set_stream_buffer_bytes(session: StreamSession, buffer_bytes: int) -> None:
+    with STREAM_LOCK:
+        active = ACTIVE_STREAMS.get(session.session_id)
+        if active:
+            active.buffer_bytes = buffer_bytes
+
+
 def reserve_stream_session(channel: dict[str, Any], settings: HdhrSettings) -> StreamSession:
     now = time.time()
     session = StreamSession(
@@ -415,6 +441,7 @@ def reserve_stream_session(channel: dict[str, Any], settings: HdhrSettings) -> S
         mode=settings.stream_mode,
         started_at=now,
         last_activity_at=now,
+        buffer_target_seconds=settings.buffer_seconds if settings.stream_mode == "buffered" else 0,
     )
 
     stream_limit = min(settings.tuner_count, settings.max_upstream_streams)
@@ -524,6 +551,74 @@ def ffmpeg_stream_iterator(session: StreamSession) -> Iterator[bytes]:
             yield chunk
     finally:
         stop_stream_session(session.session_id)
+
+
+def buffered_ffmpeg_stream_iterator(session: StreamSession, buffer_seconds: int, buffer_max_mb: int) -> Iterator[bytes]:
+    chunks: Deque[BufferedChunk] = deque()
+    max_buffer_bytes = buffer_max_mb * 1024 * 1024
+    buffered_bytes = 0
+    done = False
+    condition = threading.Condition()
+
+    def reader() -> None:
+        nonlocal buffered_bytes, done
+        try:
+            if session.process is None or session.process.stdout is None:
+                return
+
+            while True:
+                chunk = session.process.stdout.read(1024 * 256)
+                if not chunk:
+                    break
+                item = BufferedChunk(data=chunk, read_at=time.monotonic())
+                with condition:
+                    while buffered_bytes + len(chunk) > max_buffer_bytes and not STREAM_SAFETY_STOP.is_set():
+                        condition.wait(timeout=0.25)
+                    chunks.append(item)
+                    buffered_bytes += len(chunk)
+                    set_stream_buffer_bytes(session, buffered_bytes)
+                    condition.notify_all()
+        finally:
+            with condition:
+                done = True
+                condition.notify_all()
+
+    thread = threading.Thread(target=reader, name=f"hdhr-buffer-{session.session_id[:8]}", daemon=True)
+    thread.start()
+
+    try:
+        while True:
+            with condition:
+                while not chunks and not done:
+                    condition.wait(timeout=0.25)
+                if not chunks and done:
+                    break
+                item = chunks[0]
+
+            release_at = item.read_at + buffer_seconds
+            wait_for = release_at - time.monotonic()
+            if wait_for > 0:
+                time.sleep(min(wait_for, 0.25))
+                continue
+
+            with condition:
+                if not chunks:
+                    continue
+                item = chunks.popleft()
+                buffered_bytes -= len(item.data)
+                set_stream_buffer_bytes(session, buffered_bytes)
+                condition.notify_all()
+
+            record_stream_chunk(session, item.data)
+            yield item.data
+    finally:
+        stop_stream_session(session.session_id)
+        with condition:
+            done = True
+            chunks.clear()
+            buffered_bytes = 0
+            set_stream_buffer_bytes(session, 0)
+            condition.notify_all()
 
 
 def stream_safety_cleanup(settings: HdhrSettings) -> None:
@@ -793,7 +888,10 @@ def hdhr_stream_channel(channel_id: str) -> StreamingResponse:
     channel = selected_channel_row(channel_id)
     session = reserve_stream_session(channel, settings)
 
-    if settings.stream_mode == "ffmpeg":
+    if settings.stream_mode == "buffered":
+        open_ffmpeg_process(session, channel["stream_url"], settings.ffmpeg_path)
+        iterator = buffered_ffmpeg_stream_iterator(session, settings.buffer_seconds, settings.buffer_max_mb)
+    elif settings.stream_mode == "ffmpeg":
         open_ffmpeg_process(session, channel["stream_url"], settings.ffmpeg_path)
         iterator = ffmpeg_stream_iterator(session)
     else:
