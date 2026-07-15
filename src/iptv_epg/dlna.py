@@ -34,8 +34,8 @@ router = APIRouter(tags=["dlna"])
 
 CONTENT_DIRECTORY_SERVICE = "urn:schemas-upnp-org:service:ContentDirectory:1"
 CONNECTION_MANAGER_SERVICE = "urn:schemas-upnp-org:service:ConnectionManager:1"
-DLNA_STREAM_MEDIA_TYPE = "video/vnd.dlna.mpeg-tts"
-DLNA_CONTENT_FEATURES = "DLNA.ORG_PN=AVC_TS_MP_HD_AAC_MULT5;DLNA.ORG_OP=01;DLNA.ORG_CI=0"
+DLNA_STREAM_MEDIA_TYPE = "video/mpeg"
+DLNA_CONTENT_FEATURES = "DLNA.ORG_PN=MPEG_TS_SD_EU_ISO;DLNA.ORG_FLAGS=8D100000000000000000000000000000"
 DLNA_VIDEO_PROTOCOL = f"http-get:*:{DLNA_STREAM_MEDIA_TYPE}:{DLNA_CONTENT_FEATURES}"
 DLNA_STREAM_HEADERS = {
     "Accept-Ranges": "bytes",
@@ -268,7 +268,8 @@ def didl_container(container_id: str, parent_id: str, title: str, child_count: i
     return (
         f'<container id="{html.escape(container_id)}" parentID="{html.escape(parent_id)}" restricted="1" childCount="{child_count}">'
         f"<dc:title>{html.escape(title)}</dc:title>"
-        "<upnp:class>object.container.storageFolder</upnp:class>"
+        "<upnp:class>object.container</upnp:class>"
+        "<dlna:containerType>Tuner_1_0</dlna:containerType>"
         "</container>"
     )
 
@@ -279,8 +280,10 @@ def didl_channel(channel: dict[str, Any], parent_id: str, base_url: str) -> str:
     icon = f'<upnp:albumArtURI>{html.escape(logo)}</upnp:albumArtURI>' if logo else ""
     return (
         f'<item id="channel:{html.escape(channel["channel_id"])}" parentID="{html.escape(parent_id)}" restricted="1">'
-        f"<dc:title>{html.escape(channel['name'])}</dc:title>"
-        "<upnp:class>object.item.videoItem</upnp:class>"
+        f"<dc:title>{html.escape(str(channel['number']))} {html.escape(channel['name'])}</dc:title>"
+        "<upnp:class>object.item.videoItem.videoBroadcast</upnp:class>"
+        f"<upnp:channelNr>{html.escape(str(channel['number']))}</upnp:channelNr>"
+        f"<upnp:channelName>{html.escape(channel['name'])}</upnp:channelName>"
         f"{icon}"
         f'<res protocolInfo="{DLNA_VIDEO_PROTOCOL}">{html.escape(url)}</res>'
         "</item>"
@@ -291,6 +294,7 @@ def didl_wrap(children: list[str]) -> str:
     return (
         '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" '
         'xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" '
+        'xmlns:dlna="urn:schemas-dlna-org:metadata-1-0/" '
         'xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">'
         + "".join(children)
         + "</DIDL-Lite>"
