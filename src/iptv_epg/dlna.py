@@ -35,7 +35,7 @@ DLNA_STREAM_MEDIA_TYPE = "video/vnd.dlna.mpeg-tts"
 DLNA_CONTENT_FEATURES = "DLNA.ORG_PN=AVC_TS_MP_HD_AAC_MULT5;DLNA.ORG_OP=01;DLNA.ORG_CI=0"
 DLNA_VIDEO_PROTOCOL = f"http-get:*:{DLNA_STREAM_MEDIA_TYPE}:{DLNA_CONTENT_FEATURES}"
 DLNA_STREAM_HEADERS = {
-    "Accept-Ranges": "none",
+    "Accept-Ranges": "bytes",
     "Cache-Control": "no-store",
     "Connection": "close",
     "contentFeatures.dlna.org": DLNA_CONTENT_FEATURES,
