@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <title>iptv_epg</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="/static/app.css?v=0.11.4" />
+  <link rel="stylesheet" href="/static/app.css?v=0.11.5" />
 </head>
 <body>
   <header class="app-header">
@@ -367,6 +367,10 @@
 
       <div class="card">
         <h2>Status</h2>
+        <div class="button-row">
+          <button id="dlna-refresh-requests">Refresh request log</button>
+          <button id="dlna-clear-requests">Clear request log</button>
+        </div>
         <pre id="dlna-json" class="json-box">{}</pre>
       </div>
     </section>
@@ -407,6 +411,6 @@
 
   </main>
 
-  <script src="/static/app.js?v=0.11.4"></script>
+  <script src="/static/app.js?v=0.11.5"></script>
 </body>
 </html>

@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import html
 import subprocess
+import threading
+import time
 import xml.etree.ElementTree as ET
+from collections import deque
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Deque
 from urllib.parse import unquote, urljoin
 
 from fastapi import APIRouter, HTTPException, Request
@@ -36,6 +39,9 @@ DLNA_STREAM_HEADERS = {
     "Connection": "close",
     "X-Accel-Buffering": "no",
 }
+DLNA_REQUEST_LOG_LIMIT = 100
+DLNA_REQUEST_LOG: Deque[dict[str, Any]] = deque(maxlen=DLNA_REQUEST_LOG_LIMIT)
+DLNA_REQUEST_LOG_LOCK = threading.Lock()
 
 
 class DlnaSettingsIn(BaseModel):
@@ -62,6 +68,44 @@ def bool_setting(key: str, default: bool) -> bool:
 
 def normalise_base_url(value: str | None) -> str:
     return (value or "").strip().rstrip("/")
+
+
+def interesting_headers(request: Request) -> dict[str, str]:
+    names = [
+        "user-agent",
+        "range",
+        "accept",
+        "transfermode.dlna.org",
+        "getcontentfeatures.dlna.org",
+        "soapaction",
+    ]
+    return {name: request.headers[name] for name in names if name in request.headers}
+
+
+def log_dlna_request(request: Request, event: str, **extra: Any) -> None:
+    client = f"{request.client.host}:{request.client.port}" if request.client else None
+    entry = {
+        "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "event": event,
+        "method": request.method,
+        "path": request.url.path,
+        "query": request.url.query,
+        "client": client,
+        "headers": interesting_headers(request),
+        **extra,
+    }
+    with DLNA_REQUEST_LOG_LOCK:
+        DLNA_REQUEST_LOG.appendleft(entry)
+
+
+def recent_dlna_requests() -> list[dict[str, Any]]:
+    with DLNA_REQUEST_LOG_LOCK:
+        return list(DLNA_REQUEST_LOG)
+
+
+def clear_dlna_requests() -> None:
+    with DLNA_REQUEST_LOG_LOCK:
+        DLNA_REQUEST_LOG.clear()
 
 
 def get_dlna_settings() -> DlnaSettings:
@@ -340,6 +384,7 @@ def api_dlna_settings(request: Request) -> dict:
         "ok": True,
         "settings": {**settings.__dict__, "resolved_base_url": base_url},
         "status": {"channel_count": len(channels), "group_count": len(groups), "device_url": dlna_location(base_url)},
+        "recent_requests": recent_dlna_requests(),
     }
 
 
@@ -352,11 +397,24 @@ def api_save_dlna_settings(payload: DlnaSettingsIn, request: Request) -> dict:
         "ok": True,
         "settings": {**settings.__dict__, "resolved_base_url": base_url},
         "status": {"channel_count": len(channels), "group_count": len(groups), "device_url": dlna_location(base_url)},
+        "recent_requests": recent_dlna_requests(),
     }
+
+
+@router.get("/api/dlna/requests")
+def api_dlna_requests() -> dict:
+    return {"ok": True, "requests": recent_dlna_requests()}
+
+
+@router.delete("/api/dlna/requests")
+def api_clear_dlna_requests() -> dict:
+    clear_dlna_requests()
+    return {"ok": True, "requests": []}
 
 
 @router.get("/dlna/device.xml")
 def dlna_device(request: Request) -> Response:
+    log_dlna_request(request, "device")
     settings = get_dlna_settings()
     return Response(device_description_xml(base_url_for_request(request, settings), settings), media_type="application/xml")
 
@@ -390,12 +448,27 @@ async def content_directory_control(request: Request) -> Response:
         payload = "<Id>1</Id>"
     else:
         action_name = "Browse"
+        object_id = xml_text(root, "ObjectID", "0")
+        browse_flag = xml_text(root, "BrowseFlag", "BrowseDirectChildren")
+        starting_index = xml_int(root, "StartingIndex", 0)
+        requested_count = xml_int(root, "RequestedCount", 0)
         result, returned, total = browse_result(
-            xml_text(root, "ObjectID", "0"),
+            object_id,
             base_url_for_request(request),
-            xml_int(root, "StartingIndex", 0),
-            xml_int(root, "RequestedCount", 0),
-            xml_text(root, "BrowseFlag", "BrowseDirectChildren"),
+            starting_index,
+            requested_count,
+            browse_flag,
+        )
+        log_dlna_request(
+            request,
+            "content_directory",
+            action=action_name,
+            object_id=object_id,
+            browse_flag=browse_flag,
+            starting_index=starting_index,
+            requested_count=requested_count,
+            returned=returned,
+            total=total,
         )
         payload = (
             f"<Result>{html.escape(result)}</Result>"
@@ -403,11 +476,14 @@ async def content_directory_control(request: Request) -> Response:
             f"<TotalMatches>{total}</TotalMatches>"
             "<UpdateID>1</UpdateID>"
         )
+    if action_name != "Browse":
+        log_dlna_request(request, "content_directory", action=action_name)
     return Response(soap_response(action_name, CONTENT_DIRECTORY_SERVICE, payload), media_type="text/xml; charset=utf-8")
 
 
 @router.post("/dlna/control/connection-manager")
 async def connection_manager_control(request: Request) -> Response:
+    log_dlna_request(request, "connection_manager")
     payload = f"<Source>{DLNA_VIDEO_PROTOCOL}</Source><Sink></Sink>"
     return Response(soap_response("GetProtocolInfo", CONNECTION_MANAGER_SERVICE, payload), media_type="text/xml; charset=utf-8")
 
@@ -419,9 +495,10 @@ def dlna_event() -> PlainTextResponse:
 
 
 @router.get("/dlna/channel/{channel_id}", response_model=None)
-def dlna_stream_channel(channel_id: str) -> StreamingResponse:
+def dlna_stream_channel(channel_id: str, request: Request) -> StreamingResponse:
     clean_channel_id = channel_id[:-4] if channel_id.endswith(".mpg") else channel_id
     settings = get_dlna_settings()
+    log_dlna_request(request, "stream_get", channel_id=clean_channel_id, stream_mode=settings.stream_mode)
     if settings.stream_mode == "transcode":
         response = dlna_transcoded_stream(clean_channel_id)
     else:
@@ -435,15 +512,16 @@ def dlna_stream_channel(channel_id: str) -> StreamingResponse:
 
 
 @router.get("/dlna/channel/{channel_id}.mpg", response_model=None)
-def dlna_stream_channel_mpg(channel_id: str) -> StreamingResponse:
-    return dlna_stream_channel(channel_id)
+def dlna_stream_channel_mpg(channel_id: str, request: Request) -> StreamingResponse:
+    return dlna_stream_channel(channel_id, request)
 
 
 @router.head("/dlna/channel/{channel_id}", response_model=None)
 @router.head("/dlna/channel/{channel_id}.mpg", response_model=None)
-def dlna_stream_head(channel_id: str) -> Response:
+def dlna_stream_head(channel_id: str, request: Request) -> Response:
     clean_channel_id = channel_id[:-4] if channel_id.endswith(".mpg") else channel_id
     selected_channel_row(clean_channel_id)
+    log_dlna_request(request, "stream_head", channel_id=clean_channel_id)
     headers = {
         **DLNA_STREAM_HEADERS,
         "Content-Type": DLNA_STREAM_MEDIA_TYPE,

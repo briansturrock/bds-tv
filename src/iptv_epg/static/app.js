@@ -242,6 +242,20 @@ async function saveDlna() {
   return body;
 }
 
+async function refreshDlnaRequests() {
+  const body = await api("/api/dlna/requests");
+  renderJson("dlna-json", body);
+  setMessage("dlna-message", `Loaded ${body.requests?.length || 0} DLNA request log entries.`);
+  return body;
+}
+
+async function clearDlnaRequests() {
+  const body = await api("/api/dlna/requests", { method: "DELETE" });
+  renderJson("dlna-json", body);
+  setMessage("dlna-message", "DLNA request log cleared.");
+  return body;
+}
+
 function startHdhrPolling() {
   if (state.hdhrPollTimer) return;
   state.hdhrPollTimer = setInterval(async () => {
@@ -733,6 +747,12 @@ function wireEvents() {
 
   $("dlna-save").addEventListener("click", () => {
     saveDlna().catch((err) => setMessage("dlna-message", `Save failed: ${err.message}`, true));
+  });
+  $("dlna-refresh-requests").addEventListener("click", () => {
+    refreshDlnaRequests().catch((err) => setMessage("dlna-message", `Refresh failed: ${err.message}`, true));
+  });
+  $("dlna-clear-requests").addEventListener("click", () => {
+    clearDlnaRequests().catch((err) => setMessage("dlna-message", `Clear failed: ${err.message}`, true));
   });
 }
 

@@ -18,6 +18,7 @@ class _DummyRouter:
 
     post = get
     head = get
+    delete = get
 
 
 fastapi = types.ModuleType("fastapi")
