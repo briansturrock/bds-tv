@@ -32,7 +32,7 @@ router = APIRouter(tags=["dlna"])
 CONTENT_DIRECTORY_SERVICE = "urn:schemas-upnp-org:service:ContentDirectory:1"
 CONNECTION_MANAGER_SERVICE = "urn:schemas-upnp-org:service:ConnectionManager:1"
 DLNA_STREAM_MEDIA_TYPE = "video/vnd.dlna.mpeg-tts"
-DLNA_CONTENT_FEATURES = "DLNA.ORG_PN=MPEG_TS_SD_NA;DLNA.ORG_OP=01;DLNA.ORG_CI=0"
+DLNA_CONTENT_FEATURES = "DLNA.ORG_PN=AVC_TS_MP_HD_AAC_MULT5;DLNA.ORG_OP=01;DLNA.ORG_CI=0"
 DLNA_VIDEO_PROTOCOL = f"http-get:*:{DLNA_STREAM_MEDIA_TYPE}:{DLNA_CONTENT_FEATURES}"
 DLNA_STREAM_HEADERS = {
     "Accept-Ranges": "none",
