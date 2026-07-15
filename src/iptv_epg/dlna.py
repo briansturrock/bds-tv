@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import socket
 import subprocess
 import threading
 import time
@@ -9,6 +10,8 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any, Deque
 from urllib.parse import unquote, urljoin
+from urllib.request import Request as UrlRequest
+from urllib.request import urlopen
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import PlainTextResponse, Response, StreamingResponse
@@ -52,6 +55,18 @@ class DlnaSettingsIn(BaseModel):
     device_name: str = "iptv-epg DLNA"
     public_base_url: str = ""
     stream_mode: str = "copy"
+
+
+class DlnaInspectLocationIn(BaseModel):
+    location: str
+
+
+class DlnaInspectBrowseIn(BaseModel):
+    location: str
+    object_id: str = "0"
+    browse_flag: str = "BrowseDirectChildren"
+    starting_index: int = 0
+    requested_count: int = 0
 
 
 @dataclass
@@ -378,6 +393,179 @@ def xml_int(root: ET.Element, name: str, default: int = 0) -> int:
         return default
 
 
+def element_name(elem: ET.Element) -> str:
+    return elem.tag.split("}", 1)[-1]
+
+
+def child_text(elem: ET.Element, name: str, default: str = "") -> str:
+    for child in elem:
+        if element_name(child) == name:
+            return child.text or default
+    return default
+
+
+def parse_ssdp_response(payload: bytes, addr: tuple[str, int]) -> dict[str, str]:
+    lines = payload.decode("utf-8", errors="ignore").splitlines()
+    item: dict[str, str] = {"from": f"{addr[0]}:{addr[1]}"}
+    if lines:
+        item["status"] = lines[0].strip()
+    for line in lines[1:]:
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        item[key.strip().lower()] = value.strip()
+    return item
+
+
+def discover_dlna_devices(timeout_seconds: float = 3.0) -> list[dict[str, str]]:
+    targets = ["urn:schemas-upnp-org:device:MediaServer:1", "ssdp:all"]
+    seen: set[str] = set()
+    devices: list[dict[str, str]] = []
+    deadline = time.monotonic() + max(1.0, timeout_seconds)
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
+        sock.settimeout(0.5)
+        for target in targets:
+            message = "\r\n".join(
+                [
+                    "M-SEARCH * HTTP/1.1",
+                    "HOST: 239.255.255.250:1900",
+                    'MAN: "ssdp:discover"',
+                    "MX: 1",
+                    f"ST: {target}",
+                    "",
+                    "",
+                ]
+            ).encode("utf-8")
+            sock.sendto(message, ("239.255.255.250", 1900))
+        while time.monotonic() < deadline:
+            try:
+                payload, addr = sock.recvfrom(65535)
+            except socket.timeout:
+                continue
+            item = parse_ssdp_response(payload, addr)
+            location = item.get("location", "")
+            if not location or location in seen:
+                continue
+            seen.add(location)
+            devices.append(item)
+    return devices
+
+
+def fetch_text(url: str, timeout_seconds: float = 5.0) -> str:
+    request = UrlRequest(url, headers={"User-Agent": "iptv-epg-dlna-inspector/1.0"})
+    with urlopen(request, timeout=timeout_seconds) as response:
+        return response.read().decode("utf-8", errors="replace")
+
+
+def parse_device_description(location: str, xml: str) -> dict[str, Any]:
+    root = ET.fromstring(xml)
+    device = next((elem for elem in root.iter() if element_name(elem) == "device"), root)
+    services = []
+    for service in root.iter():
+        if element_name(service) != "service":
+            continue
+        service_type = child_text(service, "serviceType")
+        control_url = child_text(service, "controlURL")
+        services.append(
+            {
+                "service_type": service_type,
+                "service_id": child_text(service, "serviceId"),
+                "control_url": urljoin(location, control_url),
+                "scpd_url": urljoin(location, child_text(service, "SCPDURL")),
+                "event_url": urljoin(location, child_text(service, "eventSubURL")),
+            }
+        )
+    return {
+        "friendly_name": child_text(device, "friendlyName"),
+        "manufacturer": child_text(device, "manufacturer"),
+        "model_name": child_text(device, "modelName"),
+        "model_number": child_text(device, "modelNumber"),
+        "udn": child_text(device, "UDN"),
+        "presentation_url": child_text(device, "presentationURL"),
+        "services": services,
+        "content_directory": next((item for item in services if item["service_type"] == CONTENT_DIRECTORY_SERVICE), None),
+    }
+
+
+def content_directory_control_url(location: str) -> tuple[str, dict[str, Any], str]:
+    xml = fetch_text(location)
+    device = parse_device_description(location, xml)
+    service = device.get("content_directory")
+    if not service:
+        raise HTTPException(status_code=400, detail="Device has no ContentDirectory service.")
+    return service["control_url"], device, xml
+
+
+def inspect_browse_payload(payload: DlnaInspectBrowseIn) -> str:
+    browse_flag = payload.browse_flag if payload.browse_flag in {"BrowseDirectChildren", "BrowseMetadata"} else "BrowseDirectChildren"
+    return (
+        '<?xml version="1.0"?>'
+        '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" '
+        's:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">'
+        "<s:Body>"
+        f'<u:Browse xmlns:u="{CONTENT_DIRECTORY_SERVICE}">'
+        f"<ObjectID>{html.escape(payload.object_id)}</ObjectID>"
+        f"<BrowseFlag>{browse_flag}</BrowseFlag>"
+        "<Filter>*</Filter>"
+        f"<StartingIndex>{max(0, payload.starting_index)}</StartingIndex>"
+        f"<RequestedCount>{max(0, payload.requested_count)}</RequestedCount>"
+        "<SortCriteria></SortCriteria>"
+        "</u:Browse>"
+        "</s:Body>"
+        "</s:Envelope>"
+    )
+
+
+def parse_didl_items(result_xml: str) -> list[dict[str, Any]]:
+    if not result_xml.strip():
+        return []
+    root = ET.fromstring(result_xml)
+    parsed: list[dict[str, Any]] = []
+    for elem in root:
+        kind = element_name(elem)
+        if kind not in {"container", "item"}:
+            continue
+        resources = []
+        for child in elem:
+            if element_name(child) != "res":
+                continue
+            resources.append(
+                {
+                    "url": child.text or "",
+                    "protocol_info": child.attrib.get("protocolInfo", ""),
+                    "size": child.attrib.get("size", ""),
+                    "duration": child.attrib.get("duration", ""),
+                    "bitrate": child.attrib.get("bitrate", ""),
+                    "resolution": child.attrib.get("resolution", ""),
+                }
+            )
+        parsed.append(
+            {
+                "type": kind,
+                "id": elem.attrib.get("id", ""),
+                "parent_id": elem.attrib.get("parentID", ""),
+                "restricted": elem.attrib.get("restricted", ""),
+                "child_count": elem.attrib.get("childCount", ""),
+                "title": child_text(elem, "title"),
+                "class": child_text(elem, "class"),
+                "resources": resources,
+            }
+        )
+    return parsed
+
+
+def parse_browse_response(xml: str) -> dict[str, Any]:
+    root = ET.fromstring(xml)
+    result = xml_text(root, "Result")
+    return {
+        "number_returned": xml_int(root, "NumberReturned", 0),
+        "total_matches": xml_int(root, "TotalMatches", 0),
+        "update_id": xml_text(root, "UpdateID"),
+        "result_xml": result,
+        "items": parse_didl_items(result),
+    }
+
+
 @router.get("/api/dlna/settings")
 def api_dlna_settings(request: Request) -> dict:
     settings = get_dlna_settings()
@@ -413,6 +601,60 @@ def api_dlna_requests() -> dict:
 def api_clear_dlna_requests() -> dict:
     clear_dlna_requests()
     return {"ok": True, "requests": []}
+
+
+@router.post("/api/dlna/inspect/discover")
+def api_dlna_inspect_discover() -> dict:
+    return {"ok": True, "devices": discover_dlna_devices()}
+
+
+@router.post("/api/dlna/inspect/device")
+def api_dlna_inspect_device(payload: DlnaInspectLocationIn) -> dict:
+    try:
+        xml = fetch_text(payload.location)
+        device = parse_device_description(payload.location, xml)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not inspect DLNA device: {exc}") from exc
+    return {"ok": True, "device": device, "device_xml": xml}
+
+
+@router.post("/api/dlna/inspect/browse")
+def api_dlna_inspect_browse(payload: DlnaInspectBrowseIn) -> dict:
+    try:
+        control_url, device, _device_xml = content_directory_control_url(payload.location)
+        body = inspect_browse_payload(payload)
+        request = UrlRequest(
+            control_url,
+            data=body.encode("utf-8"),
+            headers={
+                "Content-Type": 'text/xml; charset="utf-8"',
+                "SOAPACTION": f'"{CONTENT_DIRECTORY_SERVICE}#Browse"',
+                "User-Agent": "iptv-epg-dlna-inspector/1.0",
+            },
+            method="POST",
+        )
+        with urlopen(request, timeout=8.0) as response:
+            response_xml = response.read().decode("utf-8", errors="replace")
+        parsed = parse_browse_response(response_xml)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not browse DLNA device: {exc}") from exc
+    return {
+        "ok": True,
+        "device": device,
+        "control_url": control_url,
+        "request": {
+            "object_id": payload.object_id,
+            "browse_flag": payload.browse_flag,
+            "starting_index": payload.starting_index,
+            "requested_count": payload.requested_count,
+        },
+        "browse": parsed,
+        "response_xml": response_xml,
+    }
 
 
 @router.get("/dlna/device.xml")

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <title>iptv_epg</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="/static/app.css?v=0.11.8" />
+  <link rel="stylesheet" href="/static/app.css?v=0.11.9" />
 </head>
 <body>
   <header class="app-header">
@@ -373,6 +373,35 @@
         </div>
         <pre id="dlna-json" class="json-box">{}</pre>
       </div>
+
+      <div class="card">
+        <h2>DLNA inspector</h2>
+        <div class="button-row">
+          <button id="dlna-inspect-discover">Discover devices</button>
+        </div>
+        <div class="hdhr-grid">
+          <label>
+            Device description URL
+            <input id="dlna-inspect-location" type="url" placeholder="http://192.168.0.38:5004/rootDesc.xml" />
+          </label>
+          <label>
+            Object ID
+            <input id="dlna-inspect-object-id" type="text" value="0" />
+          </label>
+          <label>
+            Browse mode
+            <select id="dlna-inspect-browse-flag">
+              <option value="BrowseDirectChildren">Children</option>
+              <option value="BrowseMetadata">Metadata</option>
+            </select>
+          </label>
+        </div>
+        <div class="button-row">
+          <button id="dlna-inspect-device">Inspect device</button>
+          <button id="dlna-inspect-browse">Browse object</button>
+        </div>
+        <p class="muted">Diagnostics only. This reads another DLNA server's browse metadata so we can compare its channel items with iptv-epg.</p>
+      </div>
     </section>
 
 
@@ -411,6 +440,6 @@
 
   </main>
 
-  <script src="/static/app.js?v=0.11.8"></script>
+  <script src="/static/app.js?v=0.11.9"></script>
 </body>
 </html>

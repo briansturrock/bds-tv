@@ -256,6 +256,55 @@ async function clearDlnaRequests() {
   return body;
 }
 
+async function discoverDlnaDevices() {
+  setMessage("dlna-message", "Discovering DLNA devices...");
+  const body = await api("/api/dlna/inspect/discover", { method: "POST" });
+  const firstLocation = body.devices?.[0]?.location;
+  if (firstLocation) {
+    $("dlna-inspect-location").value = firstLocation;
+  }
+  renderJson("dlna-json", body);
+  setMessage("dlna-message", `Found ${body.devices?.length || 0} DLNA device responses.`);
+  return body;
+}
+
+async function inspectDlnaDevice() {
+  const location = $("dlna-inspect-location").value.trim();
+  if (!location) {
+    throw new Error("Enter a device description URL first.");
+  }
+  setMessage("dlna-message", "Inspecting DLNA device...");
+  const body = await api("/api/dlna/inspect/device", {
+    method: "POST",
+    body: JSON.stringify({ location }),
+  });
+  renderJson("dlna-json", body);
+  setMessage("dlna-message", body.device?.friendly_name ? `Inspected ${body.device.friendly_name}.` : "Device inspected.");
+  return body;
+}
+
+async function browseDlnaObject() {
+  const location = $("dlna-inspect-location").value.trim();
+  if (!location) {
+    throw new Error("Enter a device description URL first.");
+  }
+  const payload = {
+    location,
+    object_id: $("dlna-inspect-object-id").value.trim() || "0",
+    browse_flag: $("dlna-inspect-browse-flag").value,
+    starting_index: 0,
+    requested_count: 0,
+  };
+  setMessage("dlna-message", "Browsing DLNA object...");
+  const body = await api("/api/dlna/inspect/browse", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  renderJson("dlna-json", body);
+  setMessage("dlna-message", `Browse returned ${body.browse?.number_returned || 0} of ${body.browse?.total_matches || 0}.`);
+  return body;
+}
+
 function startHdhrPolling() {
   if (state.hdhrPollTimer) return;
   state.hdhrPollTimer = setInterval(async () => {
@@ -753,6 +802,15 @@ function wireEvents() {
   });
   $("dlna-clear-requests").addEventListener("click", () => {
     clearDlnaRequests().catch((err) => setMessage("dlna-message", `Clear failed: ${err.message}`, true));
+  });
+  $("dlna-inspect-discover").addEventListener("click", () => {
+    discoverDlnaDevices().catch((err) => setMessage("dlna-message", `Discover failed: ${err.message}`, true));
+  });
+  $("dlna-inspect-device").addEventListener("click", () => {
+    inspectDlnaDevice().catch((err) => setMessage("dlna-message", `Inspect failed: ${err.message}`, true));
+  });
+  $("dlna-inspect-browse").addEventListener("click", () => {
+    browseDlnaObject().catch((err) => setMessage("dlna-message", `Browse failed: ${err.message}`, true));
   });
 }
 
