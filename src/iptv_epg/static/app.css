@@ -27,7 +27,7 @@ body {
 
 .app-header {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(220px, 0.7fr) minmax(360px, 1.4fr);
+  grid-template-columns: minmax(240px, max-content) minmax(240px, 1fr) minmax(360px, max-content);
   align-items: center;
   gap: 14px;
   padding: 16px 20px;
@@ -48,6 +48,8 @@ body {
   justify-content: center;
   gap: 8px;
   justify-self: start;
+  align-self: start;
+  padding-top: 8px;
   color: var(--text);
   font-size: 13px;
   font-weight: 600;
