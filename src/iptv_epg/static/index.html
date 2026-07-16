@@ -4,9 +4,9 @@
   <meta charset="utf-8" />
   <title>iptv_epg</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="/static/favicon.png?v=0.11.19" type="image/png" />
-  <link rel="icon" href="/static/favicon.ico?v=0.11.19" sizes="any" />
-  <link rel="stylesheet" href="/static/app.css?v=0.11.19" />
+  <link rel="icon" href="/static/favicon.png?v=0.11.20" type="image/png" />
+  <link rel="icon" href="/static/favicon.ico?v=0.11.20" sizes="any" />
+  <link rel="stylesheet" href="/static/app.css?v=0.11.20" />
 </head>
 <body>
   <header class="app-header">
@@ -33,6 +33,17 @@
         <h2>Settings</h2>
         <label for="m3u-url">M3U playlist URL</label>
         <textarea id="m3u-url" rows="3" spellcheck="false" placeholder="Paste upstream M3U URL"></textarea>
+        <div class="settings-grid">
+          <label>
+            Home country ISO code
+            <input id="killswitch-country" class="country-code-input" type="text" maxlength="2" spellcheck="false" placeholder="GB" />
+          </label>
+          <label class="toggle-row killswitch-toggle">
+            <input id="killswitch-enabled" type="checkbox" />
+            <span>Enable streaming killswitch</span>
+          </label>
+        </div>
+        <div id="killswitch-status" class="muted">Killswitch status not loaded yet.</div>
         <div class="button-row">
           <button id="save-settings">Save settings</button>
           <button id="fetch-m3u">Fetch M3U / rebuild index</button>
@@ -443,6 +454,6 @@
 
   </main>
 
-  <script src="/static/app.js?v=0.11.19"></script>
+  <script src="/static/app.js?v=0.11.20"></script>
 </body>
 </html>

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import signal
 import shutil
@@ -47,6 +46,13 @@ from .hdhr import router as hdhr_router, start_ssdp_service, start_stream_safety
 from .m3u import fetch_and_index_m3u, generate_filtered_m3u
 from .scheduler import router as scheduler_router, start_scheduler_thread
 from .settings import FILTERED_EPG, FILTERED_M3U, ensure_runtime_dirs
+from .stream_safety import (
+    cached_public_ip,
+    enforce_stream_killswitch,
+    get_killswitch_settings,
+    save_killswitch_settings,
+    stream_killswitch_status,
+)
 
 
 app = FastAPI(title="iptv_epg", version=__version__)
@@ -55,9 +61,6 @@ HLS_ROOT = Path("/tmp/iptv_epg_hls")
 HLS_PROCESSES: dict[str, subprocess.Popen] = {}
 HLS_LOCK = threading.Lock()
 executor = ThreadPoolExecutor(max_workers=2)
-PUBLIC_IP_CACHE_TTL_SECONDS = 15 * 60
-PUBLIC_IP_CACHE: dict[str, object] = {"expires_at": 0.0, "payload": None}
-PUBLIC_IP_LOCK = threading.Lock()
 
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -72,10 +75,15 @@ app.include_router(scheduler_router)
 
 class SettingsIn(BaseModel):
     m3u_url: str | None = Field(default=None)
+    killswitch_enabled: bool = False
+    killswitch_home_country_code: str | None = None
 
 
 class SettingsOut(BaseModel):
     m3u_url: str | None = None
+    killswitch_enabled: bool = False
+    killswitch_home_country_code: str = ""
+    killswitch_status: dict | None = None
 
 
 class ChannelSelectionIn(BaseModel):
@@ -100,115 +108,14 @@ class ChannelLogoIn(BaseModel):
     preferred_logo_url: str | None = None
 
 
-def country_flag(country_code: str | None) -> str:
-    code = (country_code or "").strip().upper()
-    if len(code) != 2 or not code.isalpha():
-        return ""
-    return "".join(chr(0x1F1E6 + ord(ch) - ord("A")) for ch in code)
-
-
-def fetch_json(url: str, timeout: float = 5.0) -> dict:
-    request = Request(url, headers={"User-Agent": f"iptv-epg/{__version__}"})
-    with urlopen(request, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8", errors="replace"))
-
-
-def fetch_text(url: str, timeout: float = 5.0) -> str:
-    request = Request(url, headers={"User-Agent": f"iptv-epg/{__version__}"})
-    with urlopen(request, timeout=timeout) as response:
-        return response.read().decode("utf-8", errors="replace").strip()
-
-
-def lookup_public_ip() -> dict:
-    errors: list[str] = []
-    ip_lookups = [
-        (
-            "checkip.amazonaws.com",
-            lambda: fetch_text("https://checkip.amazonaws.com/"),
-        ),
-        (
-            "api4.ipify.org",
-            lambda: fetch_json("https://api4.ipify.org?format=json").get("ip") or "",
-        ),
-        (
-            "ipv4.icanhazip.com",
-            lambda: fetch_text("https://ipv4.icanhazip.com/"),
-        ),
-    ]
-
-    ip = ""
-    ip_source = ""
-    for source, fetcher in ip_lookups:
-        try:
-            candidate = fetcher().strip()
-            if not candidate:
-                raise RuntimeError("lookup did not return an IP address")
-            if ":" in candidate:
-                raise RuntimeError("lookup returned IPv6 address")
-            ip = candidate
-            ip_source = source
-            break
-        except Exception as exc:
-            errors.append(f"{source}: {exc}")
-
-    if ip:
-        country_code = ""
-        country_name = ""
-        for source, url, parser in [
-            (
-                "ip-api.com",
-                f"http://ip-api.com/json/{ip}?fields=status,message,country,countryCode",
-                lambda data: (data.get("countryCode") or "", data.get("country") or ""),
-            ),
-            (
-                "ipapi.co",
-                f"https://ipapi.co/{ip}/json/",
-                lambda data: (data.get("country_code") or "", data.get("country_name") or ""),
-            ),
-        ]:
-            try:
-                data = fetch_json(url)
-                if data.get("error") or data.get("status") == "fail":
-                    raise RuntimeError(data.get("reason") or data.get("message") or "lookup failed")
-                country_code, country_name = parser(data)
-                break
-            except Exception as exc:
-                errors.append(f"{source}: {exc}")
-        return {
-            "ok": True,
-            "source": ip_source,
-            "ip": ip,
-            "country_code": country_code,
-            "country_name": country_name,
-            "flag": country_flag(country_code),
-            "checked_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "geo_error": "; ".join(errors) if not country_code else "",
-        }
-
-    return {
-        "ok": False,
-        "source": "",
-        "ip": "",
-        "country_code": "",
-        "country_name": "",
-        "flag": "",
-        "checked_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "error": "; ".join(errors),
-    }
-
-
-def cached_public_ip() -> dict:
-    now = time.time()
-    with PUBLIC_IP_LOCK:
-        cached = PUBLIC_IP_CACHE.get("payload")
-        if cached and now < float(PUBLIC_IP_CACHE.get("expires_at") or 0):
-            return dict(cached)
-
-    payload = lookup_public_ip()
-    with PUBLIC_IP_LOCK:
-        PUBLIC_IP_CACHE["payload"] = payload
-        PUBLIC_IP_CACHE["expires_at"] = now + PUBLIC_IP_CACHE_TTL_SECONDS
-    return dict(payload)
+def settings_payload() -> SettingsOut:
+    killswitch = get_killswitch_settings()
+    return SettingsOut(
+        m3u_url=get_setting("m3u_url"),
+        killswitch_enabled=bool(killswitch["enabled"]),
+        killswitch_home_country_code=killswitch["home_country_code"],
+        killswitch_status=stream_killswitch_status(),
+    )
 
 
 @app.on_event("startup")
@@ -253,14 +160,15 @@ def api_public_ip() -> dict:
 
 @app.get("/api/settings", response_model=SettingsOut)
 def api_get_settings() -> SettingsOut:
-    return SettingsOut(m3u_url=get_setting("m3u_url"))
+    return settings_payload()
 
 
 @app.post("/api/settings", response_model=SettingsOut)
 def api_set_settings(payload: SettingsIn) -> SettingsOut:
     if payload.m3u_url is not None:
         set_setting("m3u_url", payload.m3u_url.strip())
-    return SettingsOut(m3u_url=get_setting("m3u_url"))
+    save_killswitch_settings(payload.killswitch_enabled, payload.killswitch_home_country_code)
+    return settings_payload()
 
 
 def run_m3u_fetch_job(job_id: str, url: str) -> None:
@@ -697,6 +605,8 @@ def stop_all_hls_processes() -> None:
 
 
 def selected_channel_stream_url(channel_id: str) -> tuple[str, str]:
+    enforce_stream_killswitch()
+
     with connect() as conn:
         row = conn.execute(
             """
@@ -875,6 +785,7 @@ def api_stop_hls(channel_id: str, mode: str) -> dict:
 
 @app.get("/stream/{channel_id}")
 def stream_channel(channel_id: str):
+    enforce_stream_killswitch()
     stop_all_hls_processes()
 
     with connect() as conn:

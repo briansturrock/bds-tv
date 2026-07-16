@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from .db import connect, get_groups, get_selected_channels, get_setting, set_setting
 from .m3u import extinf_with_logo
 from .settings import DATA_DIR, FILTERED_EPG
+from .stream_safety import enforce_stream_killswitch
 
 
 router = APIRouter(tags=["hdhr"])
@@ -951,6 +952,7 @@ def hdhr_stream_channel(channel_id: str) -> StreamingResponse:
 
 
 def stream_selected_channel(channel_id: str, settings: HdhrSettings) -> StreamingResponse:
+    enforce_stream_killswitch()
     channel = selected_channel_row(channel_id)
     session = reserve_stream_session(channel, settings)
 

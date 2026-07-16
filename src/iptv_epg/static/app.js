@@ -91,6 +91,31 @@ async function loadPublicIp() {
 async function loadSettings() {
   const settings = await api("/api/settings");
   $("m3u-url").value = settings.m3u_url || "";
+  $("killswitch-country").value = settings.killswitch_home_country_code || "";
+  $("killswitch-enabled").checked = !!settings.killswitch_enabled;
+  renderKillswitchStatus(settings.killswitch_status || {});
+}
+
+function settingsPayloadFromForm() {
+  return {
+    m3u_url: $("m3u-url").value.trim(),
+    killswitch_enabled: $("killswitch-enabled").checked,
+    killswitch_home_country_code: $("killswitch-country").value.trim().toUpperCase(),
+  };
+}
+
+function renderKillswitchStatus(status) {
+  const el = $("killswitch-status");
+  if (!el) return;
+  const home = status.home_country_code || "not set";
+  const current = status.public_ip?.country_code || "unknown";
+  if (status.blocked) {
+    el.textContent = `Killswitch active: streaming disabled because public IP country is ${current}.`;
+    el.classList.add("danger-text");
+    return;
+  }
+  el.textContent = `Killswitch ${status.enabled ? "enabled" : "disabled"} · Home: ${home} · Current: ${current}`;
+  el.classList.remove("danger-text");
 }
 
 const hdhrState = {
@@ -355,11 +380,14 @@ function stopHdhrPolling() {
 }
 
 async function saveSettings() {
-  const m3uUrl = $("m3u-url").value.trim();
   const result = await api("/api/settings", {
     method: "POST",
-    body: JSON.stringify({ m3u_url: m3uUrl }),
+    body: JSON.stringify(settingsPayloadFromForm()),
   });
+  $("m3u-url").value = result.m3u_url || "";
+  $("killswitch-country").value = result.killswitch_home_country_code || "";
+  $("killswitch-enabled").checked = !!result.killswitch_enabled;
+  renderKillswitchStatus(result.killswitch_status || {});
   setMessage("settings-message", "Settings saved.");
   return result;
 }
@@ -791,6 +819,9 @@ function wireEvents() {
 
   $("fetch-m3u").addEventListener("click", () => {
     startFetchM3u().catch((err) => setMessage("settings-message", `Fetch failed: ${err.message}`, true));
+  });
+  $("killswitch-country").addEventListener("input", (event) => {
+    event.target.value = event.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2);
   });
 
   $("refresh-groups").addEventListener("click", () => {

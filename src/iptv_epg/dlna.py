@@ -28,6 +28,7 @@ from .hdhr import (
     stop_stream_session,
     stream_selected_channel,
 )
+from .stream_safety import enforce_stream_killswitch
 
 
 router = APIRouter(tags=["dlna"])
@@ -859,6 +860,7 @@ def dlna_transcode_command(stream_url: str, ffmpeg_path: str) -> list[str]:
 
 
 def dlna_transcoded_stream(channel_id: str) -> StreamingResponse:
+    enforce_stream_killswitch()
     hdhr_settings = get_hdhr_settings()
     channel = selected_channel_row(channel_id)
     session = reserve_stream_session(channel, hdhr_settings)
