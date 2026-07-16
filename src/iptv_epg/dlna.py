@@ -38,12 +38,19 @@ DLNA_STREAM_MEDIA_TYPE = "video/mpeg"
 DLNA_CONTENT_FEATURES = "DLNA.ORG_PN=MPEG_TS_SD_EU_ISO;DLNA.ORG_FLAGS=8D100000000000000000000000000000"
 DLNA_VIDEO_PROTOCOL = f"http-get:*:{DLNA_STREAM_MEDIA_TYPE}:{DLNA_CONTENT_FEATURES}"
 DLNA_STREAM_HEADERS = {
-    "Accept-Ranges": "bytes",
-    "Cache-Control": "no-store",
+    "Access-Control-Allow-Origin": "*",
+    "Cache-Control": "no-cache",
     "Connection": "close",
     "contentFeatures.dlna.org": DLNA_CONTENT_FEATURES,
     "transferMode.dlna.org": "Streaming",
     "X-Accel-Buffering": "no",
+}
+DLNA_STREAM_HEAD_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Cache-Control": "no-cache",
+    "Connection": "close",
+    "contentFeatures.dlna.org": DLNA_CONTENT_FEATURES,
+    "transferMode.dlna.org": "Streaming",
 }
 DLNA_REQUEST_LOG_LIMIT = 100
 DLNA_REQUEST_LOG: Deque[dict[str, Any]] = deque(maxlen=DLNA_REQUEST_LOG_LIMIT)
@@ -792,12 +799,11 @@ def dlna_stream_head(channel_id: str, request: Request) -> Response:
     clean_channel_id = channel_id[:-4] if channel_id.endswith(".mpg") else channel_id
     selected_channel_row(clean_channel_id)
     headers = {
-        **DLNA_STREAM_HEADERS,
+        **DLNA_STREAM_HEAD_HEADERS,
         "Content-Type": DLNA_STREAM_MEDIA_TYPE,
-        "Content-Disposition": f'inline; filename="{clean_channel_id}.mpg"',
     }
     log_dlna_request(request, "stream_head", channel_id=clean_channel_id, response_headers=headers)
-    return Response(status_code=200, headers=headers, media_type=DLNA_STREAM_MEDIA_TYPE)
+    return StreamingResponse(iter(()), status_code=200, headers=headers, media_type=DLNA_STREAM_MEDIA_TYPE)
 
 
 @router.head("/dlna/auto/v{channel_number}", response_model=None)
