@@ -6,9 +6,15 @@ services:
     restart: unless-stopped
     network_mode: host
     command: ["uvicorn", "iptv_epg.main:app", "--host", "0.0.0.0", "--port", "8088"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8088/health', timeout=5).read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
     environment:
       - TZ=UTC
-      - IPTV_EPG_VERSION=0.11.22
+      - IPTV_EPG_VERSION=0.11.23
       - CONFIG_DIR=/config
       - DATA_DIR=/data
       - DB_PATH=/db/iptv_epg.db

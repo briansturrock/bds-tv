@@ -42,7 +42,7 @@ from .dlna import router as dlna_router
 from .epgshare_routes import router as epgshare_router
 from .epgshare_review_routes import router as epgshare_review_router
 from .guide_routes import router as guide_router
-from .hdhr import router as hdhr_router, start_ssdp_service, start_stream_safety_service, stop_ssdp_service
+from .hdhr import active_status, router as hdhr_router, start_ssdp_service, start_stream_safety_service, stop_ssdp_service
 from .m3u import fetch_and_index_m3u, generate_filtered_m3u
 from .scheduler import router as scheduler_router, start_scheduler_thread
 from .settings import FILTERED_EPG, FILTERED_M3U, ensure_runtime_dirs
@@ -61,6 +61,7 @@ HLS_ROOT = Path("/tmp/iptv_epg_hls")
 HLS_PROCESSES: dict[str, subprocess.Popen] = {}
 HLS_LOCK = threading.Lock()
 executor = ThreadPoolExecutor(max_workers=2)
+STARTED_AT = time.time()
 
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -139,12 +140,25 @@ def index() -> Response:
 
 
 @app.get("/health")
-def health() -> dict:
+async def health() -> dict:
     return {
         "ok": True,
         "app": "iptv_epg",
         "version": __version__,
+        "uptime_seconds": int(time.time() - STARTED_AT),
         "message": "running",
+    }
+
+
+@app.get("/health/deep")
+async def health_deep() -> dict:
+    return {
+        "ok": True,
+        "app": "iptv_epg",
+        "version": __version__,
+        "uptime_seconds": int(time.time() - STARTED_AT),
+        "threads": [thread.name for thread in threading.enumerate()],
+        "proxy": active_status(),
     }
 
 
