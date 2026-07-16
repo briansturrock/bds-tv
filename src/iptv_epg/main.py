@@ -113,50 +113,77 @@ def fetch_json(url: str, timeout: float = 5.0) -> dict:
         return json.loads(response.read().decode("utf-8", errors="replace"))
 
 
+def fetch_text(url: str, timeout: float = 5.0) -> str:
+    request = Request(url, headers={"User-Agent": f"iptv-epg/{__version__}"})
+    with urlopen(request, timeout=timeout) as response:
+        return response.read().decode("utf-8", errors="replace").strip()
+
+
 def lookup_public_ip() -> dict:
     errors: list[str] = []
-    lookups = [
+    ip_lookups = [
         (
-            "ipapi.co",
-            "https://ipapi.co/ipv4/json/",
-            lambda data: {
-                "ip": data.get("ip") or "",
-                "country_code": data.get("country_code") or "",
-                "country_name": data.get("country_name") or "",
-            },
+            "checkip.amazonaws.com",
+            lambda: fetch_text("https://checkip.amazonaws.com/"),
         ),
         (
-            "ipinfo.io",
-            "https://v4.ipinfo.io/json",
-            lambda data: {
-                "ip": data.get("ip") or "",
-                "country_code": data.get("country") or "",
-                "country_name": "",
-            },
+            "api4.ipify.org",
+            lambda: fetch_json("https://api4.ipify.org?format=json").get("ip") or "",
+        ),
+        (
+            "ipv4.icanhazip.com",
+            lambda: fetch_text("https://ipv4.icanhazip.com/"),
         ),
     ]
 
-    for source, url, parser in lookups:
+    ip = ""
+    ip_source = ""
+    for source, fetcher in ip_lookups:
         try:
-            data = fetch_json(url)
-            if data.get("error") or data.get("status") == "fail":
-                raise RuntimeError(data.get("reason") or data.get("message") or "lookup failed")
-            parsed = parser(data)
-            if not parsed["ip"]:
+            candidate = fetcher().strip()
+            if not candidate:
                 raise RuntimeError("lookup did not return an IP address")
-            if ":" in parsed["ip"]:
+            if ":" in candidate:
                 raise RuntimeError("lookup returned IPv6 address")
-            return {
-                "ok": True,
-                "source": source,
-                "ip": parsed["ip"],
-                "country_code": parsed["country_code"],
-                "country_name": parsed["country_name"],
-                "flag": country_flag(parsed["country_code"]),
-                "checked_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            }
+            ip = candidate
+            ip_source = source
+            break
         except Exception as exc:
             errors.append(f"{source}: {exc}")
+
+    if ip:
+        country_code = ""
+        country_name = ""
+        for source, url, parser in [
+            (
+                "ip-api.com",
+                f"http://ip-api.com/json/{ip}?fields=status,message,country,countryCode",
+                lambda data: (data.get("countryCode") or "", data.get("country") or ""),
+            ),
+            (
+                "ipapi.co",
+                f"https://ipapi.co/{ip}/json/",
+                lambda data: (data.get("country_code") or "", data.get("country_name") or ""),
+            ),
+        ]:
+            try:
+                data = fetch_json(url)
+                if data.get("error") or data.get("status") == "fail":
+                    raise RuntimeError(data.get("reason") or data.get("message") or "lookup failed")
+                country_code, country_name = parser(data)
+                break
+            except Exception as exc:
+                errors.append(f"{source}: {exc}")
+        return {
+            "ok": True,
+            "source": ip_source,
+            "ip": ip,
+            "country_code": country_code,
+            "country_name": country_name,
+            "flag": country_flag(country_code),
+            "checked_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "geo_error": "; ".join(errors) if not country_code else "",
+        }
 
     return {
         "ok": False,

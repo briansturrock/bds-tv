@@ -12,7 +12,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY src /app/src
 
 ENV PYTHONPATH=/app/src
-ENV IPTV_EPG_VERSION=0.11.17
+ENV IPTV_EPG_VERSION=0.11.18
 ENV CONFIG_DIR=/config
 ENV DATA_DIR=/data
 ENV DB_PATH=/db/iptv_epg.db
