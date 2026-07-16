@@ -16,7 +16,7 @@ from urllib.request import Request, urlopen
 from xml.etree import ElementTree as ET
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from .db import connect, get_groups, get_selected_channels, get_setting, set_setting
@@ -27,6 +27,10 @@ from .settings import DATA_DIR, FILTERED_EPG
 router = APIRouter(tags=["hdhr"])
 
 HDHR_PROXY_M3U = DATA_DIR / "hdhr.m3u"
+HDHR_NO_CACHE_HEADERS = {
+    "Cache-Control": "no-store, no-cache, max-age=0",
+    "Pragma": "no-cache",
+}
 SSDP_ADDR = "239.255.255.250"
 SSDP_PORT = 1900
 SSDP_THREAD: threading.Thread | None = None
@@ -854,6 +858,7 @@ def api_hdhr_settings(request: Request) -> dict:
 @router.post("/api/hdhr/settings")
 def api_save_hdhr_settings(payload: HdhrSettingsIn, request: Request) -> dict:
     settings = save_hdhr_settings(payload)
+    generate_hdhr_m3u(base_url_for_request(request, settings), settings)
     return {
         "ok": True,
         "settings": {
@@ -878,8 +883,13 @@ def hdhr_m3u(request: Request) -> PlainTextResponse | FileResponse:
         settings = get_hdhr_settings()
         generate_hdhr_m3u(base_url_for_request(request, settings), settings)
     if not HDHR_PROXY_M3U.exists():
-        return PlainTextResponse("#EXTM3U\n", media_type="application/vnd.apple.mpegurl")
-    return FileResponse(HDHR_PROXY_M3U, media_type="application/vnd.apple.mpegurl", filename="hdhr.m3u")
+        return PlainTextResponse("#EXTM3U\n", media_type="application/vnd.apple.mpegurl", headers=HDHR_NO_CACHE_HEADERS)
+    return FileResponse(
+        HDHR_PROXY_M3U,
+        media_type="application/vnd.apple.mpegurl",
+        filename="hdhr.m3u",
+        headers=HDHR_NO_CACHE_HEADERS,
+    )
 
 
 @router.get("/hdhr_epg.xml", response_model=None)
@@ -887,31 +897,40 @@ def hdhr_epg() -> StreamingResponse:
     return StreamingResponse(
         hdhr_xmltv_stream(),
         media_type="application/xml",
-        headers={"Cache-Control": "no-store"},
+        headers=HDHR_NO_CACHE_HEADERS,
     )
 
 
 @router.get("/discover.json")
-def discover_json(request: Request) -> dict:
+def discover_json(request: Request) -> JSONResponse:
     settings = get_hdhr_settings()
-    return hdhr_discovery_payload(base_url_for_request(request, settings), settings)
+    return JSONResponse(
+        hdhr_discovery_payload(base_url_for_request(request, settings), settings),
+        headers=HDHR_NO_CACHE_HEADERS,
+    )
 
 
 @router.get("/lineup.json")
-def lineup_json(request: Request) -> list[dict[str, str]]:
+def lineup_json(request: Request) -> JSONResponse:
     settings = get_hdhr_settings()
-    return lineup_rows(base_url_for_request(request, settings), settings)
+    return JSONResponse(
+        lineup_rows(base_url_for_request(request, settings), settings),
+        headers=HDHR_NO_CACHE_HEADERS,
+    )
 
 
 @router.get("/lineup_status.json")
-def lineup_status_json() -> dict:
+def lineup_status_json() -> JSONResponse:
     settings = get_hdhr_settings()
-    return {
-        "ScanInProgress": 0,
-        "ScanPossible": 1 if settings.enabled else 0,
-        "Source": "Cable",
-        "SourceList": ["Cable"],
-    }
+    return JSONResponse(
+        {
+            "ScanInProgress": 0,
+            "ScanPossible": 1 if settings.enabled else 0,
+            "Source": "Cable",
+            "SourceList": ["Cable"],
+        },
+        headers=HDHR_NO_CACHE_HEADERS,
+    )
 
 
 @router.get("/auto/v{guide_number}", response_model=None)
