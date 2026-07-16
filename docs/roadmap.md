@@ -1,29 +1,36 @@
 # Roadmap
 
-## 0.8-db-foundation
+## Current Milestone
 
-- Create SQLite DB automatically on startup.
-- Move durable state to SQLite.
-- Keep generated/transient files on disk.
-- Keep UI as thin API client.
-- Do not add group-ordering UI until DB/API foundation is stable.
+The app is approaching a `1.0.0` milestone.
 
-## 0.8.1-ui-safe
+Core features now implemented:
 
-- Channels tab uses paged/scoped API data.
-- EPG management page uses server-side search for XMLTV channels.
-- Guide page loads one group/time-window at a time.
-- No heavy work on startup.
+- SQLite-backed state;
+- provider M3U fetch/index;
+- channel/group selection and ordering;
+- filtered M3U generation;
+- EPGShare import and matching;
+- filtered XMLTV generation;
+- scheduled XMLTV generation;
+- Guide page with stream preview;
+- HDHR emulation for Plex;
+- DLNA media server for VLC/TV clients;
+- stream cleanup and buffering options;
+- public IP display and streaming killswitch;
+- health and deep-health diagnostics.
 
-## 0.8.2-group-order
+## Before 1.0.0
 
-- Add manual group ordering from Channels tab.
-- Save `groups.user_order`.
-- Apply same order to filtered M3U and Guide.
+- Investigate the overnight issue where the container remains running but the app becomes unreachable.
+- Use Docker healthcheck and `/health/deep` output to identify whether the issue is Uvicorn, a background thread, stream cleanup, scheduler work, or host/network state.
+- Decide whether to add an automatic recovery mechanism after the cause is understood.
 
-## Later
+## Later Candidates
 
-- Channel ordering
-- Better EPG matching suggestions
-- Player polish
-- Optional proxied M3U mode
+- More polished operational status page.
+- Backup/restore workflow for the SQLite database and generated config.
+- More explicit stream history/audit log.
+- Better guide/search filtering.
+- Optional additional DLNA compatibility profiles if a specific TV needs them.
+- More complete user-facing documentation screenshots once the UI settles.
