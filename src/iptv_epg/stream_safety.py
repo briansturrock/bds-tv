@@ -138,12 +138,13 @@ def lookup_public_ip() -> dict:
     }
 
 
-def cached_public_ip() -> dict:
+def cached_public_ip(force_refresh: bool = False) -> dict:
     now = time.time()
-    with PUBLIC_IP_LOCK:
-        cached = PUBLIC_IP_CACHE.get("payload")
-        if cached and now < float(PUBLIC_IP_CACHE.get("expires_at") or 0):
-            return dict(cached)
+    if not force_refresh:
+        with PUBLIC_IP_LOCK:
+            cached = PUBLIC_IP_CACHE.get("payload")
+            if cached and now < float(PUBLIC_IP_CACHE.get("expires_at") or 0):
+                return dict(cached)
 
     payload = lookup_public_ip()
     with PUBLIC_IP_LOCK:
@@ -152,9 +153,9 @@ def cached_public_ip() -> dict:
     return dict(payload)
 
 
-def stream_killswitch_status() -> dict:
+def stream_killswitch_status(force_refresh: bool = False) -> dict:
     settings = get_killswitch_settings()
-    public_ip = cached_public_ip()
+    public_ip = cached_public_ip(force_refresh)
     home_country = settings["home_country_code"]
     current_country = normalise_country_code(public_ip.get("country_code"))
     blocked = bool(settings["enabled"] and home_country and current_country and home_country == current_country)

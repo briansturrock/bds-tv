@@ -108,13 +108,13 @@ class ChannelLogoIn(BaseModel):
     preferred_logo_url: str | None = None
 
 
-def settings_payload() -> SettingsOut:
+def settings_payload(force_refresh_ip: bool = False) -> SettingsOut:
     killswitch = get_killswitch_settings()
     return SettingsOut(
         m3u_url=get_setting("m3u_url"),
         killswitch_enabled=bool(killswitch["enabled"]),
         killswitch_home_country_code=killswitch["home_country_code"],
-        killswitch_status=stream_killswitch_status(),
+        killswitch_status=stream_killswitch_status(force_refresh_ip),
     )
 
 
@@ -154,13 +154,13 @@ def api_status() -> dict:
 
 
 @app.get("/api/public-ip")
-def api_public_ip() -> dict:
-    return cached_public_ip()
+def api_public_ip(refresh: bool = Query(False)) -> dict:
+    return cached_public_ip(refresh)
 
 
 @app.get("/api/settings", response_model=SettingsOut)
-def api_get_settings() -> SettingsOut:
-    return settings_payload()
+def api_get_settings(refresh_ip: bool = Query(False)) -> SettingsOut:
+    return settings_payload(refresh_ip)
 
 
 @app.post("/api/settings", response_model=SettingsOut)
@@ -168,7 +168,7 @@ def api_set_settings(payload: SettingsIn) -> SettingsOut:
     if payload.m3u_url is not None:
         set_setting("m3u_url", payload.m3u_url.strip())
     save_killswitch_settings(payload.killswitch_enabled, payload.killswitch_home_country_code)
-    return settings_payload()
+    return settings_payload(force_refresh_ip=True)
 
 
 def run_m3u_fetch_job(job_id: str, url: str) -> None:

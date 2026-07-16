@@ -60,11 +60,11 @@ async function loadStatus() {
   return status;
 }
 
-async function loadPublicIp() {
+async function loadPublicIp(refresh = false) {
   const el = $("header-public-ip");
   if (!el) return null;
   try {
-    const body = await api("/api/public-ip");
+    const body = await api(`/api/public-ip${refresh ? "?refresh=true" : ""}`);
     if (!body.ok || !body.ip) {
       el.textContent = "IP Address: unknown";
       el.title = body.error || "Public IP lookup failed";
@@ -88,8 +88,8 @@ async function loadPublicIp() {
   }
 }
 
-async function loadSettings() {
-  const settings = await api("/api/settings");
+async function loadSettings(refreshIp = false) {
+  const settings = await api(`/api/settings${refreshIp ? "?refresh_ip=true" : ""}`);
   $("m3u-url").value = settings.m3u_url || "";
   $("killswitch-country").value = settings.killswitch_home_country_code || "";
   $("killswitch-enabled").checked = !!settings.killswitch_enabled;
@@ -885,7 +885,7 @@ async function init() {
   }
 
   try {
-    await loadSettings();
+    await loadSettings(true);
     await loadStatus();
     loadPublicIp();
     setMessage("settings-message", "Ready.");
