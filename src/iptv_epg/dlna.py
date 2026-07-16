@@ -7,7 +7,7 @@ import threading
 import time
 import xml.etree.ElementTree as ET
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Deque
 from urllib.parse import unquote, urljoin
 from urllib.request import Request as UrlRequest
@@ -137,7 +137,7 @@ def clear_dlna_requests() -> None:
 def get_dlna_settings() -> DlnaSettings:
     hdhr_settings = get_hdhr_settings()
     stream_mode = (get_setting("dlna_stream_mode", "copy") or "copy").strip().lower()
-    if stream_mode not in {"copy", "transcode"}:
+    if stream_mode not in {"copy", "buffered", "transcode"}:
         stream_mode = "copy"
     return DlnaSettings(
         enabled=bool_setting("dlna_enabled", True),
@@ -149,7 +149,7 @@ def get_dlna_settings() -> DlnaSettings:
 
 def save_dlna_settings(payload: DlnaSettingsIn) -> DlnaSettings:
     stream_mode = payload.stream_mode.strip().lower()
-    if stream_mode not in {"copy", "transcode"}:
+    if stream_mode not in {"copy", "buffered", "transcode"}:
         stream_mode = "copy"
     values = {
         "dlna_enabled": "true" if payload.enabled else "false",
@@ -772,7 +772,10 @@ def dlna_stream_channel(channel_id: str, request: Request) -> StreamingResponse:
     if settings.stream_mode == "transcode":
         response = dlna_transcoded_stream(clean_channel_id)
     else:
-        response = stream_selected_channel(clean_channel_id, get_hdhr_settings())
+        hdhr_settings = get_hdhr_settings()
+        if settings.stream_mode == "buffered":
+            hdhr_settings = replace(hdhr_settings, stream_mode="buffered")
+        response = stream_selected_channel(clean_channel_id, hdhr_settings)
     response.media_type = DLNA_STREAM_MEDIA_TYPE
     response.headers["Content-Type"] = DLNA_STREAM_MEDIA_TYPE
     response.headers["Content-Disposition"] = f'inline; filename="{clean_channel_id}.mpg"'
