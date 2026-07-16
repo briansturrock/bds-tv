@@ -209,12 +209,66 @@ function updateHdhrLinks(settings) {
   $("hdhr-epg-link").href = `${base}/hdhr_epg.xml`;
 }
 
+function formatDuration(seconds) {
+  const total = Math.max(0, Number(seconds || 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hours) return `${hours}h ${minutes}m`;
+  if (minutes) return `${minutes}m ${secs}s`;
+  return `${secs}s`;
+}
+
+function formatBytes(bytes) {
+  const value = Math.max(0, Number(bytes || 0));
+  if (value >= 1024 * 1024 * 1024) return `${(value / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  if (value >= 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+  if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${value} B`;
+}
+
+function renderActiveStreams(status = {}) {
+  const summary = $("active-streams-summary");
+  const list = $("active-streams-list");
+  if (!summary || !list) return;
+
+  const streams = status.streams || [];
+  const activeClients = status.active_client_count ?? streams.length;
+  const activeUpstreams = status.active_upstream_count ?? streams.length;
+
+  if (!streams.length) {
+    summary.textContent = `No active streams. Upstreams: ${activeUpstreams}.`;
+    list.innerHTML = "";
+    return;
+  }
+
+  summary.textContent = `${activeClients} active client${activeClients === 1 ? "" : "s"} · ${activeUpstreams} upstream${activeUpstreams === 1 ? "" : "s"}`;
+  list.innerHTML = streams
+    .map(
+      (stream) => `
+        <div class="stream-row">
+          <div>
+            <strong>${esc(stream.channel_name || "Unknown channel")}</strong>
+            <span>${esc(stream.channel_id || "")}</span>
+          </div>
+          <div><small>Mode</small>${esc(stream.mode || "unknown")}</div>
+          <div><small>Running</small>${formatDuration(stream.seconds)}</div>
+          <div><small>Idle</small>${formatDuration(stream.idle_seconds)}</div>
+          <div><small>Sent</small>${formatBytes(stream.bytes_sent)}</div>
+          <div><small>Buffer</small>${formatBytes(stream.buffer_bytes)}</div>
+        </div>
+      `
+    )
+    .join("");
+}
+
 async function loadHdhr() {
   const body = await api("/api/hdhr/settings");
   setHdhrForm(body.settings || {});
   hdhrState.groups = body.groups || [];
   renderHdhrGroups();
   updateHdhrLinks(body.settings || {});
+  renderActiveStreams(body.status || {});
   renderJson("hdhr-json", body);
   hdhrState.loaded = true;
   setMessage("hdhr-message", body.settings?.enabled ? "HDHR enabled." : "HDHR disabled.");
@@ -231,6 +285,7 @@ async function saveHdhr() {
   hdhrState.groups = body.groups || [];
   renderHdhrGroups();
   updateHdhrLinks(body.settings || {});
+  renderActiveStreams(body.status || {});
   renderJson("hdhr-json", body);
   setMessage("hdhr-message", "HDHR settings saved.");
   return body;
@@ -245,6 +300,7 @@ async function generateHdhrM3u() {
 
 async function stopHdhrStreams() {
   const body = await api("/api/hdhr/streams/stop", { method: "POST" });
+  renderActiveStreams(body.status || {});
   renderJson("hdhr-json", body);
   setMessage("hdhr-message", "Stopped active HDHR streams.");
 }
@@ -363,6 +419,7 @@ function startHdhrPolling() {
   state.hdhrPollTimer = setInterval(async () => {
     try {
       const body = await api("/api/hdhr/status");
+      renderActiveStreams(body.status || {});
       renderJson("hdhr-json", {
         settings: hdhrPayloadFromForm(),
         ...body,

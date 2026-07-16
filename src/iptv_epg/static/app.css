@@ -1491,6 +1491,47 @@ body:has(#tab-channels.active) {
   margin-bottom: 8px;
 }
 
+.stream-summary {
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.stream-list {
+  display: grid;
+  gap: 8px;
+}
+
+.stream-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) repeat(5, minmax(72px, auto));
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcff;
+  font-size: 13px;
+}
+
+.stream-row strong,
+.stream-row span,
+.stream-row small {
+  display: block;
+}
+
+.stream-row span,
+.stream-row small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .stream-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 .hdhr-groups-list {
   display: grid;
   gap: 6px;

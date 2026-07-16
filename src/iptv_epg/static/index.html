@@ -4,9 +4,9 @@
   <meta charset="utf-8" />
   <title>iptv_epg</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="/static/favicon.png?v=0.11.23" type="image/png" />
-  <link rel="icon" href="/static/favicon.ico?v=0.11.23" sizes="any" />
-  <link rel="stylesheet" href="/static/app.css?v=0.11.23" />
+  <link rel="icon" href="/static/favicon.png?v=0.11.24" type="image/png" />
+  <link rel="icon" href="/static/favicon.ico?v=0.11.24" sizes="any" />
+  <link rel="stylesheet" href="/static/app.css?v=0.11.24" />
 </head>
 <body>
   <header class="app-header">
@@ -332,7 +332,13 @@
         </div>
 
         <div class="card">
-          <h2>Status</h2>
+          <h2>Active streams</h2>
+          <div id="active-streams-summary" class="stream-summary">No active streams.</div>
+          <div id="active-streams-list" class="stream-list"></div>
+        </div>
+
+        <div class="card">
+          <h2>Status JSON</h2>
           <pre id="hdhr-json" class="json-box">{}</pre>
         </div>
       </div>
@@ -455,6 +461,6 @@
 
   </main>
 
-  <script src="/static/app.js?v=0.11.23"></script>
+  <script src="/static/app.js?v=0.11.24"></script>
 </body>
 </html>
