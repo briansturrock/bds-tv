@@ -275,7 +275,7 @@ def didl_container(container_id: str, parent_id: str, title: str, child_count: i
 
 
 def didl_channel(channel: dict[str, Any], parent_id: str, base_url: str) -> str:
-    url = urljoin(f"{base_url}/", f"dlna/channel/{channel['channel_id']}.mpg")
+    url = urljoin(f"{base_url}/", f"dlna/auto/v{channel['number']}")
     logo = channel.get("logo_url") or ""
     icon = f'<upnp:albumArtURI>{html.escape(logo)}</upnp:albumArtURI>' if logo else ""
     return (
@@ -307,8 +307,21 @@ def dlna_catalogue(base_url: str) -> tuple[list[dict[str, Any]], list[dict[str, 
     for index, group in enumerate(groups, start=1):
         group["object_id"] = f"group:{index}"
         for channel in group["channels"]:
-            channel["url"] = urljoin(f"{base_url}/", f"dlna/channel/{channel['channel_id']}")
+            channel["url"] = urljoin(f"{base_url}/", f"dlna/auto/v{channel['number']}")
     return channels, groups
+
+
+def dlna_channel_id_for_number(channel_number: str) -> str | None:
+    try:
+        number = int(channel_number)
+    except ValueError:
+        return None
+    if number <= 0:
+        return None
+    channels = selected_catalogue_channels(limit=None)
+    if number > len(channels):
+        return None
+    return channels[number - 1]["channel_id"]
 
 
 def page_children(children: list[str], starting_index: int, requested_count: int) -> list[str]:
@@ -765,6 +778,14 @@ def dlna_stream_channel_mpg(channel_id: str, request: Request) -> StreamingRespo
     return dlna_stream_channel(channel_id, request)
 
 
+@router.get("/dlna/auto/v{channel_number}", response_model=None)
+def dlna_stream_auto(channel_number: str, request: Request) -> StreamingResponse:
+    channel_id = dlna_channel_id_for_number(channel_number)
+    if not channel_id:
+        raise HTTPException(status_code=404, detail="DLNA channel number not found")
+    return dlna_stream_channel(channel_id, request)
+
+
 @router.head("/dlna/channel/{channel_id}", response_model=None)
 @router.head("/dlna/channel/{channel_id}.mpg", response_model=None)
 def dlna_stream_head(channel_id: str, request: Request) -> Response:
@@ -777,6 +798,14 @@ def dlna_stream_head(channel_id: str, request: Request) -> Response:
     }
     log_dlna_request(request, "stream_head", channel_id=clean_channel_id, response_headers=headers)
     return Response(status_code=200, headers=headers, media_type=DLNA_STREAM_MEDIA_TYPE)
+
+
+@router.head("/dlna/auto/v{channel_number}", response_model=None)
+def dlna_stream_auto_head(channel_number: str, request: Request) -> Response:
+    channel_id = dlna_channel_id_for_number(channel_number)
+    if not channel_id:
+        raise HTTPException(status_code=404, detail="DLNA channel number not found")
+    return dlna_stream_head(channel_id, request)
 
 
 def dlna_transcode_command(stream_url: str, ffmpeg_path: str) -> list[str]:
