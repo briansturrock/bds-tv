@@ -26,8 +26,8 @@ body {
 }
 
 .app-header {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(220px, 0.7fr) minmax(360px, 1.4fr);
   align-items: center;
   gap: 14px;
   padding: 16px 20px;
@@ -45,17 +45,25 @@ body {
 .public-ip-status {
   display: flex;
   align-items: center;
+  justify-content: center;
+  gap: 8px;
+  justify-self: start;
   color: var(--text);
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
-  margin-left: auto;
-  margin-right: auto;
 }
 
 .public-ip-status.muted-status {
   color: var(--muted);
   font-weight: 500;
+}
+
+.public-ip-flag {
+  width: 30px;
+  height: 22px;
+  object-fit: contain;
+  display: block;
 }
 
 h1, h2 {

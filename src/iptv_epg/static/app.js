@@ -72,7 +72,11 @@ async function loadPublicIp() {
       return body;
     }
     const location = [body.country_name, body.country_code].filter(Boolean).join(" · ");
-    el.textContent = `IP Address: ${body.ip} ${body.flag || ""}`.trim();
+    const countryCode = (body.country_code || "").toUpperCase();
+    const flag = countryCode
+      ? `<img class="public-ip-flag" src="https://flagsapi.com/${encodeURIComponent(countryCode)}/flat/48.png" alt="${countryCode}" loading="lazy" />`
+      : "";
+    el.innerHTML = `<span>IP Address: ${body.ip}</span>${flag}`;
     el.title = location ? `App public IPv4 address · ${location}` : "App public IPv4 address";
     el.classList.remove("muted-status");
     return body;
