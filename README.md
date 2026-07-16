@@ -189,6 +189,18 @@ The DLNA server provides:
 - a request log for troubleshooting TV behaviour;
 - a DLNA inspector for comparing other DLNA servers, such as a real HDHomeRun or Plex.
 
+### DLNA Request Log
+
+The DLNA request log records recent DLNA browse and stream requests from clients. It captures useful details such as the client address, user agent, request path, SOAP action, browse object ID, browse mode, stream mode, and selected channel ID.
+
+This is especially useful with TVs, because they often fail silently or show vague messages like "unsupported feature". The request log shows what the TV actually asked for, whether it browsed folder children or item metadata, whether it sent `HEAD` before `GET`, and which stream URL it attempted to open.
+
+### DLNA Inspector
+
+The DLNA inspector is a small but useful troubleshooting tool built into the DLNA tab. It can discover other DLNA/UPnP devices on the network, inspect their device XML, and browse their ContentDirectory metadata.
+
+This was used to compare `iptv-epg` against a real HDHomeRun and Plex. It makes the app a bit self-teaching: rather than guessing what a TV expects, the inspector can look at working DLNA servers and show how they advertise folders, channel items, stream URLs, protocol information, and metadata.
+
 ### DLNA Streaming Modes
 
 | Mode | Explanation |

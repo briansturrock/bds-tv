@@ -49,6 +49,8 @@ python scripts/test_dlna_catalogue.py
 - Plex can play an HDHR stream when the killswitch allows it.
 - DLNA appears in VLC/TV clients with grouped folders.
 - DLNA MPEG-TS copy and buffered remux modes play in VLC.
+- DLNA request log records browse/metadata/stream requests from the test client.
+- DLNA inspector can discover and browse another DLNA server, such as Plex or a real HDHomeRun.
 - Killswitch blocks streaming when the public IP country equals the configured home country.
 
 ## Image Save/Load

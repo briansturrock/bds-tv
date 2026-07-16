@@ -88,6 +88,15 @@ HDHR and DLNA share the SSDP listener. Depending on enabled settings, it respond
 
 Host networking is used in Docker so multicast discovery works reliably on the LAN.
 
+## DLNA Diagnostics
+
+DLNA includes two built-in troubleshooting tools:
+
+- the request log, which records recent browse, metadata, HEAD, and stream requests from clients;
+- the inspector, which can discover and browse other DLNA servers so `iptv-epg` can be compared with working devices such as a real HDHomeRun or Plex.
+
+These tools are useful because TVs often hide the actual DLNA request/response details behind vague playback errors.
+
 ## Health
 
 `/health` is a lightweight app health endpoint used by Docker healthcheck and external monitors.
