@@ -60,6 +60,30 @@ async function loadStatus() {
   return status;
 }
 
+async function loadPublicIp() {
+  const el = $("header-public-ip");
+  if (!el) return null;
+  try {
+    const body = await api("/api/public-ip");
+    if (!body.ok || !body.ip) {
+      el.textContent = "Public IP unknown";
+      el.title = body.error || "Public IP lookup failed";
+      el.classList.add("muted-badge");
+      return body;
+    }
+    const location = [body.country_name, body.country_code].filter(Boolean).join(" · ");
+    el.textContent = `${body.flag || ""} ${body.ip}`.trim();
+    el.title = location ? `App public IP · ${location}` : "App public IP";
+    el.classList.remove("muted-badge");
+    return body;
+  } catch (err) {
+    el.textContent = "Public IP unknown";
+    el.title = err.message;
+    el.classList.add("muted-badge");
+    return null;
+  }
+}
+
 async function loadSettings() {
   const settings = await api("/api/settings");
   $("m3u-url").value = settings.m3u_url || "";
@@ -828,6 +852,7 @@ async function init() {
   try {
     await loadSettings();
     await loadStatus();
+    loadPublicIp();
     setMessage("settings-message", "Ready.");
   } catch (err) {
     setMessage("settings-message", `Startup load failed: ${err.message}`, true);

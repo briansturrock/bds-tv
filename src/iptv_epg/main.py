@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import signal
 import shutil
@@ -54,6 +55,9 @@ HLS_ROOT = Path("/tmp/iptv_epg_hls")
 HLS_PROCESSES: dict[str, subprocess.Popen] = {}
 HLS_LOCK = threading.Lock()
 executor = ThreadPoolExecutor(max_workers=2)
+PUBLIC_IP_CACHE_TTL_SECONDS = 15 * 60
+PUBLIC_IP_CACHE: dict[str, object] = {"expires_at": 0.0, "payload": None}
+PUBLIC_IP_LOCK = threading.Lock()
 
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -96,6 +100,88 @@ class ChannelLogoIn(BaseModel):
     preferred_logo_url: str | None = None
 
 
+def country_flag(country_code: str | None) -> str:
+    code = (country_code or "").strip().upper()
+    if len(code) != 2 or not code.isalpha():
+        return ""
+    return "".join(chr(0x1F1E6 + ord(ch) - ord("A")) for ch in code)
+
+
+def fetch_json(url: str, timeout: float = 5.0) -> dict:
+    request = Request(url, headers={"User-Agent": f"iptv-epg/{__version__}"})
+    with urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8", errors="replace"))
+
+
+def lookup_public_ip() -> dict:
+    errors: list[str] = []
+    lookups = [
+        (
+            "ipapi.co",
+            "https://ipapi.co/json/",
+            lambda data: {
+                "ip": data.get("ip") or "",
+                "country_code": data.get("country_code") or "",
+                "country_name": data.get("country_name") or "",
+            },
+        ),
+        (
+            "ip-api.com",
+            "http://ip-api.com/json/?fields=status,message,query,country,countryCode",
+            lambda data: {
+                "ip": data.get("query") or "",
+                "country_code": data.get("countryCode") or "",
+                "country_name": data.get("country") or "",
+            },
+        ),
+    ]
+
+    for source, url, parser in lookups:
+        try:
+            data = fetch_json(url)
+            if data.get("error") or data.get("status") == "fail":
+                raise RuntimeError(data.get("reason") or data.get("message") or "lookup failed")
+            parsed = parser(data)
+            if not parsed["ip"]:
+                raise RuntimeError("lookup did not return an IP address")
+            return {
+                "ok": True,
+                "source": source,
+                "ip": parsed["ip"],
+                "country_code": parsed["country_code"],
+                "country_name": parsed["country_name"],
+                "flag": country_flag(parsed["country_code"]),
+                "checked_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            }
+        except Exception as exc:
+            errors.append(f"{source}: {exc}")
+
+    return {
+        "ok": False,
+        "source": "",
+        "ip": "",
+        "country_code": "",
+        "country_name": "",
+        "flag": "",
+        "checked_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "error": "; ".join(errors),
+    }
+
+
+def cached_public_ip() -> dict:
+    now = time.time()
+    with PUBLIC_IP_LOCK:
+        cached = PUBLIC_IP_CACHE.get("payload")
+        if cached and now < float(PUBLIC_IP_CACHE.get("expires_at") or 0):
+            return dict(cached)
+
+    payload = lookup_public_ip()
+    with PUBLIC_IP_LOCK:
+        PUBLIC_IP_CACHE["payload"] = payload
+        PUBLIC_IP_CACHE["expires_at"] = now + PUBLIC_IP_CACHE_TTL_SECONDS
+    return dict(payload)
+
+
 @app.on_event("startup")
 def startup() -> None:
     ensure_runtime_dirs()
@@ -129,6 +215,11 @@ def health() -> dict:
 @app.get("/api/status")
 def api_status() -> dict:
     return get_status(__version__)
+
+
+@app.get("/api/public-ip")
+def api_public_ip() -> dict:
+    return cached_public_ip()
 
 
 @app.get("/api/settings", response_model=SettingsOut)
