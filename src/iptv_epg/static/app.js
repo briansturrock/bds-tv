@@ -248,10 +248,10 @@ function renderActiveStreams(status = {}) {
       (stream) => `
         <div class="stream-row">
           <div>
-            <strong>${esc(stream.channel_name || "Unknown channel")}</strong>
-            <span>${esc(stream.channel_id || "")}</span>
+            <strong>${escapeHtml(stream.channel_name || "Unknown channel")}</strong>
+            <span>${escapeHtml(stream.channel_id || "")}</span>
           </div>
-          <div><small>Mode</small>${esc(stream.mode || "unknown")}</div>
+          <div><small>Mode</small>${escapeHtml(stream.mode || "unknown")}</div>
           <div><small>Running</small>${formatDuration(stream.seconds)}</div>
           <div><small>Idle</small>${formatDuration(stream.idle_seconds)}</div>
           <div><small>Sent</small>${formatBytes(stream.bytes_sent)}</div>
