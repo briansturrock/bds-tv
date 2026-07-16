@@ -118,7 +118,7 @@ def lookup_public_ip() -> dict:
     lookups = [
         (
             "ipapi.co",
-            "https://ipapi.co/json/",
+            "https://ipapi.co/ipv4/json/",
             lambda data: {
                 "ip": data.get("ip") or "",
                 "country_code": data.get("country_code") or "",
@@ -126,12 +126,12 @@ def lookup_public_ip() -> dict:
             },
         ),
         (
-            "ip-api.com",
-            "http://ip-api.com/json/?fields=status,message,query,country,countryCode",
+            "ipinfo.io",
+            "https://v4.ipinfo.io/json",
             lambda data: {
-                "ip": data.get("query") or "",
-                "country_code": data.get("countryCode") or "",
-                "country_name": data.get("country") or "",
+                "ip": data.get("ip") or "",
+                "country_code": data.get("country") or "",
+                "country_name": "",
             },
         ),
     ]
@@ -144,6 +144,8 @@ def lookup_public_ip() -> dict:
             parsed = parser(data)
             if not parsed["ip"]:
                 raise RuntimeError("lookup did not return an IP address")
+            if ":" in parsed["ip"]:
+                raise RuntimeError("lookup returned IPv6 address")
             return {
                 "ok": True,
                 "source": source,

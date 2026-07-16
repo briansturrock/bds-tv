@@ -66,20 +66,20 @@ async function loadPublicIp() {
   try {
     const body = await api("/api/public-ip");
     if (!body.ok || !body.ip) {
-      el.textContent = "Public IP unknown";
+      el.textContent = "IP Address: unknown";
       el.title = body.error || "Public IP lookup failed";
-      el.classList.add("muted-badge");
+      el.classList.add("muted-status");
       return body;
     }
     const location = [body.country_name, body.country_code].filter(Boolean).join(" · ");
-    el.textContent = `${body.flag || ""} ${body.ip}`.trim();
-    el.title = location ? `App public IP · ${location}` : "App public IP";
-    el.classList.remove("muted-badge");
+    el.textContent = `IP Address: ${body.ip} ${body.flag || ""}`.trim();
+    el.title = location ? `App public IPv4 address · ${location}` : "App public IPv4 address";
+    el.classList.remove("muted-status");
     return body;
   } catch (err) {
-    el.textContent = "Public IP unknown";
+    el.textContent = "IP Address: unknown";
     el.title = err.message;
-    el.classList.add("muted-badge");
+    el.classList.add("muted-status");
     return null;
   }
 }

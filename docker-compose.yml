@@ -8,7 +8,7 @@ services:
     command: ["uvicorn", "iptv_epg.main:app", "--host", "0.0.0.0", "--port", "8088"]
     environment:
       - TZ=UTC
-      - IPTV_EPG_VERSION=0.11.16
+      - IPTV_EPG_VERSION=0.11.17
       - CONFIG_DIR=/config
       - DATA_DIR=/data
       - DB_PATH=/db/iptv_epg.db
