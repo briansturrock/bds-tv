@@ -1162,7 +1162,7 @@ def output_channel_ids_by_guide_id(mappings: list[dict[str, Any]]) -> dict[str, 
     output_ids: dict[str, list[str]] = defaultdict(list)
     for mapping in mappings:
         guide_id = (mapping.get("xmltv_id") or "").strip()
-        output_id = (mapping.get("tvg_id") or mapping.get("xmltv_id") or "").strip()
+        output_id = (mapping.get("tvg_id") or mapping.get("channel_id") or mapping.get("xmltv_id") or "").strip()
         if guide_id and output_id and output_id not in output_ids[guide_id]:
             output_ids[guide_id].append(output_id)
     return dict(output_ids)

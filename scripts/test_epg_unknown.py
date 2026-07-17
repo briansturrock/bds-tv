@@ -36,11 +36,16 @@ def main() -> None:
         {"xmltv_id": "SkySp.PL.HD.uk", "tvg_id": "uk.Sky Sports Premier League"},
         {"xmltv_id": "SkySp.PL.HD.uk", "tvg_id": "SkySportsPremiereLeague.uk"},
         {"xmltv_id": "SkySp.PL.HD.uk", "tvg_id": "SkySportsPremiereLeague.uk"},
+        {"xmltv_id": "TNT.Sports.4.HD.uk", "tvg_id": "", "channel_id": "internal-tnt-sports-4-hevc"},
         {"xmltv_id": "SkySportsMainEvent.uk", "tvg_id": "SkySportsMainEvent.uk"},
     ])
     check(
         targets["SkySp.PL.HD.uk"] == ["uk.Sky Sports Premier League", "SkySportsPremiereLeague.uk"],
         "same guide id should fan out to multiple selected tvg-ids without duplicates",
+    )
+    check(
+        targets["TNT.Sports.4.HD.uk"] == ["internal-tnt-sports-4-hevc"],
+        "blank tvg-id should fall back to the selected channel id",
     )
     check(targets["SkySportsMainEvent.uk"] == ["SkySportsMainEvent.uk"], "single guide target mapping failed")
 
