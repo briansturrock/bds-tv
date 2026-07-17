@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import gzip
 import os
 import re
@@ -1157,6 +1158,16 @@ def selected_channel_xmltv_id(channel: dict[str, Any]) -> str:
     return (channel.get("tvg_id") or channel.get("channel_id") or "").strip()
 
 
+def output_channel_ids_by_guide_id(mappings: list[dict[str, Any]]) -> dict[str, list[str]]:
+    output_ids: dict[str, list[str]] = defaultdict(list)
+    for mapping in mappings:
+        guide_id = (mapping.get("xmltv_id") or "").strip()
+        output_id = (mapping.get("tvg_id") or mapping.get("xmltv_id") or "").strip()
+        if guide_id and output_id and output_id not in output_ids[guide_id]:
+            output_ids[guide_id].append(output_id)
+    return dict(output_ids)
+
+
 def selected_channel_element(channel: dict[str, Any]) -> ET.Element:
     target_id = selected_channel_xmltv_id(channel)
     elem = ET.Element("channel", {"id": target_id})
@@ -1284,10 +1295,7 @@ def generate_filtered_epgshare(job_id: str | None = None, days: int = 3) -> dict
 
             source_mappings = source["mappings"]
             source_xmltv_ids = {m["xmltv_id"] for m in source_mappings}
-            target_by_xmltv_id = {
-                m["xmltv_id"]: (m.get("tvg_id") or m["xmltv_id"])
-                for m in source_mappings
-            }
+            output_ids_by_guide_id = output_channel_ids_by_guide_id(source_mappings)
 
             temp_path = download_to_tempfile(xml_url)
             downloaded_sources.append({
@@ -1325,11 +1333,13 @@ def generate_filtered_epgshare(job_id: str | None = None, days: int = 3) -> dict
                             elem.clear()
                             continue
 
-                        elem.attrib["channel"] = target_by_xmltv_id[source_channel_id]
-                        out.write(serialize_element(elem))
-                        out.write("\n")
-                        channels_with_programmes.add(elem.attrib["channel"])
-                        programme_count += 1
+                        for output_channel_id in output_ids_by_guide_id.get(source_channel_id, []):
+                            output_elem = copy.deepcopy(elem)
+                            output_elem.attrib["channel"] = output_channel_id
+                            out.write(serialize_element(output_elem))
+                            out.write("\n")
+                            channels_with_programmes.add(output_channel_id)
+                            programme_count += 1
                         elem.clear()
 
                 for xmltv_id in source_xmltv_ids - seen_channel_ids:

@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.modules.setdefault("requests", types.SimpleNamespace())
 
-from iptv_epg.epgshare import unknown_programmes_for_xmltv_id, xmltv_time  # noqa: E402
+from iptv_epg.epgshare import output_channel_ids_by_guide_id, unknown_programmes_for_xmltv_id, xmltv_time  # noqa: E402
 
 
 def check(condition: bool, message: str) -> None:
@@ -31,6 +31,18 @@ def main() -> None:
     check(all(item.findtext("title") == "Unknown" for item in programmes), "Unknown title missing")
     check(programmes[0].get("stop") == programmes[1].get("start"), "Unknown blocks are not contiguous")
     check(programmes[-1].get("stop") == "20260714200000 +0000", "last stop time wrong")
+
+    targets = output_channel_ids_by_guide_id([
+        {"xmltv_id": "SkySp.PL.HD.uk", "tvg_id": "uk.Sky Sports Premier League"},
+        {"xmltv_id": "SkySp.PL.HD.uk", "tvg_id": "SkySportsPremiereLeague.uk"},
+        {"xmltv_id": "SkySp.PL.HD.uk", "tvg_id": "SkySportsPremiereLeague.uk"},
+        {"xmltv_id": "SkySportsMainEvent.uk", "tvg_id": "SkySportsMainEvent.uk"},
+    ])
+    check(
+        targets["SkySp.PL.HD.uk"] == ["uk.Sky Sports Premier League", "SkySportsPremiereLeague.uk"],
+        "same guide id should fan out to multiple selected tvg-ids without duplicates",
+    )
+    check(targets["SkySportsMainEvent.uk"] == ["SkySportsMainEvent.uk"], "single guide target mapping failed")
 
 
 if __name__ == "__main__":
