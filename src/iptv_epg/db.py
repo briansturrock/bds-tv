@@ -151,10 +151,14 @@ def normalise_tvg_id(value: str | None) -> str:
 def apply_inherited_preferred_logos(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     preferred_by_tvg_id: dict[str, str] = {}
     keys_needing_lookup: set[str] = set()
+    channel_ids: list[str] = []
 
     for row in rows:
         key = normalise_tvg_id(row.get("tvg_id"))
         preferred = (row.get("preferred_logo_url") or "").strip()
+        channel_id = str(row.get("channel_id") or row.get("id") or "").strip()
+        if channel_id:
+            channel_ids.append(channel_id)
         if key and preferred and key not in preferred_by_tvg_id:
             preferred_by_tvg_id[key] = preferred
         elif key:
@@ -182,9 +186,62 @@ def apply_inherited_preferred_logos(rows: list[dict[str, Any]]) -> list[dict[str
             if key and preferred and key not in preferred_by_tvg_id:
                 preferred_by_tvg_id[key] = preferred
 
+    guide_id_by_channel_id: dict[str, str] = {}
+    preferred_by_guide_id: dict[str, str] = {}
+    if channel_ids:
+        placeholders = ",".join("?" for _ in channel_ids)
+        try:
+            with connect() as conn:
+                mapping_rows = conn.execute(
+                    f"""
+                    SELECT channel_id, xmltv_id
+                    FROM epgshare_mappings
+                    WHERE ignored = 0
+                      AND xmltv_id IS NOT NULL
+                      AND xmltv_id != ''
+                      AND channel_id IN ({placeholders})
+                    """,
+                    channel_ids,
+                ).fetchall()
+
+                guide_id_by_channel_id = {
+                    str(row["channel_id"]): str(row["xmltv_id"])
+                    for row in mapping_rows
+                    if row["channel_id"] and row["xmltv_id"]
+                }
+                guide_ids = sorted(set(guide_id_by_channel_id.values()))
+
+                if guide_ids:
+                    guide_placeholders = ",".join("?" for _ in guide_ids)
+                    logo_rows = conn.execute(
+                        f"""
+                        SELECT epgshare_mappings.xmltv_id, channels.preferred_logo_url
+                        FROM epgshare_mappings
+                        JOIN channels ON channels.id = epgshare_mappings.channel_id
+                        WHERE epgshare_mappings.ignored = 0
+                          AND epgshare_mappings.xmltv_id IN ({guide_placeholders})
+                          AND channels.missing = 0
+                          AND channels.preferred_logo_url IS NOT NULL
+                          AND channels.preferred_logo_url != ''
+                        ORDER BY epgshare_mappings.updated_at DESC
+                        """,
+                        guide_ids,
+                    ).fetchall()
+
+                    for logo_row in logo_rows:
+                        guide_id = str(logo_row["xmltv_id"] or "").strip()
+                        preferred = str(logo_row["preferred_logo_url"] or "").strip()
+                        if guide_id and preferred and guide_id not in preferred_by_guide_id:
+                            preferred_by_guide_id[guide_id] = preferred
+        except sqlite3.Error:
+            guide_id_by_channel_id = {}
+            preferred_by_guide_id = {}
+
     for row in rows:
         key = normalise_tvg_id(row.get("tvg_id"))
-        inherited = preferred_by_tvg_id.get(key)
+        channel_id = str(row.get("channel_id") or row.get("id") or "").strip()
+        guide_id = guide_id_by_channel_id.get(channel_id)
+        inherited = preferred_by_tvg_id.get(key) or preferred_by_guide_id.get(guide_id or "")
         if not inherited or row.get("preferred_logo_url"):
             continue
 
