@@ -998,6 +998,23 @@ function epgMappingFromOption(row, opt, mappingType = "manual") {
   };
 }
 
+function resetEpgReviewState() {
+  epgState.activeGroupName = null;
+  epgState.activeChannelId = null;
+  epgState.pending = null;
+  epgState.manualSearch = {
+    channelId: null,
+    query: "",
+    results: [],
+  };
+
+  const groupFilter = $("epg-group-filter");
+  if (groupFilter) groupFilter.value = "";
+
+  const channelFilter = $("epg-channel-filter");
+  if (channelFilter) channelFilter.value = "";
+}
+
 async function loadEpgReview() {
   const body = await api("/api/epgshare/mapping-review");
   epgState.review = body;
@@ -1030,6 +1047,7 @@ async function loadEpgReview() {
 }
 
 async function refreshEpg() {
+  resetEpgReviewState();
   await loadEpgReview();
 }
 

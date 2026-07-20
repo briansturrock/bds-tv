@@ -258,6 +258,22 @@ def get_setting(key: str, default: str | None = None) -> str | None:
     return row["value"] if row else default
 
 
+def get_settings(keys: list[str] | tuple[str, ...] | set[str] | None = None) -> dict[str, str]:
+    with connect() as conn:
+        if keys is None:
+            rows = conn.execute("SELECT key, value FROM settings").fetchall()
+        else:
+            cleaned = sorted({key for key in keys if key})
+            if not cleaned:
+                return {}
+            placeholders = ",".join("?" for _ in cleaned)
+            rows = conn.execute(
+                f"SELECT key, value FROM settings WHERE key IN ({placeholders})",
+                cleaned,
+            ).fetchall()
+    return {row["key"]: row["value"] for row in rows}
+
+
 def set_setting(key: str, value: str) -> None:
     with connect() as conn:
         conn.execute("BEGIN IMMEDIATE")

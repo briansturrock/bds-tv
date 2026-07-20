@@ -8,7 +8,7 @@ import time
 import xml.etree.ElementTree as ET
 from collections import deque
 from dataclasses import dataclass, replace
-from typing import Any, Deque
+from typing import Any, Deque, Mapping
 from urllib.parse import unquote, urljoin
 from urllib.request import Request as UrlRequest
 from urllib.request import urlopen
@@ -17,8 +17,9 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import PlainTextResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
-from .db import get_setting, set_setting
+from .db import get_setting, get_settings, set_setting
 from .hdhr import (
+    HDHR_SETTING_KEYS,
     ffmpeg_stream_iterator,
     get_hdhr_settings,
     reserve_stream_session,
@@ -85,8 +86,22 @@ class DlnaSettings:
     stream_mode: str
 
 
-def bool_setting(key: str, default: bool) -> bool:
-    value = get_setting(key)
+DLNA_SETTING_KEYS: tuple[str, ...] = (
+    "dlna_enabled",
+    "dlna_device_name",
+    "dlna_public_base_url",
+    "dlna_stream_mode",
+)
+
+
+def setting_value(settings: Mapping[str, str] | None, key: str, default: str | None = None) -> str | None:
+    if settings is not None:
+        return settings.get(key, default)
+    return get_setting(key, default)
+
+
+def bool_setting_from_snapshot(key: str, default: bool, settings: Mapping[str, str] | None = None) -> bool:
+    value = setting_value(settings, key)
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
@@ -134,15 +149,18 @@ def clear_dlna_requests() -> None:
         DLNA_REQUEST_LOG.clear()
 
 
-def get_dlna_settings() -> DlnaSettings:
-    hdhr_settings = get_hdhr_settings()
-    stream_mode = (get_setting("dlna_stream_mode", "copy") or "copy").strip().lower()
+def get_dlna_settings(settings: Mapping[str, str] | None = None) -> DlnaSettings:
+    if settings is None:
+        settings = get_settings((*DLNA_SETTING_KEYS, *HDHR_SETTING_KEYS))
+
+    hdhr_settings = get_hdhr_settings(settings)
+    stream_mode = (setting_value(settings, "dlna_stream_mode", "copy") or "copy").strip().lower()
     if stream_mode not in {"copy", "buffered", "transcode"}:
         stream_mode = "copy"
     return DlnaSettings(
-        enabled=bool_setting("dlna_enabled", True),
-        device_name=(get_setting("dlna_device_name", "iptv-epg DLNA") or "iptv-epg DLNA").strip() or "iptv-epg DLNA",
-        public_base_url=normalise_base_url(get_setting("dlna_public_base_url") or hdhr_settings.public_base_url),
+        enabled=bool_setting_from_snapshot("dlna_enabled", True, settings),
+        device_name=(setting_value(settings, "dlna_device_name", "iptv-epg DLNA") or "iptv-epg DLNA").strip() or "iptv-epg DLNA",
+        public_base_url=normalise_base_url(setting_value(settings, "dlna_public_base_url") or hdhr_settings.public_base_url),
         stream_mode=stream_mode,
     )
 

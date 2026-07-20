@@ -9,7 +9,7 @@ import uuid
 from collections import deque
 from dataclasses import dataclass
 import json
-from typing import Any, Deque, Iterator
+from typing import Any, Deque, Iterator, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
@@ -19,7 +19,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from .db import connect, get_groups, get_selected_channels, get_setting, set_setting
+from .db import connect, get_groups, get_selected_channels, get_setting, get_settings, set_setting
 from .m3u import extinf_with_logo
 from .settings import DATA_DIR, FILTERED_EPG
 from .stream_safety import enforce_stream_killswitch
@@ -125,15 +125,44 @@ STREAM_SAFETY_STATUS: dict[str, Any] = {
 }
 
 
-def bool_setting(key: str, default: bool) -> bool:
-    value = get_setting(key)
+HDHR_SETTING_KEYS: tuple[str, ...] = (
+    "hdhr_enabled",
+    "hdhr_device_name",
+    "hdhr_device_id",
+    "hdhr_channel_limit",
+    "hdhr_excluded_group_ids",
+    "hdhr_tuner_count",
+    "hdhr_max_upstream_streams",
+    "hdhr_public_base_url",
+    "hdhr_stream_mode",
+    "hdhr_conflict_policy",
+    "hdhr_ffmpeg_path",
+    "hdhr_buffer_seconds",
+    "hdhr_buffer_max_mb",
+    "hdhr_stream_cleanup_enabled",
+    "hdhr_max_stream_age_minutes",
+    "hdhr_idle_timeout_seconds",
+    "hdhr_cleanup_interval_seconds",
+    "hdhr_scheduled_drop_enabled",
+    "hdhr_scheduled_drop_time",
+)
+
+
+def setting_value(settings: Mapping[str, str] | None, key: str, default: str | None = None) -> str | None:
+    if settings is not None:
+        return settings.get(key, default)
+    return get_setting(key, default)
+
+
+def bool_setting(key: str, default: bool, settings: Mapping[str, str] | None = None) -> bool:
+    value = setting_value(settings, key)
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def int_setting(key: str, default: int, min_value: int, max_value: int) -> int:
-    value = get_setting(key)
+def int_setting(key: str, default: int, min_value: int, max_value: int, settings: Mapping[str, str] | None = None) -> int:
+    value = setting_value(settings, key)
     try:
         parsed = int(value) if value is not None else default
     except ValueError:
@@ -141,8 +170,8 @@ def int_setting(key: str, default: int, min_value: int, max_value: int) -> int:
     return max(min_value, min(parsed, max_value))
 
 
-def list_setting(key: str) -> list[str]:
-    value = get_setting(key)
+def list_setting(key: str, settings: Mapping[str, str] | None = None) -> list[str]:
+    value = setting_value(settings, key)
     if not value:
         return []
     try:
@@ -172,8 +201,8 @@ def normalise_hhmm(value: str | None, default: str = "04:00") -> str:
     return f"{hour:02d}:{minute:02d}"
 
 
-def get_or_create_device_id() -> str:
-    existing = (get_setting("hdhr_device_id") or "").strip()
+def get_or_create_device_id(settings: Mapping[str, str] | None = None) -> str:
+    existing = (setting_value(settings, "hdhr_device_id") or "").strip()
     if existing:
         return existing
 
@@ -182,35 +211,38 @@ def get_or_create_device_id() -> str:
     return generated
 
 
-def get_hdhr_settings() -> HdhrSettings:
-    stream_mode = (get_setting("hdhr_stream_mode", "direct") or "direct").strip().lower()
+def get_hdhr_settings(settings: Mapping[str, str] | None = None) -> HdhrSettings:
+    if settings is None:
+        settings = get_settings(HDHR_SETTING_KEYS)
+
+    stream_mode = (setting_value(settings, "hdhr_stream_mode", "direct") or "direct").strip().lower()
     if stream_mode not in {"direct", "ffmpeg", "buffered"}:
         stream_mode = "direct"
 
-    conflict_policy = (get_setting("hdhr_conflict_policy", "reject_new") or "reject_new").strip().lower()
+    conflict_policy = (setting_value(settings, "hdhr_conflict_policy", "reject_new") or "reject_new").strip().lower()
     if conflict_policy not in {"reject_new", "stop_existing"}:
         conflict_policy = "reject_new"
 
     return HdhrSettings(
-        enabled=bool_setting("hdhr_enabled", False),
-        device_name=(get_setting("hdhr_device_name", "iptv-epg") or "iptv-epg").strip() or "iptv-epg",
-        device_id=get_or_create_device_id(),
-        channel_limit=int_setting("hdhr_channel_limit", 450, 1, 5000),
-        excluded_group_ids=list_setting("hdhr_excluded_group_ids"),
-        tuner_count=int_setting("hdhr_tuner_count", 1, 1, 16),
-        max_upstream_streams=int_setting("hdhr_max_upstream_streams", 1, 1, 16),
-        public_base_url=normalise_base_url(get_setting("hdhr_public_base_url")),
+        enabled=bool_setting("hdhr_enabled", False, settings),
+        device_name=(setting_value(settings, "hdhr_device_name", "iptv-epg") or "iptv-epg").strip() or "iptv-epg",
+        device_id=get_or_create_device_id(settings),
+        channel_limit=int_setting("hdhr_channel_limit", 450, 1, 5000, settings),
+        excluded_group_ids=list_setting("hdhr_excluded_group_ids", settings),
+        tuner_count=int_setting("hdhr_tuner_count", 1, 1, 16, settings),
+        max_upstream_streams=int_setting("hdhr_max_upstream_streams", 1, 1, 16, settings),
+        public_base_url=normalise_base_url(setting_value(settings, "hdhr_public_base_url")),
         stream_mode=stream_mode,
         conflict_policy=conflict_policy,
-        ffmpeg_path=(get_setting("hdhr_ffmpeg_path", "ffmpeg") or "ffmpeg").strip() or "ffmpeg",
-        buffer_seconds=int_setting("hdhr_buffer_seconds", 30, 0, 120),
-        buffer_max_mb=int_setting("hdhr_buffer_max_mb", 256, 16, 2048),
-        stream_cleanup_enabled=bool_setting("hdhr_stream_cleanup_enabled", True),
-        max_stream_age_minutes=int_setting("hdhr_max_stream_age_minutes", 240, 1, 1440),
-        idle_timeout_seconds=int_setting("hdhr_idle_timeout_seconds", 120, 0, 3600),
-        cleanup_interval_seconds=int_setting("hdhr_cleanup_interval_seconds", 30, 5, 300),
-        scheduled_drop_enabled=bool_setting("hdhr_scheduled_drop_enabled", False),
-        scheduled_drop_time=normalise_hhmm(get_setting("hdhr_scheduled_drop_time"), "04:00"),
+        ffmpeg_path=(setting_value(settings, "hdhr_ffmpeg_path", "ffmpeg") or "ffmpeg").strip() or "ffmpeg",
+        buffer_seconds=int_setting("hdhr_buffer_seconds", 30, 0, 120, settings),
+        buffer_max_mb=int_setting("hdhr_buffer_max_mb", 256, 16, 2048, settings),
+        stream_cleanup_enabled=bool_setting("hdhr_stream_cleanup_enabled", True, settings),
+        max_stream_age_minutes=int_setting("hdhr_max_stream_age_minutes", 240, 1, 1440, settings),
+        idle_timeout_seconds=int_setting("hdhr_idle_timeout_seconds", 120, 0, 3600, settings),
+        cleanup_interval_seconds=int_setting("hdhr_cleanup_interval_seconds", 30, 5, 300, settings),
+        scheduled_drop_enabled=bool_setting("hdhr_scheduled_drop_enabled", False, settings),
+        scheduled_drop_time=normalise_hhmm(setting_value(settings, "hdhr_scheduled_drop_time"), "04:00"),
     )
 
 

@@ -29,6 +29,7 @@ sys.modules.setdefault("fastapi", fastapi)
 
 responses = types.ModuleType("fastapi.responses")
 responses.FileResponse = object
+responses.JSONResponse = object
 responses.PlainTextResponse = object
 responses.Response = object
 responses.StreamingResponse = object
@@ -53,9 +54,9 @@ def main() -> None:
     original = dlna.selected_catalogue_channels
     try:
         dlna.selected_catalogue_channels = lambda limit=None: [
-            {"channel_id": "bbc1", "name": "BBC One", "group_id": "uk", "group_name": "UK", "logo_url": ""},
-            {"channel_id": "bbc2", "name": "BBC Two", "group_id": "uk", "group_name": "UK", "logo_url": ""},
-            {"channel_id": "cnn", "name": "CNN", "group_id": "news", "group_name": "News", "logo_url": ""},
+            {"number": 1, "channel_id": "bbc1", "name": "BBC One", "group_id": "uk", "group_name": "UK", "logo_url": ""},
+            {"number": 2, "channel_id": "bbc2", "name": "BBC Two", "group_id": "uk", "group_name": "UK", "logo_url": ""},
+            {"number": 3, "channel_id": "cnn", "name": "CNN", "group_id": "news", "group_name": "News", "logo_url": ""},
         ]
 
         root, returned, total = dlna.browse_result("0", "http://example")
@@ -68,8 +69,8 @@ def main() -> None:
         uk, returned, total = dlna.browse_result("group%3A1", "http://example")
         check(returned == 2 and total == 2, "DLNA group should expose its channels")
         check("BBC One" in uk and "BBC Two" in uk, "DLNA group should include channel titles")
-        check("http://example/dlna/channel/bbc1.mpg" in uk, "DLNA channel URL should look like a TV-playable MPEG file")
-        check("video/vnd.dlna.mpeg-tts" in uk, "DLNA channel should advertise MPEG-TS video protocol info")
+        check("http://example/dlna/auto/v1" in uk, "DLNA channel URL should use the TV-friendly numbered stream route")
+        check("video/mpeg" in uk, "DLNA channel should advertise MPEG video protocol info")
 
         legacy, returned, total = dlna.browse_result("group:uk", "http://example")
         check(returned == 2 and total == 2 and "BBC One" in legacy, "legacy raw group IDs should still browse")
@@ -81,7 +82,7 @@ def main() -> None:
         command = dlna.dlna_transcode_command("http://upstream", "ffmpeg")
         check("libx264" in command and "aac" in command, "DLNA transcode command should target TV-compatible codecs")
         check(command[-2:] == ["mpegts", "pipe:1"], "DLNA transcode command should stream MPEG-TS to stdout")
-        check(dlna.DLNA_STREAM_HEADERS["Accept-Ranges"] == "none", "DLNA streams should advertise non-seekable live output")
+        check("Accept-Ranges" not in dlna.DLNA_STREAM_HEADERS, "DLNA streams should not advertise byte ranges for live output")
         check(dlna.DLNA_STREAM_HEADERS["Connection"] == "close", "DLNA streams should use TV-friendly connection headers")
     finally:
         dlna.selected_catalogue_channels = original
