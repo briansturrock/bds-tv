@@ -98,7 +98,7 @@ def _run_generate_filtered_job(job_id: str, days: int) -> None:
             job_id,
             status="complete",
             message=(
-                f"Generated EPGShare filtered EPG with "
+                f"Generated BDS-TV XMLTV with "
                 f"{result['channel_count']} channels and {result['programme_count']} programmes"
             ),
             progress_current=int(result["source_count"]),
@@ -109,7 +109,7 @@ def _run_generate_filtered_job(job_id: str, days: int) -> None:
         update_job(
             job_id,
             status="failed",
-            message="EPGShare filtered EPG generation failed",
+            message="BDS-TV XMLTV generation failed",
             error=str(exc),
             finish=True,
         )
@@ -118,11 +118,11 @@ def _run_generate_filtered_job(job_id: str, days: int) -> None:
 @router.post("/generate-filtered")
 def api_generate_filtered_epgshare(days: int = Query(3, ge=1, le=14)) -> dict:
     job_id = str(uuid.uuid4())
-    create_job(job_id, "epgshare_filtered_epg", "Queued EPGShare filtered EPG generation")
+    create_job(job_id, "epgshare_filtered_epg", "Queued BDS-TV XMLTV generation")
     executor.submit(_run_generate_filtered_job, job_id, days)
     return {
         "ok": True,
         "job_id": job_id,
-        "message": "EPGShare filtered EPG generation job started",
+        "message": "BDS-TV XMLTV generation job started",
         "days": days,
     }

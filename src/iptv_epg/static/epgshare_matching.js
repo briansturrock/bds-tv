@@ -221,7 +221,7 @@ loadReview().catch(err => {
 
 
 async function generateFilteredEpg() {
-  const ok = confirm("Generate filtered_epg.xml from saved mappings only?");
+  const ok = confirm("Generate bds-tv.xml from saved mappings only?");
   if (!ok) return;
 
   const res = await fetch("/api/epgshare/generate-filtered?days=3", { method: "POST" });

@@ -194,6 +194,6 @@ def start_scheduler_thread() -> None:
     with _start_lock:
         if _started:
             return
-        thread = threading.Thread(target=scheduler_loop, name="iptv_epg_scheduler", daemon=True)
+        thread = threading.Thread(target=scheduler_loop, name="bds_tv_scheduler", daemon=True)
         thread.start()
         _started = True

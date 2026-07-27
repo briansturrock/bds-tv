@@ -4,7 +4,7 @@
 
 The UI is a thin API client. The backend owns downloads, parsing, matching, XMLTV generation, stream proxying, HDHR emulation, DLNA serving, scheduling, and diagnostics.
 
-The selected channel catalogue is the source of truth. The filtered M3U, filtered XMLTV, Guide, HDHR lineup, HDHR XMLTV, and DLNA catalogue all derive from the same selected-channel configuration.
+The selected channel catalogue is the source of truth. The BDS-TV M3U, XMLTV, Guide, HDHR lineup, HDHR XMLTV, and DLNA catalogue all derive from the same selected-channel configuration.
 
 ## Durable state
 
@@ -36,11 +36,13 @@ Files under `/data`:
 
 ```text
 /data/source/source.m3u
-/data/filtered.m3u
-/data/filtered_epg.xml
+/data/bds-tv.m3u
+/data/bds-tv.xml
 /data/hdhr.m3u
 /data/epg_cache/*
 ```
+
+Legacy `/data/filtered.m3u` and `/data/filtered_epg.xml` files are recognised as fallbacks during the rename transition.
 
 HLS preview files are created under `/tmp/iptv_epg_hls`.
 
@@ -62,11 +64,11 @@ Channels:
 2. then `channels.user_order`;
 3. then `channels.provider_order`.
 
-Filtered M3U, Guide, HDHR, and DLNA use the same selected-channel ordering unless a feature deliberately applies its own filter, such as HDHR group exclusions.
+BDS-TV M3U, Guide, HDHR, and DLNA use the same selected-channel ordering unless a feature deliberately applies its own filter, such as HDHR group exclusions.
 
 ## Streaming Architecture
 
-`filtered.m3u` keeps provider stream URLs and is not a proxy playlist.
+`bds-tv.m3u` keeps provider stream URLs and is not a proxy playlist.
 
 Proxy streaming is handled separately:
 
@@ -93,7 +95,7 @@ Host networking is used in Docker so multicast discovery works reliably on the L
 DLNA includes two built-in troubleshooting tools:
 
 - the request log, which records recent browse, metadata, HEAD, and stream requests from clients;
-- the inspector, which can discover and browse other DLNA servers so `iptv-epg` can be compared with working devices such as a real HDHomeRun or Plex.
+- the inspector, which can discover and browse other DLNA servers so `bds-tv` can be compared with working devices such as a real HDHomeRun or Plex.
 
 These tools are useful because TVs often hide the actual DLNA request/response details behind vague playback errors.
 

@@ -16,6 +16,7 @@ from xml.etree import ElementTree as ET
 import requests
 
 from .db import apply_inherited_preferred_logos, connect, normalise_tvg_id, update_job
+from .settings import FILTERED_EPG
 
 
 EPGSHARE_BASE_URL = "https://epgshare01.online/epgshare01"
@@ -264,7 +265,7 @@ def parse_all_sources_text(text: str) -> list[EpgshareEntry]:
 
 def download_all_sources_text() -> str:
     headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; iptv_epg/0.1)",
+        "User-Agent": "Mozilla/5.0 (compatible; bds-tv/0.12)",
         "Accept": "text/plain,*/*",
     }
     response = requests.get(EPGSHARE_ALL_SOURCES_URL, timeout=(20, 240), headers=headers)
@@ -1116,7 +1117,7 @@ def programme_in_window(elem: ET.Element, window_start: datetime, window_end: da
 
 def download_to_tempfile(url: str) -> Path:
     headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; iptv_epg/0.1)",
+        "User-Agent": "Mozilla/5.0 (compatible; bds-tv/0.12)",
         "Accept": "application/gzip,application/xml,text/xml,*/*",
     }
 
@@ -1242,11 +1243,8 @@ def generate_filtered_epgshare(job_id: str | None = None, days: int = 3) -> dict
         )
         by_source[source_key]["mappings"].append(mapping)
 
-    # Keep output location consistent with filtered.m3u and the existing
-    # browser/download route expectations.
-    output_dir = Path(os.environ.get("DATA_DIR", "/data"))
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / "filtered_epg.xml"
+    output_path = FILTERED_EPG
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     window_start = datetime.now(timezone.utc) - timedelta(hours=6)
     window_end = datetime.now(timezone.utc) + timedelta(days=days)
@@ -1268,7 +1266,7 @@ def generate_filtered_epgshare(job_id: str | None = None, days: int = 3) -> dict
 
     with output_path.open("w", encoding="utf-8") as out:
         out.write('<?xml version="1.0" encoding="UTF-8"?>\n')
-        out.write('<tv generator-info-name="iptv_epg EPGShare filtered">\n')
+        out.write('<tv generator-info-name="bds-tv EPGShare">\n')
 
         # Emit channel definitions that match the IPTV M3U tvg-id values.
         emitted_channel_ids: set[str] = set()

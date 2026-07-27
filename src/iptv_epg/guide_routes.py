@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import re
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -11,13 +10,14 @@ from xml.etree import ElementTree as ET
 from fastapi import APIRouter, Query
 
 from .db import apply_inherited_preferred_logos, connect
+from .settings import readable_filtered_epg
 
 
 router = APIRouter(prefix="/api/guide", tags=["guide"])
 
 
 def filtered_epg_path() -> Path:
-    return Path(os.environ.get("DATA_DIR", "/data")) / "filtered_epg.xml"
+    return readable_filtered_epg()
 
 
 def parse_xmltv_time(value: str | None) -> datetime | None:

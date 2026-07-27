@@ -27,6 +27,7 @@ sys.modules.setdefault("fastapi", fastapi)
 
 responses = types.ModuleType("fastapi.responses")
 responses.FileResponse = object
+responses.JSONResponse = object
 responses.PlainTextResponse = object
 responses.StreamingResponse = object
 sys.modules.setdefault("fastapi.responses", responses)
@@ -49,7 +50,7 @@ def check(condition: bool, message: str) -> None:
 def settings(**overrides):
     values = {
         "enabled": True,
-        "device_name": "iptv-epg",
+        "device_name": "bds-tv",
         "device_id": "12345678",
         "channel_limit": 450,
         "tuner_count": 1,

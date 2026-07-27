@@ -1,6 +1,6 @@
-# iptv-epg
+# bds-tv
 
-`iptv-epg` is a self-hosted IPTV playlist, EPG, streaming proxy, HDHomeRun emulator, and DLNA media server.
+`bds-tv` is a self-hosted IPTV playlist, EPG, streaming proxy, HDHomeRun emulator, and DLNA media server.
 
 The original aim was to replace hosted playlist managers such as m3u4u with a local service. It now goes further than that: it creates curated M3U/XMLTV outputs, schedules EPG generation, exposes a usable guide, and can proxy streams for Plex, VLC, TVs, and other clients without those clients talking directly to the IPTV provider.
 
@@ -72,9 +72,9 @@ When a channel is selected, it moves into the selected section at the top of tha
 
 Selected groups and channels can be reordered using the arrow buttons. Changes are saved on the fly.
 
-When selection is complete, click **Generate filtered M3U** to create the curated M3U. The **Open filtered.m3u** button opens the URL that IPTV clients can use.
+When selection is complete, click **Generate BDS-TV M3U** to create the curated M3U. The **Open bds-tv.m3u** button opens the URL that IPTV clients can use.
 
-Important: `filtered.m3u` is not a streaming proxy playlist. It contains the original IPTV provider stream URLs. It is suitable for IPTV apps, but at home it should be used with the VPN route in place. The proxy functions are handled separately by HDHR and DLNA.
+Important: `bds-tv.m3u` is not a streaming proxy playlist. It contains the original IPTV provider stream URLs. It is suitable for IPTV apps, but at home it should be used with the VPN route in place. The proxy functions are handled separately by HDHR and DLNA.
 
 ## EPG
 
@@ -90,7 +90,7 @@ First-time workflow:
 4. Save the suggested match where correct.
 5. Search manually where no good suggestion exists.
 6. Optionally override logos.
-7. Click **Generate filtered EPG**.
+7. Click **Generate BDS-TV XMLTV**.
 
 The app matches and stores EPG configuration by `tvg-id`, not merely by the individual channel row. This means that channels from different groups with the same `tvg-id` share the same EPG mapping and logo preference.
 
@@ -103,8 +103,11 @@ Useful logo source:
 Generated output:
 
 ```text
-/filtered_epg.xml
+/bds-tv.m3u
+/bds-tv.xml
 ```
+
+`/bds-tv.m3u` and `/bds-tv.xml` are the canonical outputs. `/filtered.m3u` and `/filtered_epg.xml` remain as compatibility aliases for existing clients.
 
 The filtered M3U and XMLTV can also be exposed externally, for example through a Cloudflare tunnel. The app itself does not provide authentication, so any external exposure should be protected by the tunnel or another access-control layer.
 
@@ -123,7 +126,7 @@ The scheduler uses the selected channels from the curated M3U and generates the 
 
 ## HDHR
 
-The HDHR tab makes `iptv-epg` appear as a SiliconDust HDHomeRun-style network tuner.
+The HDHR tab makes `bds-tv` appear as a SiliconDust HDHomeRun-style network tuner.
 
 This matters most for Plex, because Plex does not accept a plain IPTV M3U as a live TV source in the same way Emby and Jellyfin can. Plex can, however, add an HDHomeRun tuner.
 
@@ -172,9 +175,9 @@ After changing HDHR group exclusions, the HDHR lineup and guide are regenerated 
 
 ## DLNA
 
-The DLNA tab makes `iptv-epg` appear as a DLNA media server.
+The DLNA tab makes `bds-tv` appear as a DLNA media server.
 
-This is intended for VLC, TVs, and other DLNA clients. It allows a TV to browse `iptv-epg` as a source without Plex, Jellyfin, Emby, or a dedicated IPTV app.
+This is intended for VLC, TVs, and other DLNA clients. It allows a TV to browse `bds-tv` as a source without Plex, Jellyfin, Emby, or a dedicated IPTV app.
 
 Unlike HDHR/Plex, DLNA exposes the full selected channel list and preserves IPTV groups as folders. This is important because hundreds of flat channels are awkward to browse on a TV.
 
@@ -199,7 +202,7 @@ This is especially useful with TVs, because they often fail silently or show vag
 
 The DLNA inspector is a small but useful troubleshooting tool built into the DLNA tab. It can discover other DLNA/UPnP devices on the network, inspect their device XML, and browse their ContentDirectory metadata.
 
-This was used to compare `iptv-epg` against a real HDHomeRun and Plex. It makes the app a bit self-teaching: rather than guessing what a TV expects, the inspector can look at working DLNA servers and show how they advertise folders, channel items, stream URLs, protocol information, and metadata.
+This was used to compare `bds-tv` against a real HDHomeRun and Plex. It makes the app a bit self-teaching: rather than guessing what a TV expects, the inspector can look at working DLNA servers and show how they advertise folders, channel items, stream URLs, protocol information, and metadata.
 
 ### DLNA Streaming Modes
 
@@ -258,11 +261,13 @@ It runs:
 ```bash
 cd /docker/iptv_epg/repo
 git pull origin main
-docker compose -p iptv_epg build
-docker compose -p iptv_epg up -d --force-recreate
+docker compose -p bds_tv build
+docker compose -p bds_tv up -d --force-recreate
 sleep 3
 curl http://localhost:8088/health
 ```
+
+Until the host folder is renamed, run `deploy.sh` from `/docker/iptv_epg/repo`. After the folder is renamed, use `/docker/bds-tv/repo`. The script itself supports both paths.
 
 Do not use `--no-cache` for normal deploys. That causes unnecessary re-downloads and rebuilds, including `ffmpeg`.
 
@@ -280,11 +285,13 @@ Generated and transient files live under `/data`, including:
 
 ```text
 /data/source/source.m3u
-/data/filtered.m3u
-/data/filtered_epg.xml
+/data/bds-tv.m3u
+/data/bds-tv.xml
 /data/hdhr.m3u
 /data/epg_cache/*
 ```
+
+The old `/data/filtered.m3u` and `/data/filtered_epg.xml` filenames are still recognised as compatibility fallbacks.
 
 Runtime layout:
 
@@ -295,19 +302,19 @@ Runtime layout:
 /logs    app logs
 ```
 
-The UI is a thin API client. Heavy work happens server-side. The filtered M3U, filtered XMLTV, guide, HDHR, and DLNA all draw from the same selected-channel configuration.
+The UI is a thin API client. Heavy work happens server-side. The BDS-TV M3U, XMLTV, guide, HDHR, and DLNA all draw from the same selected-channel configuration.
 
 ## Summary
 
 | Scenario | Result |
 | --- | --- |
-| IPTV app | Uses curated `filtered.m3u` and `filtered_epg.xml`. At home, VPN routing is recommended because the M3U contains provider URLs. |
+| IPTV app | Uses curated `bds-tv.m3u` and `bds-tv.xml`. At home, VPN routing is recommended because the M3U contains provider URLs. |
 | IPTV away from home | The curated M3U/XMLTV can be exposed through a protected tunnel if required. |
-| Plex live TV | Uses HDHR emulation, with `iptv-epg` acting as the proxy. Plex does not talk directly to the IPTV provider. |
+| Plex live TV | Uses HDHR emulation, with `bds-tv` acting as the proxy. Plex does not talk directly to the IPTV provider. |
 | Emby/Jellyfin | Can use M3U/XMLTV directly, or consume the HDHR-style proxy where useful. |
-| DLNA/VLC/TV | Uses the DLNA media server. Channels are grouped by IPTV group and streamed through `iptv-epg`. |
+| DLNA/VLC/TV | Uses the DLNA media server. Channels are grouped by IPTV group and streamed through `bds-tv`. |
 | VPN safety | The public IP display and killswitch help prevent streaming when the host has fallen back to the home ISP route. |
 
-At this point, `iptv-epg` covers the original m3u4u-style playlist workflow, the XMLTV generation workflow, HDHR proxying for Plex, DLNA proxying for TVs, and safety tooling around VPN routing and stream cleanup.
+At this point, `bds-tv` covers the original m3u4u-style playlist workflow, the XMLTV generation workflow, HDHR proxying for Plex, DLNA proxying for TVs, and safety tooling around VPN routing and stream cleanup.
 
 Pretty nifty stuff.

@@ -2,16 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>iptv_epg</title>
+  <title>bds-tv</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="/static/favicon.png?v=0.11.29" type="image/png" />
-  <link rel="icon" href="/static/favicon.ico?v=0.11.29" sizes="any" />
-  <link rel="stylesheet" href="/static/app.css?v=0.11.29" />
+  <link rel="icon" href="/static/favicon.png?v=0.12.0" type="image/png" />
+  <link rel="icon" href="/static/favicon.ico?v=0.12.0" sizes="any" />
+  <link rel="stylesheet" href="/static/app.css?v=0.12.0" />
 </head>
 <body>
   <header class="app-header">
     <div class="header-brand">
-      <h1>iptv_epg</h1>
+      <h1>bds-tv</h1>
       <div id="header-status" class="muted">Starting…</div>
     </div>
     <div id="header-public-ip" class="public-ip-status" title="App public IPv4 address">IP Address: checking…</div>
@@ -61,8 +61,8 @@
       <div class="channels-toolbar">
         <div id="channels-info" class="info-bar">Open Channels to load groups.</div>
         <button id="refresh-groups">Refresh groups</button>
-        <button id="generate-m3u">Generate filtered M3U</button>
-        <a class="button" id="filtered-m3u-link" href="/filtered.m3u" target="_blank">Open filtered.m3u</a>
+        <button id="generate-m3u">Generate BDS-TV M3U</button>
+        <a class="button" id="filtered-m3u-link" href="/bds-tv.m3u" target="_blank">Open bds-tv.m3u</a>
       </div>
 
       <div class="channels-layout">
@@ -104,11 +104,11 @@
           <div class="button-row">
             <button id="epg-refresh">Refresh</button>
             <button id="epg-import-index">Import/update EPGShare index</button>
-            <button id="epg-generate">Generate filtered EPG</button>
+            <button id="epg-generate">Generate BDS-TV XMLTV</button>
           </div>
           <div class="button-row">
-            <a class="button" href="/filtered.m3u" target="_blank" rel="noopener">Open filtered.m3u</a>
-            <a class="button" href="/filtered_epg.xml" target="_blank" rel="noopener">Open filtered_epg.xml</a>
+            <a class="button" href="/bds-tv.m3u" target="_blank" rel="noopener">Open bds-tv.m3u</a>
+            <a class="button" href="/bds-tv.xml" target="_blank" rel="noopener">Open bds-tv.xml</a>
           </div>
         </div>
 
@@ -187,7 +187,7 @@
           <h2>Scheduler</h2>
           <label class="toggle-row">
             <input id="scheduler-enabled" type="checkbox" />
-            <span>Run filtered EPG automatically</span>
+            <span>Run BDS-TV XMLTV automatically</span>
           </label>
 
           <div class="scheduler-grid">
@@ -204,7 +204,7 @@
           <div class="button-row">
             <button id="scheduler-save">Save scheduler</button>
             <button id="scheduler-run-now">Run now</button>
-            <a class="button" href="/filtered_epg.xml" target="_blank" rel="noopener">Open filtered_epg.xml</a>
+            <a class="button" href="/bds-tv.xml" target="_blank" rel="noopener">Open bds-tv.xml</a>
           </div>
           <div id="scheduler-message" class="info-bar">Scheduler not loaded yet.</div>
         </div>
@@ -421,7 +421,7 @@
           <button id="dlna-inspect-device">Inspect device</button>
           <button id="dlna-inspect-browse">Browse object</button>
         </div>
-        <p class="muted">Diagnostics only. This reads another DLNA server's browse metadata so we can compare its channel items with iptv-epg.</p>
+        <p class="muted">Diagnostics only. This reads another DLNA server's browse metadata so we can compare its channel items with bds-tv.</p>
       </div>
     </section>
 
@@ -461,6 +461,6 @@
 
   </main>
 
-  <script src="/static/app.js?v=0.11.29"></script>
+  <script src="/static/app.js?v=0.12.0"></script>
 </body>
 </html>

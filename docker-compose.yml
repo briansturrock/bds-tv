@@ -1,8 +1,8 @@
 services:
-  iptv_epg:
+  bds_tv:
     build: .
-    image: iptv_epg:dev
-    container_name: iptv-epg
+    image: bds_tv:dev
+    container_name: bds-tv
     restart: unless-stopped
     network_mode: host
     command: ["uvicorn", "iptv_epg.main:app", "--host", "0.0.0.0", "--port", "8088"]
@@ -14,7 +14,7 @@ services:
       start_period: 20s
     environment:
       - TZ=UTC
-      - IPTV_EPG_VERSION=0.11.29
+      - IPTV_EPG_VERSION=0.12.0
       - CONFIG_DIR=/config
       - DATA_DIR=/data
       - DB_PATH=/db/iptv_epg.db

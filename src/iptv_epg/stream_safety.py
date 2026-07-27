@@ -49,13 +49,13 @@ def country_flag(country_code: str | None) -> str:
 
 
 def fetch_json(url: str, timeout: float = 5.0) -> dict:
-    request = Request(url, headers={"User-Agent": f"iptv-epg/{__version__}"})
+    request = Request(url, headers={"User-Agent": f"bds-tv/{__version__}"})
     with urlopen(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8", errors="replace"))
 
 
 def fetch_text(url: str, timeout: float = 5.0) -> str:
-    request = Request(url, headers={"User-Agent": f"iptv-epg/{__version__}"})
+    request = Request(url, headers={"User-Agent": f"bds-tv/{__version__}"})
     with urlopen(request, timeout=timeout) as response:
         return response.read().decode("utf-8", errors="replace").strip()
 

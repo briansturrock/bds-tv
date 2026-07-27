@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from .db import connect, get_groups, get_selected_channels, get_setting, get_settings, set_setting
 from .m3u import extinf_with_logo
-from .settings import DATA_DIR, FILTERED_EPG
+from .settings import DATA_DIR, readable_filtered_epg
 from .stream_safety import enforce_stream_killswitch
 
 
@@ -49,7 +49,7 @@ SSDP_STATUS: dict[str, Any] = {
 
 class HdhrSettingsIn(BaseModel):
     enabled: bool = False
-    device_name: str = "iptv-epg"
+    device_name: str = "bds-tv"
     device_id: str | None = None
     channel_limit: int = Field(default=450, ge=1, le=5000)
     excluded_group_ids: list[str] = Field(default_factory=list)
@@ -201,6 +201,11 @@ def normalise_hhmm(value: str | None, default: str = "04:00") -> str:
     return f"{hour:02d}:{minute:02d}"
 
 
+def normalise_device_name(value: str | None, default: str = "bds-tv") -> str:
+    cleaned = (value or default).strip() or default
+    return default if cleaned == "iptv-epg" else cleaned
+
+
 def get_or_create_device_id(settings: Mapping[str, str] | None = None) -> str:
     existing = (setting_value(settings, "hdhr_device_id") or "").strip()
     if existing:
@@ -225,7 +230,7 @@ def get_hdhr_settings(settings: Mapping[str, str] | None = None) -> HdhrSettings
 
     return HdhrSettings(
         enabled=bool_setting("hdhr_enabled", False, settings),
-        device_name=(setting_value(settings, "hdhr_device_name", "iptv-epg") or "iptv-epg").strip() or "iptv-epg",
+        device_name=normalise_device_name(setting_value(settings, "hdhr_device_name", "bds-tv")),
         device_id=get_or_create_device_id(settings),
         channel_limit=int_setting("hdhr_channel_limit", 450, 1, 5000, settings),
         excluded_group_ids=list_setting("hdhr_excluded_group_ids", settings),
@@ -258,7 +263,7 @@ def save_hdhr_settings(payload: HdhrSettingsIn) -> HdhrSettings:
 
     values = {
         "hdhr_enabled": "true" if payload.enabled else "false",
-        "hdhr_device_name": payload.device_name.strip() or "iptv-epg",
+        "hdhr_device_name": payload.device_name.strip() or "bds-tv",
         "hdhr_device_id": device_id,
         "hdhr_channel_limit": str(max(1, min(payload.channel_limit, 5000))),
         "hdhr_excluded_group_ids": json.dumps(sorted({gid for gid in payload.excluded_group_ids if gid})),
@@ -743,7 +748,7 @@ def hdhr_discovery_payload(base_url: str, settings: HdhrSettings) -> dict[str, A
         "FirmwareName": "hdhomeruntc_atsc",
         "FirmwareVersion": "20250101",
         "DeviceID": settings.device_id,
-        "DeviceAuth": "iptv-epg",
+        "DeviceAuth": "bds-tv",
         "BaseURL": base_url,
         "LineupURL": urljoin(f"{base_url}/", "lineup.json"),
         "GuideURL": urljoin(f"{base_url}/", "hdhr_epg.xml"),
@@ -828,7 +833,7 @@ def hdhr_xmltv_stream() -> Iterator[str]:
         by_xmltv_id.setdefault(xmltv_id, []).append(channel)
 
     yield '<?xml version="1.0" encoding="UTF-8"?>\n'
-    yield '<tv generator-info-name="iptv_epg HDHR filtered">\n'
+    yield '<tv generator-info-name="bds-tv HDHR">\n'
 
     for channel in channels:
         channel_elem = ET.Element("channel", {"id": str(channel["number"])})
@@ -844,12 +849,13 @@ def hdhr_xmltv_stream() -> Iterator[str]:
         yield serialize_xmltv_element(channel_elem)
         yield "\n"
 
-    if not FILTERED_EPG.exists() or not by_xmltv_id:
+    filtered_epg = readable_filtered_epg()
+    if not filtered_epg.exists() or not by_xmltv_id:
         yield "</tv>\n"
         return
 
     try:
-        context = ET.iterparse(FILTERED_EPG, events=("end",))
+        context = ET.iterparse(filtered_epg, events=("end",))
         for _event, elem in context:
             if elem.tag != "programme":
                 continue
@@ -1049,7 +1055,7 @@ def ssdp_response(location: str, settings: HdhrSettings, search_target: str) -> 
         "CACHE-CONTROL: max-age=1800",
         "EXT:",
         f"LOCATION: {location}",
-        "SERVER: iptv-epg/1.0 UPnP/1.0 HDHomeRun/1.0",
+        "SERVER: bds-tv/1.0 UPnP/1.0 HDHomeRun/1.0",
         f"ST: {st}",
         f"USN: {usn}",
         "",
@@ -1097,7 +1103,7 @@ def ssdp_notify_messages(location: str, settings: HdhrSettings) -> list[bytes]:
             f"HOST: {SSDP_ADDR}:{SSDP_PORT}",
             "CACHE-CONTROL: max-age=1800",
             f"LOCATION: {location}",
-            "SERVER: iptv-epg/1.0 UPnP/1.0 HDHomeRun/1.0",
+            "SERVER: bds-tv/1.0 UPnP/1.0 HDHomeRun/1.0",
             f"NT: {target}",
             "NTS: ssdp:alive",
             f"USN: {usn}",

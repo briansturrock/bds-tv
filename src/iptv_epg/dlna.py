@@ -61,7 +61,7 @@ DLNA_REQUEST_LOG_LOCK = threading.Lock()
 
 class DlnaSettingsIn(BaseModel):
     enabled: bool = True
-    device_name: str = "iptv-epg DLNA"
+    device_name: str = "bds-tv DLNA"
     public_base_url: str = ""
     stream_mode: str = "copy"
 
@@ -109,6 +109,11 @@ def bool_setting_from_snapshot(key: str, default: bool, settings: Mapping[str, s
 
 def normalise_base_url(value: str | None) -> str:
     return (value or "").strip().rstrip("/")
+
+
+def normalise_device_name(value: str | None, default: str = "bds-tv DLNA") -> str:
+    cleaned = (value or default).strip() or default
+    return default if cleaned == "iptv-epg DLNA" else cleaned
 
 
 def interesting_headers(request: Request) -> dict[str, str]:
@@ -159,7 +164,7 @@ def get_dlna_settings(settings: Mapping[str, str] | None = None) -> DlnaSettings
         stream_mode = "copy"
     return DlnaSettings(
         enabled=bool_setting_from_snapshot("dlna_enabled", True, settings),
-        device_name=(setting_value(settings, "dlna_device_name", "iptv-epg DLNA") or "iptv-epg DLNA").strip() or "iptv-epg DLNA",
+        device_name=normalise_device_name(setting_value(settings, "dlna_device_name", "bds-tv DLNA")),
         public_base_url=normalise_base_url(setting_value(settings, "dlna_public_base_url") or hdhr_settings.public_base_url),
         stream_mode=stream_mode,
     )
@@ -171,7 +176,7 @@ def save_dlna_settings(payload: DlnaSettingsIn) -> DlnaSettings:
         stream_mode = "copy"
     values = {
         "dlna_enabled": "true" if payload.enabled else "false",
-        "dlna_device_name": payload.device_name.strip() or "iptv-epg DLNA",
+        "dlna_device_name": payload.device_name.strip() or "bds-tv DLNA",
         "dlna_public_base_url": normalise_base_url(payload.public_base_url),
         "dlna_stream_mode": stream_mode,
     }
@@ -188,7 +193,7 @@ def base_url_for_request(request: Request, settings: DlnaSettings | None = None)
 
 
 def device_uuid() -> str:
-    return f"uuid:iptv-epg-dlna-{get_hdhr_settings().device_id}"
+    return f"uuid:bds-tv-dlna-{get_hdhr_settings().device_id}"
 
 
 def dlna_location(base_url: str) -> str:
@@ -214,7 +219,7 @@ def dlna_ssdp_response(location: str, search_target: str) -> bytes:
         "CACHE-CONTROL: max-age=1800",
         "EXT:",
         f"LOCATION: {location}",
-        "SERVER: iptv-epg/1.0 UPnP/1.0 DLNADOC/1.50",
+        "SERVER: bds-tv/1.0 UPnP/1.0 DLNADOC/1.50",
         f"ST: {st}",
         f"USN: {usn}",
         "",
@@ -234,7 +239,7 @@ def dlna_ssdp_notify_messages(location: str) -> list[bytes]:
             "HOST: 239.255.255.250:1900",
             "CACHE-CONTROL: max-age=1800",
             f"LOCATION: {location}",
-            "SERVER: iptv-epg/1.0 UPnP/1.0 DLNADOC/1.50",
+            "SERVER: bds-tv/1.0 UPnP/1.0 DLNADOC/1.50",
             f"NT: {target}",
             "NTS: ssdp:alive",
             f"USN: {usn}",
@@ -263,8 +268,8 @@ def device_description_xml(base_url: str, settings: DlnaSettings) -> str:
     device = ET.SubElement(root, "device")
     ET.SubElement(device, "deviceType").text = "urn:schemas-upnp-org:device:MediaServer:1"
     ET.SubElement(device, "friendlyName").text = settings.device_name
-    ET.SubElement(device, "manufacturer").text = "iptv-epg"
-    ET.SubElement(device, "modelName").text = "iptv-epg DLNA"
+    ET.SubElement(device, "manufacturer").text = "bds-tv"
+    ET.SubElement(device, "modelName").text = "bds-tv DLNA"
     ET.SubElement(device, "modelNumber").text = "1"
     ET.SubElement(device, "UDN").text = device_uuid()
     ET.SubElement(device, "presentationURL").text = base_url
@@ -384,7 +389,7 @@ def browse_result(
             for group in groups
         ]
         if browse_flag == "BrowseMetadata":
-            return didl_wrap([didl_container("0", "-1", "iptv-epg", len(children))]), 1, 1
+            return didl_wrap([didl_container("0", "-1", "bds-tv", len(children))]), 1, 1
         paged = page_children(children, starting_index, requested_count)
         return didl_wrap(paged), len(paged), len(children)
 
@@ -495,7 +500,7 @@ def discover_dlna_devices(timeout_seconds: float = 3.0) -> list[dict[str, str]]:
 
 
 def fetch_text(url: str, timeout_seconds: float = 5.0) -> str:
-    request = UrlRequest(url, headers={"User-Agent": "iptv-epg-dlna-inspector/1.0"})
+    request = UrlRequest(url, headers={"User-Agent": "bds-tv-dlna-inspector/1.0"})
     with urlopen(request, timeout=timeout_seconds) as response:
         return response.read().decode("utf-8", errors="replace")
 
@@ -674,7 +679,7 @@ def api_dlna_inspect_browse(payload: DlnaInspectBrowseIn) -> dict:
             headers={
                 "Content-Type": 'text/xml; charset="utf-8"',
                 "SOAPACTION": f'"{CONTENT_DIRECTORY_SERVICE}#Browse"',
-                "User-Agent": "iptv-epg-dlna-inspector/1.0",
+                "User-Agent": "bds-tv-dlna-inspector/1.0",
             },
             method="POST",
         )

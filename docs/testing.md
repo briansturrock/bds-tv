@@ -11,7 +11,7 @@ curl http://127.0.0.1:8088/api/status
 Docker should also report the service as healthy:
 
 ```bash
-docker compose -p iptv_epg ps
+docker compose -p bds_tv ps
 ```
 
 ## Deploy Smoke Test
@@ -22,6 +22,8 @@ On the Docker host:
 cd /docker/iptv_epg/repo
 bash deploy.sh
 ```
+
+Until the host folder is renamed, run `deploy.sh` from `/docker/iptv_epg/repo`. After the folder is renamed, use `/docker/bds-tv/repo`. The script itself supports both paths.
 
 The helper pulls `main`, builds without `--no-cache`, recreates the container, waits briefly, and calls `/health`.
 
@@ -40,9 +42,9 @@ python scripts/test_dlna_catalogue.py
 
 - Settings loads, public IPv4/country flag appears, and forced refresh works.
 - Channels can be selected without the list jumping back to the top.
-- Filtered M3U generation produces `/filtered.m3u`.
+- BDS-TV M3U generation produces `/bds-tv.m3u`.
 - EPG matching saves by `tvg-id` and logo overrides apply across matching channels.
-- Filtered EPG generation produces `/filtered_epg.xml`.
+- BDS-TV XMLTV generation produces `/bds-tv.xml`.
 - Scheduler can save settings and run manually.
 - Guide opens at the current time and shows "Unknown" where data is missing.
 - HDHR discovery, `lineup.json`, and `hdhr_epg.xml` load.
@@ -58,7 +60,7 @@ python scripts/test_dlna_catalogue.py
 Usually not needed now that the repo is deployed directly, but still possible:
 
 ```bash
-docker build -t iptv_epg:dev .
-docker save iptv_epg:dev -o iptv_epg-dev-amd64.tar
-docker load -i iptv_epg-dev-amd64.tar
+docker build -t bds_tv:dev .
+docker save bds_tv:dev -o bds-tv-dev-amd64.tar
+docker load -i bds-tv-dev-amd64.tar
 ```

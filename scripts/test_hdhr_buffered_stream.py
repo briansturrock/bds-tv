@@ -27,6 +27,7 @@ sys.modules.setdefault("fastapi", fastapi)
 
 responses = types.ModuleType("fastapi.responses")
 responses.FileResponse = object
+responses.JSONResponse = object
 responses.PlainTextResponse = object
 responses.StreamingResponse = object
 sys.modules.setdefault("fastapi.responses", responses)

@@ -130,7 +130,7 @@ const dlnaState = {
 
 function setHdhrForm(settings) {
   $("hdhr-enabled").checked = !!settings.enabled;
-  $("hdhr-device-name").value = settings.device_name || "iptv-epg";
+  $("hdhr-device-name").value = settings.device_name || "bds-tv";
   $("hdhr-device-id").value = settings.device_id || "";
   $("hdhr-public-base-url").value = settings.public_base_url || "";
   $("hdhr-ffmpeg-path").value = settings.ffmpeg_path || "ffmpeg";
@@ -178,7 +178,7 @@ function hdhrExcludedGroupIdsFromForm() {
 function hdhrPayloadFromForm() {
   return {
     enabled: $("hdhr-enabled").checked,
-    device_name: $("hdhr-device-name").value.trim() || "iptv-epg",
+    device_name: $("hdhr-device-name").value.trim() || "bds-tv",
     device_id: $("hdhr-device-id").value.trim(),
     public_base_url: $("hdhr-public-base-url").value.trim(),
     ffmpeg_path: $("hdhr-ffmpeg-path").value.trim() || "ffmpeg",
@@ -307,7 +307,7 @@ async function stopHdhrStreams() {
 
 function setDlnaForm(settings) {
   $("dlna-enabled").checked = settings.enabled !== false;
-  $("dlna-device-name").value = settings.device_name || "iptv-epg DLNA";
+  $("dlna-device-name").value = settings.device_name || "bds-tv DLNA";
   $("dlna-public-base-url").value = settings.public_base_url || "";
   $("dlna-stream-mode").value = settings.stream_mode || "copy";
 }
@@ -315,7 +315,7 @@ function setDlnaForm(settings) {
 function dlnaPayloadFromForm() {
   return {
     enabled: $("dlna-enabled").checked,
-    device_name: $("dlna-device-name").value.trim() || "iptv-epg DLNA",
+    device_name: $("dlna-device-name").value.trim() || "bds-tv DLNA",
     public_base_url: $("dlna-public-base-url").value.trim(),
     stream_mode: $("dlna-stream-mode").value,
   };
@@ -459,7 +459,7 @@ async function startFetchM3u() {
 }
 
 async function generateFilteredM3u() {
-  setMessage("channels-info", "Starting filtered M3U generation…");
+  setMessage("channels-info", "Starting BDS-TV M3U generation…");
   const result = await api("/api/m3u/generate-filtered", { method: "POST" });
   pollJob(result.job_id, "channels-info", async () => {
     await loadStatus();
@@ -1576,7 +1576,7 @@ async function importEpgIndex() {
 }
 
 async function generateEpgFromMappings() {
-  if (!confirm("Generate filtered_epg.xml from saved mappings only?")) return;
+  if (!confirm("Generate bds-tv.xml from saved mappings only?")) return;
   const body = await api("/api/epgshare/generate-filtered?days=3", { method: "POST" });
   alert(`Generation job started: ${body.job_id}`);
   await loadEpgJobs();

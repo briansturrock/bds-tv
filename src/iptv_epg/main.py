@@ -45,7 +45,7 @@ from .guide_routes import router as guide_router
 from .hdhr import active_status, router as hdhr_router, start_ssdp_service, start_stream_safety_service, stop_ssdp_service
 from .m3u import fetch_and_index_m3u, generate_filtered_m3u
 from .scheduler import router as scheduler_router, start_scheduler_thread
-from .settings import FILTERED_EPG, FILTERED_M3U, ensure_runtime_dirs
+from .settings import readable_filtered_epg, readable_filtered_m3u, ensure_runtime_dirs
 from .stream_safety import (
     cached_public_ip,
     enforce_stream_killswitch,
@@ -55,7 +55,7 @@ from .stream_safety import (
 )
 
 
-app = FastAPI(title="iptv_epg", version=__version__)
+app = FastAPI(title="bds-tv", version=__version__)
 
 HLS_ROOT = Path("/tmp/iptv_epg_hls")
 HLS_PROCESSES: dict[str, subprocess.Popen] = {}
@@ -143,7 +143,7 @@ def index() -> Response:
 async def health() -> dict:
     return {
         "ok": True,
-        "app": "iptv_epg",
+        "app": "bds-tv",
         "version": __version__,
         "uptime_seconds": int(time.time() - STARTED_AT),
         "message": "running",
@@ -154,7 +154,7 @@ async def health() -> dict:
 async def health_deep() -> dict:
     return {
         "ok": True,
-        "app": "iptv_epg",
+        "app": "bds-tv",
         "version": __version__,
         "uptime_seconds": int(time.time() - STARTED_AT),
         "threads": [thread.name for thread in threading.enumerate()],
@@ -889,7 +889,7 @@ def run_filtered_m3u_job(job_id: str) -> None:
         update_job(
             job_id,
             status="complete",
-            message=f"Generated filtered.m3u with {result['selected_count']:,} channels",
+            message=f"Generated bds-tv.m3u with {result['selected_count']:,} channels",
             progress_current=int(result["selected_count"]),
             progress_total=int(result["selected_count"]),
             finish=True,
@@ -901,20 +901,38 @@ def run_filtered_m3u_job(job_id: str) -> None:
 @app.post("/api/m3u/generate-filtered")
 def api_generate_filtered_m3u() -> dict:
     job_id = str(uuid.uuid4())
-    create_job(job_id, "filtered_m3u", "Queued filtered M3U generation")
+    create_job(job_id, "filtered_m3u", "Queued BDS-TV M3U generation")
     executor.submit(run_filtered_m3u_job, job_id)
-    return {"ok": True, "job_id": job_id, "message": "Filtered M3U generation job started"}
+    return {"ok": True, "job_id": job_id, "message": "BDS-TV M3U generation job started"}
+
+
+@app.get("/bds-tv.m3u", response_model=None)
+def bds_tv_m3u() -> Response:
+    path = readable_filtered_m3u()
+    if not path.exists():
+        return PlainTextResponse("#EXTM3U\n", media_type="application/vnd.apple.mpegurl")
+    return FileResponse(path, media_type="application/vnd.apple.mpegurl", filename="bds-tv.m3u")
+
+
+@app.get("/bds-tv.xml", response_model=None)
+def bds_tv_xml() -> Response:
+    path = readable_filtered_epg()
+    if not path.exists():
+        return PlainTextResponse('<?xml version="1.0" encoding="UTF-8"?><tv></tv>\n', media_type="application/xml")
+    return FileResponse(path, media_type="application/xml", filename="bds-tv.xml")
 
 
 @app.get("/filtered.m3u", response_model=None)
 def filtered_m3u() -> Response:
-    if not FILTERED_M3U.exists():
+    path = readable_filtered_m3u()
+    if not path.exists():
         return PlainTextResponse("#EXTM3U\n", media_type="application/vnd.apple.mpegurl")
-    return FileResponse(FILTERED_M3U, media_type="application/vnd.apple.mpegurl", filename="filtered.m3u")
+    return FileResponse(path, media_type="application/vnd.apple.mpegurl", filename="filtered.m3u")
 
 
 @app.get("/filtered_epg.xml", response_model=None)
 def filtered_epg() -> Response:
-    if not FILTERED_EPG.exists():
+    path = readable_filtered_epg()
+    if not path.exists():
         return PlainTextResponse('<?xml version="1.0" encoding="UTF-8"?><tv></tv>\n', media_type="application/xml")
-    return FileResponse(FILTERED_EPG, media_type="application/xml", filename="filtered_epg.xml")
+    return FileResponse(path, media_type="application/xml", filename="filtered_epg.xml")

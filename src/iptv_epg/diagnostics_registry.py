@@ -42,8 +42,8 @@ DIAGNOSTIC_ENDPOINTS: list[dict[str, Any]] = [
 
     endpoint(category="M3U", name="Get source metadata", method="GET", path="/api/source", description="Returns source M3U metadata.", safe_auto_run=True),
     endpoint(category="M3U", name="Fetch/index M3U", method="POST", path="/api/m3u/fetch", description="Starts a backend job to download and index the source M3U."),
-    endpoint(category="M3U", name="Generate filtered M3U", method="POST", path="/api/m3u/generate-filtered", description="Starts a backend job to generate filtered.m3u."),
-    endpoint(category="M3U", name="Open filtered M3U", method="GET", path="/filtered.m3u", description="Returns generated filtered.m3u."),
+    endpoint(category="M3U", name="Generate BDS-TV M3U", method="POST", path="/api/m3u/generate-filtered", description="Starts a backend job to generate bds-tv.m3u."),
+    endpoint(category="M3U", name="Open BDS-TV M3U", method="GET", path="/bds-tv.m3u", description="Returns generated bds-tv.m3u."),
 
     endpoint(category="Channels", name="List groups", method="GET", path="/api/groups", description="Lists channel groups.", safe_auto_run=True),
     endpoint(category="Channels", name="List channels in group", method="GET", path="/api/channels", sample_path="/api/channels?group_id=PASTE_GROUP_ID_HERE&offset=0&limit=50", description="Lists channels for one group.", expected_statuses=[200, 422]),
@@ -64,8 +64,8 @@ DIAGNOSTIC_ENDPOINTS: list[dict[str, Any]] = [
     endpoint(category="EPGShare", name="Save EPGShare mappings", method="POST", path="/api/epgshare/mappings", description="Saves reviewed EPGShare mappings or ignored channels.", sample_body={"mappings":[{"channel_id":"PASTE_CHANNEL_ID_HERE","xmltv_id":"PASTE_XMLTV_ID_HERE","source_key":"PASTE_SOURCE_KEY_HERE","mapping_type":"manual","confidence":1.0}]}),
     endpoint(category="EPGShare", name="EPGShare matching review UI", method="GET", path="/dev/epgshare-matching", description="Developer UI for reviewing and saving EPGShare channel mappings.", safe_auto_run=False),
 
-    endpoint(category="EPGShare", name="Generate EPGShare filtered EPG", method="POST", path="/api/epgshare/generate-filtered", sample_path="/api/epgshare/generate-filtered?days=3", description="Generates filtered_epg.xml from saved EPGShare mappings only."),
-    endpoint(category="EPGShare", name="Open filtered EPG", method="GET", path="/filtered_epg.xml", description="Returns generated filtered_epg.xml."),
+    endpoint(category="EPGShare", name="Generate EPGShare XMLTV", method="POST", path="/api/epgshare/generate-filtered", sample_path="/api/epgshare/generate-filtered?days=3", description="Generates bds-tv.xml from saved EPGShare mappings only."),
+    endpoint(category="EPGShare", name="Open BDS-TV XMLTV", method="GET", path="/bds-tv.xml", description="Returns generated bds-tv.xml."),
 
     endpoint(category="Guide", name="Guide groups", method="GET", path="/api/guide/groups", description="Lists only groups that contain selected channels.", safe_auto_run=True),
     endpoint(category="Guide", name="Guide for group", method="GET", path="/api/guide", sample_path="/api/guide?group_id=PASTE_GROUP_ID_HERE", description="Returns selected channels and programme data for one selected group.", safe_auto_run=False),
@@ -77,7 +77,7 @@ DIAGNOSTIC_ENDPOINTS: list[dict[str, Any]] = [
     endpoint(category="Guide Streaming", name="Raw stream proxy", method="GET", path="/stream/{channel_id}", sample_path="/stream/PASTE_CHANNEL_ID_HERE", description="Proxies a selected channel stream directly through the app.", expected_statuses=[200, 404, 502]),
 
     endpoint(category="HDHR", name="HDHR settings", method="GET", path="/api/hdhr/settings", description="Returns HDHomeRun emulation settings and stream status.", safe_auto_run=True),
-    endpoint(category="HDHR", name="Save HDHR settings", method="POST", path="/api/hdhr/settings", description="Saves HDHomeRun emulation settings.", sample_body={"enabled": False, "device_name": "iptv-epg", "device_id": "12345678", "channel_limit": 450, "excluded_group_ids": [], "tuner_count": 1, "max_upstream_streams": 1, "public_base_url": "http://192.168.0.185:8088", "stream_mode": "direct", "conflict_policy": "reject_new", "ffmpeg_path": "ffmpeg", "buffer_seconds": 30, "buffer_max_mb": 256, "stream_cleanup_enabled": True, "max_stream_age_minutes": 240, "idle_timeout_seconds": 120, "cleanup_interval_seconds": 30, "scheduled_drop_enabled": False, "scheduled_drop_time": "04:00"}),
+    endpoint(category="HDHR", name="Save HDHR settings", method="POST", path="/api/hdhr/settings", description="Saves HDHomeRun emulation settings.", sample_body={"enabled": False, "device_name": "bds-tv", "device_id": "12345678", "channel_limit": 450, "excluded_group_ids": [], "tuner_count": 1, "max_upstream_streams": 1, "public_base_url": "http://192.168.0.185:8088", "stream_mode": "direct", "conflict_policy": "reject_new", "ffmpeg_path": "ffmpeg", "buffer_seconds": 30, "buffer_max_mb": 256, "stream_cleanup_enabled": True, "max_stream_age_minutes": 240, "idle_timeout_seconds": 120, "cleanup_interval_seconds": 30, "scheduled_drop_enabled": False, "scheduled_drop_time": "04:00"}),
     endpoint(category="HDHR", name="Generate HDHR proxy M3U", method="POST", path="/api/hdhr/generate-m3u", description="Generates an optional proxy M3U with local stream URLs."),
     endpoint(category="HDHR", name="HDHR status", method="GET", path="/api/hdhr/status", description="Returns active HDHR proxy streams.", safe_auto_run=True),
     endpoint(category="HDHR", name="HDHR catalogue", method="GET", path="/api/hdhr/catalogue", description="Returns the selected channel catalogue with DLNA-ready group containers.", safe_auto_run=True),
@@ -91,7 +91,7 @@ DIAGNOSTIC_ENDPOINTS: list[dict[str, Any]] = [
     endpoint(category="HDHR", name="HDHR auto stream", method="GET", path="/auto/v{guide_number}", sample_path="/auto/v1", description="HDHomeRun channel stream URL by lineup number.", expected_statuses=[200, 403, 404, 409, 502]),
 
     endpoint(category="DLNA", name="DLNA settings", method="GET", path="/api/dlna/settings", description="Returns DLNA media server settings and dynamic catalogue counts.", safe_auto_run=True),
-    endpoint(category="DLNA", name="Save DLNA settings", method="POST", path="/api/dlna/settings", description="Saves DLNA media server settings.", sample_body={"enabled": True, "device_name": "iptv-epg DLNA", "public_base_url": "http://192.168.0.185:8088", "stream_mode": "copy"}),
+    endpoint(category="DLNA", name="Save DLNA settings", method="POST", path="/api/dlna/settings", description="Saves DLNA media server settings.", sample_body={"enabled": True, "device_name": "bds-tv DLNA", "public_base_url": "http://192.168.0.185:8088", "stream_mode": "copy"}),
     endpoint(category="DLNA", name="DLNA request log", method="GET", path="/api/dlna/requests", description="Returns recent DLNA browse and stream requests for TV troubleshooting.", safe_auto_run=True),
     endpoint(category="DLNA", name="Clear DLNA request log", method="DELETE", path="/api/dlna/requests", description="Clears the in-memory DLNA troubleshooting request log."),
     endpoint(category="DLNA", name="DLNA device description", method="GET", path="/dlna/device.xml", description="Returns the UPnP/DLNA MediaServer device description.", safe_auto_run=True),

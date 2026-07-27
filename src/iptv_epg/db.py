@@ -324,7 +324,7 @@ def get_status(app_version: str) -> dict[str, Any]:
     source_dict = row_to_dict(source) or {}
     return {
         "ok": True,
-        "app": "iptv_epg",
+        "app": "bds-tv",
         "version": app_version,
         "source": source_dict,
         "channel_count": int(source_dict.get("channel_count") or 0),

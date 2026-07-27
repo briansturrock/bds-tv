@@ -151,7 +151,7 @@ def download_m3u(url: str, destination: Path, job_id: str | None = None) -> dict
 
     with tempfile.NamedTemporaryFile("wb", delete=False, dir=str(destination.parent)) as tmp:
         tmp_path = Path(tmp.name)
-        with requests.get(url, stream=True, timeout=(20, 180), headers={"User-Agent": "iptv_epg/0.8"}) as r:
+        with requests.get(url, stream=True, timeout=(20, 180), headers={"User-Agent": "bds-tv/0.12"}) as r:
             r.raise_for_status()
             for chunk in r.iter_content(chunk_size=1024 * 512):
                 if not chunk:

@@ -1,20 +1,24 @@
 #!/usr/bin/env sh
 set -eu
 
-IMAGE_TAG="${1:-iptv_epg:dev}"
+IMAGE_TAG="${1:-bds_tv:dev}"
+APP_ROOT="${BDS_TV_ROOT:-/docker/bds-tv}"
+if [ ! -d "$APP_ROOT" ] && [ -d /docker/iptv_epg ]; then
+  APP_ROOT="/docker/iptv_epg"
+fi
 
-mkdir -p /docker/iptv_epg/config /docker/iptv_epg/data /docker/iptv_epg/db /docker/iptv_epg/logs
+mkdir -p "$APP_ROOT/config" "$APP_ROOT/data" "$APP_ROOT/db" "$APP_ROOT/logs"
 
-docker stop iptv_epg 2>/dev/null || true
-docker rm iptv_epg 2>/dev/null || true
+docker stop bds-tv iptv-epg iptv_epg 2>/dev/null || true
+docker rm bds-tv iptv-epg iptv_epg 2>/dev/null || true
 
 docker run -d \
-  --name iptv_epg \
+  --name bds-tv \
   --restart unless-stopped \
   -p 8088:8080 \
   -e TZ=UTC \
-  -v /docker/iptv_epg/config:/config \
-  -v /docker/iptv_epg/data:/data \
-  -v /docker/iptv_epg/db:/db \
-  -v /docker/iptv_epg/logs:/logs \
+  -v "$APP_ROOT/config:/config" \
+  -v "$APP_ROOT/data:/data" \
+  -v "$APP_ROOT/db:/db" \
+  -v "$APP_ROOT/logs:/logs" \
   "$IMAGE_TAG"

@@ -14,8 +14,18 @@ EPG_CACHE_DIR = DATA_DIR / "epg_cache"
 HLS_DIR = DATA_DIR / "hls"
 
 SOURCE_M3U = SOURCE_DIR / "source.m3u"
-FILTERED_M3U = DATA_DIR / "filtered.m3u"
-FILTERED_EPG = DATA_DIR / "filtered_epg.xml"
+FILTERED_M3U = DATA_DIR / "bds-tv.m3u"
+FILTERED_EPG = DATA_DIR / "bds-tv.xml"
+LEGACY_FILTERED_M3U = DATA_DIR / "filtered.m3u"
+LEGACY_FILTERED_EPG = DATA_DIR / "filtered_epg.xml"
+
+
+def readable_filtered_m3u() -> Path:
+    return FILTERED_M3U if FILTERED_M3U.exists() else LEGACY_FILTERED_M3U
+
+
+def readable_filtered_epg() -> Path:
+    return FILTERED_EPG if FILTERED_EPG.exists() else LEGACY_FILTERED_EPG
 
 
 def ensure_runtime_dirs() -> None:
