@@ -1162,11 +1162,16 @@ body:has(#tab-channels.active) {
 
 .guide-time-corner {
   padding: 4px 8px;
+  min-height: 64px;
+  box-sizing: border-box;
+  display: grid;
+  align-content: center;
+  gap: 4px;
 }
 
 .guide-date-select {
   width: 100%;
-  min-height: 30px;
+  min-height: 26px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #fff;
@@ -1174,6 +1179,10 @@ body:has(#tab-channels.active) {
   font: inherit;
   font-size: 12px;
   padding: 4px 6px;
+}
+
+.guide-time-axis {
+  height: 64px;
 }
 
 .guide-window-controls {
@@ -1185,8 +1194,8 @@ body:has(#tab-channels.active) {
 
 .guide-window-shift {
   min-height: 24px;
-  padding: 3px 5px;
-  font-size: 11px;
+  padding: 3px 4px;
+  font-size: 10px;
 }
 
 .guide-channel-row {
