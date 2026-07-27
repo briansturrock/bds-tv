@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>bds-tv</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="/static/favicon.png?v=0.13.0" type="image/png" />
+  <link rel="stylesheet" href="/static/tv.css?v=0.13.0" />
+</head>
+<body>
+  <main class="tv-app">
+    <aside class="tv-sidebar">
+      <div class="tv-brand">
+        <h1>bds-tv</h1>
+        <div id="tv-status">Loading guide...</div>
+      </div>
+      <div id="tv-groups" class="tv-groups" aria-label="Channel groups"></div>
+    </aside>
+
+    <section class="tv-main">
+      <header class="tv-header">
+        <div>
+          <h2 id="tv-group-title">Guide</h2>
+          <p id="tv-group-meta">Select a group</p>
+        </div>
+        <div class="tv-clock" id="tv-clock"></div>
+      </header>
+
+      <div id="tv-guide" class="tv-guide" aria-label="Channels"></div>
+    </section>
+  </main>
+
+  <section id="tv-player-shell" class="tv-player-shell hidden" aria-label="Player">
+    <video id="tv-player" class="tv-player" controls autoplay playsinline></video>
+    <div class="tv-player-overlay">
+      <strong id="tv-player-title">Channel</strong>
+      <span>Back closes playback</span>
+    </div>
+  </section>
+
+  <script src="/static/tv.js?v=0.13.0"></script>
+</body>
+</html>

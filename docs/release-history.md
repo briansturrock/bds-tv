@@ -17,6 +17,7 @@ Recent source-controlled milestones:
 - `0.11.x`: DLNA media server, DLNA compatibility work, favicon, public IP header, VPN streaming killswitch, DLNA buffered remux, health diagnostics.
 - `0.12.x`: rename/rebrand to `bds-tv`, including Docker identity and canonical `bds-tv.m3u` / `bds-tv.xml` outputs.
 - `0.12.1`: moves the provider stream limit to the main Settings page and improves Guide navigation for future days.
+- `0.13.0`: starts the Tizen/TV-app work with a hosted `/tv` interface that browses groups, shows guide data, and plays streams through bds-tv.
 
 The current release line is source-controlled and deployed from `main` using `deploy.sh`.
 

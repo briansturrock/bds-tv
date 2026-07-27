@@ -231,6 +231,17 @@ Preview buttons use a small play-style prompt. They are intended as a convenienc
 
 The guide uses the generated XMLTV file and the selected channel ordering, so it should reflect the same channel choices as the filtered M3U and proxy outputs.
 
+## TV Interface
+
+The `/tv` interface is the first step toward the Samsung/Tizen TV app. It is a hosted, remote-friendly screen served by bds-tv itself, so future TV-app behaviour can be updated server-side without rebuilding the sideloaded shell for every change.
+
+The TV interface:
+
+- lists selected channel groups;
+- shows selected channels and current/next guide data;
+- plays channels through bds-tv stream endpoints, not provider URLs;
+- is designed for directional remote control navigation.
+
 ## Diagnostics
 
 The Diagnostics page opens in a new tab and acts as both diagnostics and lightweight API documentation.

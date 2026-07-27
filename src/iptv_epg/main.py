@@ -146,6 +146,11 @@ def index() -> Response:
     return FileResponse(STATIC_DIR / "index.html", media_type="text/html")
 
 
+@app.get("/tv", response_model=None)
+def tv_index() -> Response:
+    return FileResponse(STATIC_DIR / "tv.html", media_type="text/html")
+
+
 @app.get("/health")
 async def health() -> dict:
     return {
