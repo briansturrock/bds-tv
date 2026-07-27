@@ -10,3 +10,5 @@ The shell is intentionally small:
 - future guide and playback behaviour should mostly update server-side.
 
 The default server URL is set in `main.js`.
+
+Version `0.1.2` keeps the same hosted URL but adds the application launch privilege so the hosted TV page can attempt a native app exit when Back is pressed from the guide.

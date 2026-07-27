@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <title>bds-tv</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="/static/favicon.png?v=0.13.0" type="image/png" />
-  <link rel="stylesheet" href="/static/tv.css?v=0.13.0" />
+  <link rel="icon" href="/static/favicon.png?v=0.13.1" type="image/png" />
+  <link rel="stylesheet" href="/static/tv.css?v=0.13.1" />
 </head>
 <body>
   <main class="tv-app">
@@ -38,6 +38,17 @@
     </div>
   </section>
 
-  <script src="/static/tv.js?v=0.13.0"></script>
+  <section id="tv-exit-shell" class="tv-exit-shell hidden" aria-label="Exit confirmation">
+    <div class="tv-exit-dialog">
+      <h2>Close bds-tv?</h2>
+      <p>Playback will stop and the app will close.</p>
+      <div class="tv-exit-actions">
+        <button id="tv-exit-yes" class="tv-exit-choice focused" type="button">Yes</button>
+        <button id="tv-exit-no" class="tv-exit-choice" type="button">No</button>
+      </div>
+    </div>
+  </section>
+
+  <script src="/static/tv.js?v=0.13.1"></script>
 </body>
 </html>

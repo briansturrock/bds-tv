@@ -244,3 +244,58 @@ body {
 .tv-player-overlay span {
   color: var(--muted);
 }
+
+.tv-exit-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.tv-exit-shell.hidden {
+  display: none;
+}
+
+.tv-exit-dialog {
+  width: min(620px, calc(100vw - 96px));
+  padding: 34px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  text-align: center;
+}
+
+.tv-exit-dialog h2 {
+  margin: 0;
+  font-size: 34px;
+}
+
+.tv-exit-dialog p {
+  margin: 12px 0 28px;
+  color: var(--muted);
+  font-size: 20px;
+}
+
+.tv-exit-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.tv-exit-choice {
+  min-height: 64px;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.tv-exit-choice.focused {
+  border-color: var(--focus);
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}

@@ -9,6 +9,7 @@ config/
 data/
 db/
 logs/
+tizen/build/
 *.db
 *.sqlite
 *.m3u
