@@ -154,7 +154,7 @@ The HDHR guide uses the app's filtered XMLTV data as the source of truth, with c
 
 ### HDHR Stream Safety
 
-The app has several protections for one-stream provider accounts:
+The app has several protections for limited-stream provider accounts. The provider stream limit is configured on the main Settings page and is shared by HDHR, DLNA, guide preview streams, and future TV-app streams:
 
 - maximum upstream stream count;
 - conflict policy;

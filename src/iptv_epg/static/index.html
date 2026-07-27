@@ -4,9 +4,9 @@
   <meta charset="utf-8" />
   <title>bds-tv</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="/static/favicon.png?v=0.12.0" type="image/png" />
-  <link rel="icon" href="/static/favicon.ico?v=0.12.0" sizes="any" />
-  <link rel="stylesheet" href="/static/app.css?v=0.12.0" />
+  <link rel="icon" href="/static/favicon.png?v=0.12.1" type="image/png" />
+  <link rel="icon" href="/static/favicon.ico?v=0.12.1" sizes="any" />
+  <link rel="stylesheet" href="/static/app.css?v=0.12.1" />
 </head>
 <body>
   <header class="app-header">
@@ -34,6 +34,10 @@
         <label for="m3u-url">M3U playlist URL</label>
         <textarea id="m3u-url" rows="3" spellcheck="false" placeholder="Paste upstream M3U URL"></textarea>
         <div class="settings-grid">
+          <label>
+            Provider stream limit
+            <input id="provider-stream-limit" type="number" min="1" max="16" step="1" />
+          </label>
           <label>
             Home country ISO code
             <input id="killswitch-country" class="country-code-input" type="text" maxlength="2" spellcheck="false" placeholder="GB" />
@@ -251,10 +255,6 @@
               <input id="hdhr-tuner-count" type="number" min="1" max="16" step="1" />
             </label>
             <label>
-              Max upstream streams
-              <input id="hdhr-max-upstream-streams" type="number" min="1" max="16" step="1" />
-            </label>
-            <label>
               Stream mode
               <select id="hdhr-stream-mode">
                 <option value="direct">Direct proxy</option>
@@ -461,6 +461,6 @@
 
   </main>
 
-  <script src="/static/app.js?v=0.12.0"></script>
+  <script src="/static/app.js?v=0.12.1"></script>
 </body>
 </html>

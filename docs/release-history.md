@@ -16,16 +16,17 @@ Recent source-controlled milestones:
 - `0.10.x`: HDHR emulation, XMLTV guide support, parser hardening, unknown EPG placeholders, channel limits, stream safety, buffered remux, HDHR group exclusions.
 - `0.11.x`: DLNA media server, DLNA compatibility work, favicon, public IP header, VPN streaming killswitch, DLNA buffered remux, health diagnostics.
 - `0.12.x`: rename/rebrand to `bds-tv`, including Docker identity and canonical `bds-tv.m3u` / `bds-tv.xml` outputs.
+- `0.12.1`: moves the provider stream limit to the main Settings page and improves Guide navigation for future days.
 
 The current release line is source-controlled and deployed from `main` using `deploy.sh`.
 
 Normal deploy:
 
 ```bash
-cd /docker/iptv_epg/repo
+cd /docker/bds-tv/repo
 bash deploy.sh
 ```
 
-Until the host folder is renamed, run `deploy.sh` from `/docker/iptv_epg/repo`. After the folder is renamed, use `/docker/bds-tv/repo`. The script itself supports both paths.
+The deploy script also supports the old `/docker/iptv_epg/repo` path for compatibility.
 
 Avoid `docker compose build --no-cache` unless deliberately testing a clean dependency rebuild.

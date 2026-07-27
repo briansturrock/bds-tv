@@ -210,7 +210,8 @@ def guide_default_window(date_value: str | None = None) -> tuple[datetime, datet
     current/near-current guide visible while still allowing long programmes that
     began earlier to appear because overlap logic is used.
 
-    Future/past dates start at midnight for the selected day.
+    Future/past dates start around the current time of day, matching the
+    behaviour people expect when switching from Today to Tomorrow.
     """
     now = datetime.now(timezone.utc)
     today = now.date()
@@ -228,7 +229,12 @@ def guide_default_window(date_value: str | None = None) -> tuple[datetime, datet
         window_end = window_start + timedelta(hours=8)
         return window_start, window_end, selected_day.isoformat()
 
-    window_start = datetime.combine(selected_day, datetime.min.time(), tzinfo=timezone.utc)
+    window_start = datetime.combine(
+        selected_day,
+        now.time().replace(second=0, microsecond=0),
+        tzinfo=timezone.utc,
+    )
+    window_start = floor_to_previous_half_hour(window_start)
     window_end = window_start + timedelta(hours=8)
     return window_start, window_end, selected_day.isoformat()
 
@@ -351,9 +357,27 @@ def api_guide(
 
     channels = selected_channels_for_group(group_id)
     requested_start = parse_iso_datetime(start)
+    selected_date = None
+    if date:
+        try:
+            selected_date = datetime.strptime(date, "%Y-%m-%d").date().isoformat()
+        except ValueError:
+            selected_date = None
+
     if requested_start:
-        window_start = floor_to_previous_half_hour(requested_start)
-        selected_date = window_start.date().isoformat()
+        requested_start = floor_to_previous_half_hour(requested_start)
+        if selected_date:
+            selected_day = datetime.strptime(selected_date, "%Y-%m-%d").date()
+            day_start = datetime.combine(selected_day, datetime.min.time(), tzinfo=timezone.utc)
+            day_end = day_start + timedelta(days=1)
+            window_start = datetime.combine(selected_day, requested_start.time(), tzinfo=timezone.utc)
+            if window_start < day_start:
+                window_start = day_start
+            if window_start >= day_end:
+                window_start = day_end - timedelta(minutes=30)
+        else:
+            window_start = requested_start
+            selected_date = window_start.date().isoformat()
     else:
         window_start, _default_window_end, selected_date = guide_default_window(date)
 

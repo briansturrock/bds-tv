@@ -91,6 +91,7 @@ async function loadPublicIp(refresh = false) {
 async function loadSettings(refreshIp = false) {
   const settings = await api(`/api/settings${refreshIp ? "?refresh_ip=true" : ""}`);
   $("m3u-url").value = settings.m3u_url || "";
+  $("provider-stream-limit").value = settings.provider_stream_limit || 1;
   $("killswitch-country").value = settings.killswitch_home_country_code || "";
   $("killswitch-enabled").checked = !!settings.killswitch_enabled;
   renderKillswitchStatus(settings.killswitch_status || {});
@@ -99,6 +100,7 @@ async function loadSettings(refreshIp = false) {
 function settingsPayloadFromForm() {
   return {
     m3u_url: $("m3u-url").value.trim(),
+    provider_stream_limit: Number($("provider-stream-limit").value || 1),
     killswitch_enabled: $("killswitch-enabled").checked,
     killswitch_home_country_code: $("killswitch-country").value.trim().toUpperCase(),
   };
@@ -136,7 +138,9 @@ function setHdhrForm(settings) {
   $("hdhr-ffmpeg-path").value = settings.ffmpeg_path || "ffmpeg";
   $("hdhr-channel-limit").value = settings.channel_limit || 450;
   $("hdhr-tuner-count").value = settings.tuner_count || 1;
-  $("hdhr-max-upstream-streams").value = settings.max_upstream_streams || 1;
+  if ($("provider-stream-limit")) {
+    $("provider-stream-limit").value = settings.max_upstream_streams || 1;
+  }
   $("hdhr-stream-mode").value = settings.stream_mode || "direct";
   $("hdhr-buffer-seconds").value = settings.buffer_seconds ?? 30;
   $("hdhr-buffer-max-mb").value = settings.buffer_max_mb || 256;
@@ -185,7 +189,7 @@ function hdhrPayloadFromForm() {
     channel_limit: Number($("hdhr-channel-limit").value || 450),
     excluded_group_ids: hdhrExcludedGroupIdsFromForm(),
     tuner_count: Number($("hdhr-tuner-count").value || 1),
-    max_upstream_streams: Number($("hdhr-max-upstream-streams").value || 1),
+    max_upstream_streams: Number($("provider-stream-limit").value || 1),
     stream_mode: $("hdhr-stream-mode").value,
     buffer_seconds: Number($("hdhr-buffer-seconds").value || 0),
     buffer_max_mb: Number($("hdhr-buffer-max-mb").value || 256),
@@ -442,6 +446,7 @@ async function saveSettings() {
     body: JSON.stringify(settingsPayloadFromForm()),
   });
   $("m3u-url").value = result.m3u_url || "";
+  $("provider-stream-limit").value = result.provider_stream_limit || 1;
   $("killswitch-country").value = result.killswitch_home_country_code || "";
   $("killswitch-enabled").checked = !!result.killswitch_enabled;
   renderKillswitchStatus(result.killswitch_status || {});
@@ -1935,6 +1940,33 @@ function guideHoursUntilEndOfDay(startDate) {
   return Math.max(1, Math.min(24, hours));
 }
 
+function selectedGuideDayBounds() {
+  const selected = selectedGuideDate();
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(selected);
+  if (!match) {
+    const fallback = floorDateToHalfHour(new Date());
+    const end = new Date(fallback);
+    end.setHours(24, 0, 0, 0);
+    return { start: fallback, end };
+  }
+  const start = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 0, 0, 0, 0));
+  const end = new Date(start.getTime() + 24 * 3600000);
+  return { start, end };
+}
+
+function shiftGuideWindow(hours) {
+  if (!guideState.activeGroupId) return;
+  const current = currentGuideStart();
+  const bounds = selectedGuideDayBounds();
+  const shifted = new Date(current.getTime() + hours * 3600000);
+  const latestStart = new Date(bounds.end.getTime() - 30 * 60000);
+  const nextStart = shifted < bounds.start ? bounds.start : (shifted > latestStart ? latestStart : shifted);
+
+  loadGuideForGroup(guideState.activeGroupId, nextStart).catch((err) => {
+    $("guide-status").textContent = `Could not move guide window: ${err.message}`;
+  });
+}
+
 
 async function loadGuideForGroup(groupId, startDate = null, options = {}) {
   initialiseGuideDate();
@@ -2062,7 +2094,13 @@ function renderGuide(body, options = {}) {
   content.innerHTML = `
     <div class="guide-grid" style="--hour-width:${GUIDE_HOUR_WIDTH}px">
       <div class="guide-time-header">
-        <div class="guide-time-corner">${renderGuideDateSelect(body.date || selectedGuideDate())}</div>
+        <div class="guide-time-corner">
+          ${renderGuideDateSelect(body.date || selectedGuideDate())}
+          <div class="guide-window-controls">
+            <button type="button" class="guide-window-shift" data-guide-shift="-4">Earlier</button>
+            <button type="button" class="guide-window-shift" data-guide-shift="4">Later</button>
+          </div>
+        </div>
         <div class="guide-time-axis" style="width:${timelineWidth}px">${ticks.join("")}</div>
       </div>
       ${rowsHtml}
@@ -2076,6 +2114,12 @@ function renderGuide(body, options = {}) {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       openGuideStream(button.dataset.channelId);
+    });
+  });
+
+  content.querySelectorAll(".guide-window-shift[data-guide-shift]").forEach((button) => {
+    button.addEventListener("click", () => {
+      shiftGuideWindow(Number(button.dataset.guideShift || 0));
     });
   });
 

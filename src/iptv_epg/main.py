@@ -76,12 +76,14 @@ app.include_router(scheduler_router)
 
 class SettingsIn(BaseModel):
     m3u_url: str | None = Field(default=None)
+    provider_stream_limit: int = Field(default=1, ge=1, le=16)
     killswitch_enabled: bool = False
     killswitch_home_country_code: str | None = None
 
 
 class SettingsOut(BaseModel):
     m3u_url: str | None = None
+    provider_stream_limit: int = 1
     killswitch_enabled: bool = False
     killswitch_home_country_code: str = ""
     killswitch_status: dict | None = None
@@ -111,8 +113,13 @@ class ChannelLogoIn(BaseModel):
 
 def settings_payload(force_refresh_ip: bool = False) -> SettingsOut:
     killswitch = get_killswitch_settings()
+    try:
+        provider_stream_limit = int(get_setting("hdhr_max_upstream_streams", "1") or "1")
+    except ValueError:
+        provider_stream_limit = 1
     return SettingsOut(
         m3u_url=get_setting("m3u_url"),
+        provider_stream_limit=max(1, min(provider_stream_limit, 16)),
         killswitch_enabled=bool(killswitch["enabled"]),
         killswitch_home_country_code=killswitch["home_country_code"],
         killswitch_status=stream_killswitch_status(force_refresh_ip),
@@ -181,6 +188,7 @@ def api_get_settings(refresh_ip: bool = Query(False)) -> SettingsOut:
 def api_set_settings(payload: SettingsIn) -> SettingsOut:
     if payload.m3u_url is not None:
         set_setting("m3u_url", payload.m3u_url.strip())
+    set_setting("hdhr_max_upstream_streams", str(max(1, min(payload.provider_stream_limit, 16))))
     save_killswitch_settings(payload.killswitch_enabled, payload.killswitch_home_country_code)
     return settings_payload(force_refresh_ip=True)
 
