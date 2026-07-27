@@ -27,6 +27,4 @@ cd /docker/bds-tv/repo
 bash deploy.sh
 ```
 
-The deploy script also supports the old `/docker/iptv_epg/repo` path for compatibility.
-
 Avoid `docker compose build --no-cache` unless deliberately testing a clean dependency rebuild.
