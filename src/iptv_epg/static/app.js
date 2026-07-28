@@ -454,6 +454,14 @@ function formatCertStatus(settings = {}) {
   return `Author: ${author} · Distributor: ${distributor} · Password: ${password}`;
 }
 
+function formatTvAppPackageStatus(settings = {}) {
+  const packageState = settings.package_built
+    ? `${settings.package_name || "bds-tv.wgt"} (${formatBytes(settings.package_size || 0)})`
+    : "not built";
+  const installer = settings.sdb_available ? "SDB installer available" : "SDB installer not available";
+  return `Package: ${packageState} · ${installer}`;
+}
+
 function setTvAppForm(settings = {}) {
   $("tv-app-manual-ip").value = settings.manual_tv_ip || "";
   $("tv-app-remove-old-version").checked = settings.remove_old_version !== false;
@@ -461,6 +469,7 @@ function setTvAppForm(settings = {}) {
   $("tv-app-cert-password").value = settings.cert_password_saved ? "" : "";
   $("tv-app-cert-password").placeholder = settings.cert_password_saved ? "Saved password" : "Certificate password";
   $("tv-app-cert-status").textContent = formatCertStatus(settings);
+  $("tv-app-package-status").textContent = formatTvAppPackageStatus(settings);
 }
 
 async function tvAppPayloadFromForm() {
@@ -529,6 +538,40 @@ async function loadTvApp() {
   renderJson("tv-app-json", body);
   tvAppState.loaded = true;
   setMessage("tv-app-message", "TV App settings loaded.");
+  return body;
+}
+
+async function buildTvAppPackage() {
+  setMessage("tv-app-message", "Building TV app package...");
+  const body = await api("/api/tv-app/package", { method: "POST" });
+  setTvAppForm(body.settings || {});
+  renderJson("tv-app-json", body);
+  setMessage("tv-app-message", "TV app package built.");
+  return body;
+}
+
+function downloadTvAppPackage() {
+  window.location.href = "/api/tv-app/package/download";
+  setMessage("tv-app-message", "Downloading TV app package...");
+}
+
+async function installTvAppPackage() {
+  const tvIp = tvAppState.selectedIp || $("tv-app-manual-ip").value.trim();
+  if (!tvIp) {
+    throw new Error("Select a TV or enter a manual TV IP first.");
+  }
+  setMessage("tv-app-message", `Installing TV app on ${tvIp}...`);
+  const body = await api("/api/tv-app/install", {
+    method: "POST",
+    body: JSON.stringify({
+      tv_ip: tvIp,
+      remove_old_version: $("tv-app-remove-old-version").checked,
+      launch_after_install: $("tv-app-launch-after-install").checked,
+    }),
+  });
+  setTvAppForm(body.settings || {});
+  renderJson("tv-app-json", body);
+  setMessage("tv-app-message", body.ok ? "TV app install completed." : "TV app install returned an error.", !body.ok);
   return body;
 }
 
@@ -1087,6 +1130,15 @@ function wireEvents() {
   });
   $("tv-app-rescan").addEventListener("click", () => {
     rescanTvAppDevices().catch((err) => setMessage("tv-app-message", `Scan failed: ${err.message}`, true));
+  });
+  $("tv-app-build-wgt").addEventListener("click", () => {
+    buildTvAppPackage().catch((err) => setMessage("tv-app-message", `Build failed: ${err.message}`, true));
+  });
+  $("tv-app-download-wgt").addEventListener("click", () => {
+    downloadTvAppPackage();
+  });
+  $("tv-app-install-tv").addEventListener("click", () => {
+    installTvAppPackage().catch((err) => setMessage("tv-app-message", `Install failed: ${err.message}`, true));
   });
 }
 

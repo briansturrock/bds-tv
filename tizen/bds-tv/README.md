@@ -11,4 +11,4 @@ The shell is intentionally small:
 
 The default server URL is set in `main.js`.
 
-Version `0.1.2` keeps the same hosted URL but adds the application launch privilege so the hosted TV page can attempt a native app exit when Back is pressed from the guide.
+Version `0.1.3` keeps the same hosted URL and is packaged by bds-tv for download or direct developer-mode installation when an SDB installer is available.

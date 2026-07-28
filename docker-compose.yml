@@ -14,7 +14,7 @@ services:
       start_period: 20s
     environment:
       - TZ=UTC
-      - IPTV_EPG_VERSION=0.13.2
+      - IPTV_EPG_VERSION=0.13.3
       - CONFIG_DIR=/config
       - DATA_DIR=/data
       - DB_PATH=/db/iptv_epg.db

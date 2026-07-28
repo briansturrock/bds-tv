@@ -10,9 +10,10 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY src /app/src
+COPY tizen /app/tizen
 
 ENV PYTHONPATH=/app/src
-ENV IPTV_EPG_VERSION=0.13.2
+ENV IPTV_EPG_VERSION=0.13.3
 ENV CONFIG_DIR=/config
 ENV DATA_DIR=/data
 ENV DB_PATH=/db/iptv_epg.db
