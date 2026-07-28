@@ -351,6 +351,15 @@ function exitApp() {
   setStatus("Closing bds-tv...");
 
   try {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: "bds-tv-exit" }, "*");
+      return;
+    }
+  } catch (_err) {
+    // Continue to native/browser fallbacks below.
+  }
+
+  try {
     if (window.tizen && tizen.application && tizen.application.getCurrentApplication) {
       tizen.application.getCurrentApplication().exit();
       return;

@@ -11,4 +11,4 @@ The shell is intentionally small:
 
 The default server URL is set in `main.js`.
 
-Version `0.1.3` keeps the same hosted URL and is packaged by bds-tv for download or direct developer-mode installation when an SDB installer is available.
+Version `0.1.4` keeps a native Tizen shell around the hosted guide, displays the shell version during startup, and lets the hosted `/tv` page ask the shell to close the app.
