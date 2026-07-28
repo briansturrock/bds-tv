@@ -1,14 +1,14 @@
-# bds-tv Tizen Shell
+# bds-tv Tizen App
 
-This is the first Samsung/Tizen TV shell for bds-tv.
+This is the Samsung/Tizen TV app for bds-tv.
 
-The shell is intentionally small:
+The app is intentionally server-backed:
 
 - it uses `icon.png` as the TV launcher icon;
-- it checks that bds-tv is reachable;
-- it then opens the hosted TV interface at `http://192.168.0.185:8088/tv`;
-- future guide and playback behaviour should mostly update server-side.
+- it loads groups and guide data from bds-tv;
+- it streams channels through bds-tv, never directly from the IPTV provider;
+- it handles Samsung remote navigation and exit confirmation inside the top-level Tizen app.
 
 The default server URL is set in `main.js`.
 
-Version `0.1.5` shows the shell version in the hosted guide and forwards Samsung Back key events between the native shell and `/tv` so exit handling can be confirmed from the remote.
+Version `0.1.6` moves the guide out of the iframe wrapper so Samsung Back key handling can run in the packaged app itself.

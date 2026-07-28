@@ -7,14 +7,48 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <main class="shell">
-    <img src="icon.png" alt="" class="logo" />
-    <h1>bds-tv</h1>
-    <p id="status">Connecting to bds-tv...</p>
-    <button id="retry" class="hidden" type="button">Retry</button>
-    <div id="version" class="version">TV shell</div>
+  <main class="tv-app">
+    <aside class="tv-sidebar">
+      <div class="tv-brand">
+        <h1>bds-tv <span id="tv-shell-version">TV shell 0.1.6</span></h1>
+        <div id="tv-status">Loading guide...</div>
+        <div id="tv-last-key" class="tv-key-debug">Last key: none</div>
+      </div>
+      <div id="tv-groups" class="tv-groups" aria-label="Channel groups"></div>
+    </aside>
+
+    <section class="tv-main">
+      <header class="tv-header">
+        <div>
+          <h2 id="tv-group-title">Guide</h2>
+          <p id="tv-group-meta">Select a group</p>
+        </div>
+        <div class="tv-clock" id="tv-clock"></div>
+      </header>
+
+      <div id="tv-guide" class="tv-guide" aria-label="Channels"></div>
+    </section>
   </main>
-  <iframe id="hosted-app" class="hosted-app hidden" title="bds-tv guide"></iframe>
+
+  <section id="tv-player-shell" class="tv-player-shell hidden" aria-label="Player">
+    <video id="tv-player" class="tv-player" controls autoplay playsinline></video>
+    <div class="tv-player-overlay">
+      <strong id="tv-player-title">Channel</strong>
+      <span>Back closes playback</span>
+    </div>
+  </section>
+
+  <section id="tv-exit-shell" class="tv-exit-shell hidden" aria-label="Exit confirmation">
+    <div class="tv-exit-dialog">
+      <h2>Close bds-tv?</h2>
+      <p>Playback will stop and the app will close.</p>
+      <div class="tv-exit-actions">
+        <button id="tv-exit-yes" class="tv-exit-choice focused" type="button">Yes</button>
+        <button id="tv-exit-no" class="tv-exit-choice" type="button">No</button>
+      </div>
+    </div>
+  </section>
+
   <script src="main.js"></script>
 </body>
 </html>

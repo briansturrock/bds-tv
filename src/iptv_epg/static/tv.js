@@ -93,6 +93,14 @@ function setStatus(message) {
   $("tv-status").textContent = message;
 }
 
+function setLastKey(event, normalisedKey) {
+  var el = $("tv-last-key");
+  if (!el) return;
+  var code = event.keyCode || event.which || 0;
+  var name = normalisedKey || event.key || event.code || "";
+  el.textContent = "Last key: " + code + (name ? " " + name : "");
+}
+
 function updateClock() {
   $("tv-clock").textContent = new Date().toLocaleTimeString([], {
     hour: "2-digit",
@@ -401,6 +409,9 @@ function handleBack() {
 }
 
 function handleKey(event) {
+  if (event.__bdsTvHandled) return;
+  event.__bdsTvHandled = true;
+
   var key = event.key || event.code;
   var code = event.keyCode || event.which || 0;
   var normalisedKey = ({
@@ -409,10 +420,17 @@ function handleKey(event) {
     38: "ArrowUp",
     39: "ArrowRight",
     40: "ArrowDown",
+    461: "Backspace",
     10009: "Backspace"
   })[code] || key;
 
-  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", "Backspace", "Escape"].indexOf(normalisedKey) >= 0) {
+  if (normalisedKey === "Back" || normalisedKey === "XF86Back") {
+    normalisedKey = "Backspace";
+  }
+
+  setLastKey(event, normalisedKey);
+
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", "Backspace", "Escape", "BrowserBack", "GoBack"].indexOf(normalisedKey) >= 0) {
     event.preventDefault();
   }
 
@@ -456,7 +474,10 @@ function handleShellMessage(event) {
   }
 }
 
-document.addEventListener("keydown", handleKey);
+document.addEventListener("keydown", handleKey, true);
+window.addEventListener("keydown", handleKey, true);
+$("tv-exit-yes").addEventListener("click", exitApp);
+$("tv-exit-no").addEventListener("click", hideExitConfirm);
 window.addEventListener("message", handleShellMessage);
 setInterval(updateClock, 15000);
 updateClock();

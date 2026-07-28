@@ -2,15 +2,17 @@
 <widget xmlns="http://www.w3.org/ns/widgets"
         xmlns:tizen="http://tizen.org/ns/widgets"
         id="http://bdsnet.local/bds-tv"
-        version="0.1.5"
+        version="0.1.6"
         viewmodes="maximized">
   <tizen:application id="bdstv00001.shell" package="bdstv00001" required_version="3.0" />
   <tizen:profile name="tv-samsung" />
   <tizen:privilege name="http://tizen.org/privilege/internet" />
   <tizen:privilege name="http://tizen.org/privilege/application.launch" />
+  <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice" />
+  <tizen:feature name="http://tizen.org/feature/tv.inputdevice" />
   <access origin="*" subdomains="true" />
   <content src="index.html" />
   <icon src="icon.png" />
   <name>bds-tv</name>
-  <description>bds-tv hosted TV shell</description>
+  <description>bds-tv TV guide</description>
 </widget>
