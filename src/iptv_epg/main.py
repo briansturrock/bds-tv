@@ -53,6 +53,7 @@ from .stream_safety import (
     save_killswitch_settings,
     stream_killswitch_status,
 )
+from .tv_app import router as tv_app_router
 
 
 app = FastAPI(title="bds-tv", version=__version__)
@@ -72,6 +73,7 @@ app.include_router(epgshare_review_router)
 app.include_router(guide_router)
 app.include_router(hdhr_router)
 app.include_router(scheduler_router)
+app.include_router(tv_app_router)
 
 
 class SettingsIn(BaseModel):

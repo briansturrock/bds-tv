@@ -105,6 +105,10 @@ DIAGNOSTIC_ENDPOINTS: list[dict[str, Any]] = [
     endpoint(category="Scheduler", name="Save scheduler settings", method="POST", path="/api/scheduler", description="Saves the scheduled EPG generation settings.", sample_body={"enabled": True, "days": 5, "run_time": "04:00"}),
     endpoint(category="Scheduler", name="Run scheduler now", method="POST", path="/api/scheduler/run-now", description="Starts scheduled EPG generation immediately.", expected_statuses=[200, 409]),
 
+
+    endpoint(category="TV App", name="TV App settings", method="GET", path="/api/tv-app/settings", description="Returns saved Samsung TV app signing and deploy settings.", safe_auto_run=True),
+    endpoint(category="TV App", name="Save TV App settings", method="POST", path="/api/tv-app/settings", description="Stores local TV app signing and deploy settings in the database.", sample_body={"author_p12_name":"author.p12","author_p12_data":"BASE64_P12","distributor_p12_name":"distributor.p12","distributor_p12_data":"BASE64_P12","cert_password":"PASSWORD","manual_tv_ip":"192.168.0.92","remove_old_version":True,"launch_after_install":False}),
+    endpoint(category="TV App", name="Discover Samsung TVs", method="POST", path="/api/tv-app/discover", description="Scans the LAN and optional manual IP for Samsung TVs with TV API or Tizen developer port open.", sample_body={"manual_tv_ip":"192.168.0.92","include_manual":True}),
     endpoint(category="Diagnostics", name="Diagnostics console", method="GET", path="/dev/diagnostics", description="Serves this diagnostics console."),
     endpoint(category="Diagnostics", name="Diagnostics endpoint registry", method="GET", path="/dev/diagnostics/endpoints", description="Returns registered diagnostics endpoint definitions.", safe_auto_run=True),
     endpoint(category="Diagnostics", name="Diagnostics coverage", method="GET", path="/dev/diagnostics/coverage", description="Compares actual FastAPI routes with registered diagnostics entries.", safe_auto_run=True),

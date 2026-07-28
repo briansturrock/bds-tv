@@ -418,6 +418,150 @@ async function browseDlnaObject() {
   return body;
 }
 
+
+const tvAppState = {
+  loaded: false,
+  devices: [],
+  selectedIp: null,
+  authorP12: null,
+  distributorP12: null,
+};
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) {
+      resolve("");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = String(reader.result || "");
+      resolve(value.includes(",") ? value.split(",").pop() : value);
+    };
+    reader.onerror = () => reject(reader.error || new Error("Could not read file."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function formatCertStatus(settings = {}) {
+  const author = settings.author_p12_saved
+    ? `${settings.author_p12_name || "author.p12"} (${formatBytes(settings.author_p12_size || 0)})`
+    : "not saved";
+  const distributor = settings.distributor_p12_saved
+    ? `${settings.distributor_p12_name || "distributor.p12"} (${formatBytes(settings.distributor_p12_size || 0)})`
+    : "not saved";
+  const password = settings.cert_password_saved ? "saved" : "not saved";
+  return `Author: ${author} · Distributor: ${distributor} · Password: ${password}`;
+}
+
+function setTvAppForm(settings = {}) {
+  $("tv-app-manual-ip").value = settings.manual_tv_ip || "";
+  $("tv-app-remove-old-version").checked = settings.remove_old_version !== false;
+  $("tv-app-launch-after-install").checked = !!settings.launch_after_install;
+  $("tv-app-cert-password").value = settings.cert_password_saved ? "" : "";
+  $("tv-app-cert-password").placeholder = settings.cert_password_saved ? "Saved password" : "Certificate password";
+  $("tv-app-cert-status").textContent = formatCertStatus(settings);
+}
+
+async function tvAppPayloadFromForm() {
+  const authorFile = $("tv-app-author-p12").files?.[0] || null;
+  const distributorFile = $("tv-app-distributor-p12").files?.[0] || null;
+  const authorData = authorFile ? await fileToBase64(authorFile) : "";
+  const distributorData = distributorFile ? await fileToBase64(distributorFile) : "";
+  return {
+    author_p12_name: authorFile?.name || "",
+    author_p12_data: authorData,
+    distributor_p12_name: distributorFile?.name || "",
+    distributor_p12_data: distributorData,
+    cert_password: $("tv-app-cert-password").value,
+    manual_tv_ip: $("tv-app-manual-ip").value.trim(),
+    remove_old_version: $("tv-app-remove-old-version").checked,
+    launch_after_install: $("tv-app-launch-after-install").checked,
+  };
+}
+
+function renderTvAppDevices(devices = []) {
+  const list = $("tv-app-devices");
+  if (!list) return;
+  if (!devices.length) {
+    list.innerHTML = `<div class="tv-device-empty muted">No TVs found yet. Turn a TV on, enable Developer Mode, then rescan.</div>`;
+    return;
+  }
+  list.innerHTML = devices
+    .map((device) => {
+      const selected = tvAppState.selectedIp === device.ip;
+      const title = device.device_name || device.ip;
+      const model = device.model_name || "Model unknown";
+      const developer = device.debug_port_open
+        ? "Developer port ready"
+        : device.tv_api_open
+          ? "Seen, not install-ready"
+          : "Not ready";
+      const detail = [device.ip, model, device.manufacturer].filter(Boolean).join(" · ");
+      const devIp = device.developer_ip ? `Developer IP: ${escapeHtml(device.developer_ip)}` : "Developer IP unknown";
+      return `
+        <button class="tv-device-row ${selected ? "selected" : ""}" data-tv-ip="${escapeAttr(device.ip)}">
+          <div>
+            <strong>${escapeHtml(title)}</strong>
+            <span>${escapeHtml(detail)}</span>
+          </div>
+          <div>
+            <small>${escapeHtml(developer)}</small>
+            <span>${devIp}</span>
+          </div>
+        </button>
+      `;
+    })
+    .join("");
+
+  document.querySelectorAll(".tv-device-row").forEach((row) => {
+    row.addEventListener("click", () => {
+      tvAppState.selectedIp = row.dataset.tvIp;
+      renderTvAppDevices(tvAppState.devices);
+      setMessage("tv-app-message", `Selected ${tvAppState.selectedIp}.`);
+    });
+  });
+}
+
+async function loadTvApp() {
+  const body = await api("/api/tv-app/settings");
+  setTvAppForm(body.settings || {});
+  renderJson("tv-app-json", body);
+  tvAppState.loaded = true;
+  setMessage("tv-app-message", "TV App settings loaded.");
+  return body;
+}
+
+async function saveTvApp() {
+  setMessage("tv-app-message", "Saving TV App settings...");
+  const payload = await tvAppPayloadFromForm();
+  const body = await api("/api/tv-app/settings", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  $("tv-app-author-p12").value = "";
+  $("tv-app-distributor-p12").value = "";
+  setTvAppForm(body.settings || {});
+  renderJson("tv-app-json", { ...body, devices: tvAppState.devices });
+  setMessage("tv-app-message", "TV App settings saved.");
+  return body;
+}
+
+async function rescanTvAppDevices() {
+  setMessage("tv-app-message", "Scanning for TVs...");
+  const body = await api("/api/tv-app/discover", {
+    method: "POST",
+    body: JSON.stringify({ manual_tv_ip: $("tv-app-manual-ip").value.trim(), include_manual: true }),
+  });
+  tvAppState.devices = body.devices || [];
+  if (tvAppState.selectedIp && !tvAppState.devices.some((device) => device.ip === tvAppState.selectedIp)) {
+    tvAppState.selectedIp = null;
+  }
+  renderTvAppDevices(tvAppState.devices);
+  renderJson("tv-app-json", body);
+  setMessage("tv-app-message", `Found ${tvAppState.devices.length} TV${tvAppState.devices.length === 1 ? "" : "s"}.`);
+  return body;
+}
 function startHdhrPolling() {
   if (state.hdhrPollTimer) return;
   state.hdhrPollTimer = setInterval(async () => {
@@ -853,7 +997,11 @@ function switchTab(tab) {
     loadDlna().catch((err) => setMessage("dlna-message", `Could not load DLNA settings: ${err.message}`, true));
   }
 
-  if (["settings", "channels", "epg", "scheduler", "hdhr", "dlna", "guide"].includes(tab)) {
+  if (tab === "tv-app" && !tvAppState.loaded) {
+    loadTvApp().catch((err) => setMessage("tv-app-message", `Could not load TV App settings: ${err.message}`, true));
+  }
+
+  if (["settings", "channels", "epg", "scheduler", "hdhr", "dlna", "tv-app", "guide"].includes(tab)) {
     history.replaceState(null, "", `#${tab}`);
   }
 }
@@ -933,6 +1081,13 @@ function wireEvents() {
   $("dlna-inspect-browse").addEventListener("click", () => {
     browseDlnaObject().catch((err) => setMessage("dlna-message", `Browse failed: ${err.message}`, true));
   });
+
+  $("tv-app-save-settings").addEventListener("click", () => {
+    saveTvApp().catch((err) => setMessage("tv-app-message", `Save failed: ${err.message}`, true));
+  });
+  $("tv-app-rescan").addEventListener("click", () => {
+    rescanTvAppDevices().catch((err) => setMessage("tv-app-message", `Scan failed: ${err.message}`, true));
+  });
 }
 
 async function init() {
@@ -942,7 +1097,7 @@ async function init() {
   wireGuideEvents();
 
   const initialTab = window.location.hash.replace("#", "");
-  if (["settings", "channels", "epg", "scheduler", "hdhr", "dlna", "guide"].includes(initialTab)) {
+  if (["settings", "channels", "epg", "scheduler", "hdhr", "dlna", "tv-app", "guide"].includes(initialTab)) {
     switchTab(initialTab);
   }
 

@@ -4,9 +4,9 @@
   <meta charset="utf-8" />
   <title>bds-tv</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="/static/favicon.png?v=0.13.1" type="image/png" />
-  <link rel="icon" href="/static/favicon.ico?v=0.13.1" sizes="any" />
-  <link rel="stylesheet" href="/static/app.css?v=0.13.1" />
+  <link rel="icon" href="/static/favicon.png?v=0.13.2" type="image/png" />
+  <link rel="icon" href="/static/favicon.ico?v=0.13.2" sizes="any" />
+  <link rel="stylesheet" href="/static/app.css?v=0.13.2" />
 </head>
 <body>
   <header class="app-header">
@@ -24,6 +24,7 @@
       <button class="tab-button" data-tab="dlna">DLNA</button>
       <button class="tab-button" data-tab="guide">Guide</button>
       <a class="tab-link" href="/tv" target="_blank" rel="noopener">TV</a>
+      <button class="tab-button" data-tab="tv-app">TV App</button>
       <a class="tab-link" href="/dev/diagnostics" target="_blank" rel="noopener">Diagnostics</a>
     </nav>
   </header>
@@ -427,6 +428,73 @@
     </section>
 
 
+
+    <section id="tab-tv-app" class="tab-panel">
+      <div class="tv-app-shell">
+        <div class="card">
+          <h2>TV discovery</h2>
+          <div class="hdhr-grid">
+            <label>
+              Manual TV IP
+              <input id="tv-app-manual-ip" type="text" placeholder="192.168.0.92" />
+            </label>
+            <label class="toggle-row inline-toggle">
+              <input id="tv-app-remove-old-version" type="checkbox" />
+              <span>Remove old version before install</span>
+            </label>
+            <label class="toggle-row inline-toggle">
+              <input id="tv-app-launch-after-install" type="checkbox" />
+              <span>Launch after install</span>
+            </label>
+          </div>
+          <div class="button-row">
+            <button id="tv-app-save-settings">Save TV app settings</button>
+            <button id="tv-app-rescan">Rescan TVs</button>
+          </div>
+          <div id="tv-app-message" class="info-bar">TV App settings not loaded yet.</div>
+        </div>
+
+        <div class="card">
+          <h2>Discovered TVs</h2>
+          <div id="tv-app-devices" class="tv-device-list"></div>
+        </div>
+
+        <div class="card">
+          <h2>Signing</h2>
+          <div class="hdhr-grid">
+            <label>
+              Author certificate
+              <input id="tv-app-author-p12" type="file" accept=".p12" />
+            </label>
+            <label>
+              Distributor certificate
+              <input id="tv-app-distributor-p12" type="file" accept=".p12" />
+            </label>
+            <label>
+              Certificate password
+              <input id="tv-app-cert-password" type="password" autocomplete="off" />
+            </label>
+          </div>
+          <div id="tv-app-cert-status" class="muted">No signing settings loaded yet.</div>
+        </div>
+
+        <div class="card">
+          <h2>Package and deploy</h2>
+          <div class="button-row">
+            <button disabled>Build WGT</button>
+            <button disabled>Download WGT</button>
+            <button disabled>Sign WGT</button>
+            <button disabled>Install selected TV</button>
+          </div>
+          <p class="muted">Build, sign, and deploy actions will be enabled after the discovery and cert foundation is proven.</p>
+        </div>
+
+        <div class="card">
+          <h2>Status JSON</h2>
+          <pre id="tv-app-json" class="json-box">{}</pre>
+        </div>
+      </div>
+    </section>
     <section id="tab-guide" class="tab-panel">
       <div class="guide-shell">
         <div class="guide-toolbar">
@@ -462,6 +530,6 @@
 
   </main>
 
-  <script src="/static/app.js?v=0.13.1"></script>
+  <script src="/static/app.js?v=0.13.2"></script>
 </body>
 </html>

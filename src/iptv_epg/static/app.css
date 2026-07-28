@@ -1653,3 +1653,76 @@ body:has(#tab-channels.active) {
   line-height: 1;
   padding-left: 1px;
 }
+
+input[type="password"],
+input[type="file"] {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  font: inherit;
+  background: #fff;
+}
+
+.tv-app-shell {
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) minmax(360px, 520px);
+  gap: 14px;
+  align-items: start;
+}
+
+.tv-app-shell .card {
+  margin-bottom: 0;
+}
+
+.tv-device-list {
+  display: grid;
+  gap: 8px;
+}
+
+.tv-device-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 320px);
+  gap: 12px;
+  text-align: left;
+  align-items: center;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.tv-device-row.selected {
+  border-color: var(--accent);
+  background: #eff6ff;
+}
+
+.tv-device-row strong,
+.tv-device-row span,
+.tv-device-row small {
+  display: block;
+}
+
+.tv-device-row span {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.tv-device-row small {
+  color: var(--success-text);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.tv-device-empty {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+@media (max-width: 980px) {
+  .tv-app-shell,
+  .tv-device-row {
+    grid-template-columns: 1fr;
+  }
+}
