@@ -25,6 +25,7 @@ Recent source-controlled milestones:
 - `0.13.5`: keeps the native Tizen shell alive around the hosted TV guide, adds shell version display, and routes hosted exit requests through the shell.
 - `0.13.6`: shows the TV shell version in the hosted guide and forwards Samsung Back key events between the shell and `/tv`.
 - `0.13.7`: moves the TV guide into the packaged Tizen app, removes the iframe wrapper, and captures Samsung Back key events in the top-level app.
+- `0.13.8`: refreshes the TV App package status immediately after WGT build or install actions and hardens the Tizen Back-to-close path.
 The current release line is source-controlled and deployed from `main` using `deploy.sh`.
 
 Normal deploy:

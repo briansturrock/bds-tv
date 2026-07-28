@@ -11,4 +11,4 @@ The app is intentionally server-backed:
 
 The default server URL is set in `main.js`.
 
-Version `0.1.6` moves the guide out of the iframe wrapper so Samsung Back key handling can run in the packaged app itself.
+Version `0.1.7` makes Back handling more visible and robust by only treating real streams as open playback and forcing the close confirmation overlay visible from the top-level app.

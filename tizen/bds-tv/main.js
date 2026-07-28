@@ -1,4 +1,4 @@
-var TV_SHELL_VERSION = "0.1.6";
+var TV_SHELL_VERSION = "0.1.7";
 var DEFAULT_SERVER = "http://192.168.0.185:8088";
 var SERVER_KEY = "bdsTvServerUrl";
 
@@ -325,6 +325,7 @@ function playChannel(channel) {
   var player = $("tv-player");
   $("tv-player-title").textContent = channel.name || "Channel";
   playerShell.classList.remove("hidden");
+  playerShell.style.display = "block";
   player.src = serverBaseUrl() + "/dlna/channel/" + encodeURIComponent(channel.channel_id) + ".mpg";
 
   try {
@@ -346,10 +347,12 @@ function stopPlayback() {
   player.removeAttribute("src");
   player.load();
   playerShell.classList.add("hidden");
+  playerShell.style.display = "none";
 }
 
 function playerOpen() {
-  return !$("tv-player-shell").classList.contains("hidden");
+  var player = $("tv-player");
+  return !!(player && (player.currentSrc || player.getAttribute("src")));
 }
 
 function renderExitConfirm() {
@@ -358,15 +361,27 @@ function renderExitConfirm() {
 }
 
 function showExitConfirm() {
+  var shell = $("tv-exit-shell");
   tvState.exitConfirmOpen = true;
   tvState.exitConfirmYes = true;
-  $("tv-exit-shell").classList.remove("hidden");
+  shell.classList.remove("hidden");
+  shell.style.display = "grid";
+  shell.setAttribute("aria-hidden", "false");
   renderExitConfirm();
+  setStatus("Back pressed. Close confirmation open.");
+  try {
+    $("tv-exit-yes").focus();
+  } catch (_err) {
+    // Older TV runtimes may not expose focus on button elements.
+  }
 }
 
 function hideExitConfirm() {
+  var shell = $("tv-exit-shell");
   tvState.exitConfirmOpen = false;
-  $("tv-exit-shell").classList.add("hidden");
+  shell.classList.add("hidden");
+  shell.style.display = "none";
+  shell.setAttribute("aria-hidden", "true");
 }
 
 function exitApp() {
@@ -402,11 +417,13 @@ function confirmExitChoice() {
 function handleBack() {
   if (playerOpen()) {
     stopPlayback();
+    setStatus("Back pressed. Playback stopped.");
     return;
   }
 
   if (tvState.exitConfirmOpen) {
     hideExitConfirm();
+    setStatus("Close cancelled.");
     return;
   }
 

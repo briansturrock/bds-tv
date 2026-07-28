@@ -455,13 +455,32 @@ function formatCertStatus(settings = {}) {
 }
 
 function formatTvAppPackageStatus(settings = {}) {
-  const packageState = settings.package_built
-    ? `${settings.package_name || "bds-tv.wgt"} (${formatBytes(settings.package_size || 0)}, TV shell ${settings.package_shell_version || "unknown"})`
+  const packageBuilt = settings.package_built ?? settings.built;
+  const packageName = settings.package_name || settings.name;
+  const packageSize = settings.package_size ?? settings.size;
+  const packageShellVersion = settings.package_shell_version || settings.shell_version;
+  const packageState = packageBuilt
+    ? `${packageName || "bds-tv.wgt"} (${formatBytes(packageSize || 0)}, TV shell ${packageShellVersion || "unknown"})`
     : "not built";
   const installer = settings.sdb_available
     ? `${settings.sdb_name || "TizenSDB"} (${formatBytes(settings.sdb_size || 0)})`
     : "SDB not downloaded";
   return `Package: ${packageState} · Installer: ${installer}`;
+}
+
+function renderTvAppPackageStatus(settings = {}, packageInfo = null) {
+  $("tv-app-package-status").textContent = formatTvAppPackageStatus({
+    ...settings,
+    ...(packageInfo
+      ? {
+          package_built: packageInfo.built,
+          package_name: packageInfo.name,
+          package_size: packageInfo.size,
+          package_updated_at: packageInfo.updated_at,
+          package_shell_version: packageInfo.shell_version,
+        }
+      : {}),
+  });
 }
 
 function setTvAppForm(settings = {}) {
@@ -471,7 +490,7 @@ function setTvAppForm(settings = {}) {
   $("tv-app-cert-password").value = settings.cert_password_saved ? "" : "";
   $("tv-app-cert-password").placeholder = settings.cert_password_saved ? "Saved password" : "Certificate password";
   $("tv-app-cert-status").textContent = formatCertStatus(settings);
-  $("tv-app-package-status").textContent = formatTvAppPackageStatus(settings);
+  renderTvAppPackageStatus(settings);
 }
 
 async function tvAppPayloadFromForm() {
@@ -547,6 +566,7 @@ async function buildTvAppPackage() {
   setMessage("tv-app-message", "Building TV app package...");
   const body = await api("/api/tv-app/package", { method: "POST" });
   setTvAppForm(body.settings || {});
+  renderTvAppPackageStatus(body.settings || {}, body.package || null);
   renderJson("tv-app-json", body);
   setMessage("tv-app-message", "TV app package built.");
   return body;
@@ -584,6 +604,7 @@ async function installTvAppPackage() {
     }),
   });
   setTvAppForm(body.settings || {});
+  renderTvAppPackageStatus(body.settings || {}, body.package || null);
   renderJson("tv-app-json", body);
   setMessage("tv-app-message", body.ok ? "TV app install completed." : "TV app install returned an error.", !body.ok);
   return body;
