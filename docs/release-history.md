@@ -21,6 +21,7 @@ Recent source-controlled milestones:
 - `0.13.1`: improves Tizen compatibility for `/tv` startup and adds Back-to-exit confirmation.
 - `0.13.2`: adds the TV App management tab for Samsung TV discovery, signing certificate storage, and future WGT deployment plumbing.
 - `0.13.3`: packages the Tizen shell from bds-tv, exposes WGT download, and adds direct install plumbing for runtimes with SDB available.
+- `0.13.4`: downloads the same Linux TizenSDB wrapper used by Apps2Samsung and uses it for WGT signing and TV installation.
 The current release line is source-controlled and deployed from `main` using `deploy.sh`.
 
 Normal deploy:

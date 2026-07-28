@@ -4,6 +4,8 @@ import base64
 import ipaddress
 import json
 import os
+import platform
+import re
 import socket
 import shutil
 import subprocess
@@ -16,7 +18,7 @@ from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import Request, urlretrieve, urlopen
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
@@ -39,6 +41,9 @@ TV_APP_BUILD_DIR = Path(os.getenv("DATA_DIR", str(REPO_ROOT / "data"))) / "tv-ap
 TV_APP_PACKAGE_NAME = "bds-tv.wgt"
 TV_APP_PACKAGE_ID = "bdstv00001"
 TV_APP_APPLICATION_ID = "bdstv00001.shell"
+TIZEN_SDB_RELEASES_URL = "https://api.github.com/repos/PatrickSt1991/tizen-sdb/releases"
+TIZEN_SDB_DIR = TV_APP_BUILD_DIR / "sdb"
+TIZEN_DEFAULT_SDK_TOOL_PATH = "/opt/usr/apps/tmp"
 
 TV_APP_SETTING_KEYS: tuple[str, ...] = (
     "tv_app_author_p12_name",
@@ -72,6 +77,10 @@ class TvAppInstallIn(BaseModel):
     tv_ip: str
     remove_old_version: bool = True
     launch_after_install: bool = False
+
+
+class TvAppSdbIn(BaseModel):
+    force: bool = False
 
 
 @dataclass
@@ -125,6 +134,7 @@ def settings_payload() -> dict[str, Any]:
     author_data = settings.get("tv_app_author_p12_data", "")
     distributor_data = settings.get("tv_app_distributor_p12_data", "")
     package = package_path()
+    sdb = tizen_sdb_path()
     return {
         "author_p12_name": settings.get("tv_app_author_p12_name", ""),
         "author_p12_saved": bool(author_data),
@@ -140,7 +150,11 @@ def settings_payload() -> dict[str, Any]:
         "package_name": package.name,
         "package_size": package.stat().st_size if package.exists() else 0,
         "package_updated_at": datetime.fromtimestamp(package.stat().st_mtime, UTC).isoformat() if package.exists() else "",
-        "sdb_available": bool(resolve_executable("sdb")),
+        "sdb_available": sdb.exists(),
+        "sdb_name": sdb.name,
+        "sdb_path": str(sdb),
+        "sdb_size": sdb.stat().st_size if sdb.exists() else 0,
+        "sdb_updated_at": datetime.fromtimestamp(sdb.stat().st_mtime, UTC).isoformat() if sdb.exists() else "",
     }
 
 
@@ -296,30 +310,161 @@ def package_payload(path: Path | None = None) -> dict[str, Any]:
     }
 
 
-def resolve_executable(name: str) -> str:
-    return shutil.which(name) or ""
+def tizen_sdb_platform_id() -> str:
+    machine = platform.machine().lower()
+    if machine in {"aarch64", "arm64"}:
+        return "linux-arm64"
+    return "linux-x64"
 
 
-def run_sdb(args: list[str], timeout: int = 45) -> dict[str, Any]:
-    sdb = resolve_executable("sdb")
-    if not sdb:
+def tizen_sdb_path() -> Path:
+    return TIZEN_SDB_DIR / f"TizenSdb_{tizen_sdb_platform_id()}"
+
+
+def sdb_payload(path: Path | None = None) -> dict[str, Any]:
+    candidate = path or tizen_sdb_path()
+    exists = candidate.exists()
+    return {
+        "available": exists,
+        "name": candidate.name,
+        "path": str(candidate),
+        "size": candidate.stat().st_size if exists else 0,
+        "updated_at": datetime.fromtimestamp(candidate.stat().st_mtime, UTC).isoformat() if exists else "",
+        "platform": tizen_sdb_platform_id(),
+    }
+
+
+def fetch_json(url: str) -> Any:
+    request = Request(url, headers={"User-Agent": "bds-tv/1.0"})
+    with urlopen(request, timeout=20) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def find_latest_tizen_sdb_asset() -> tuple[str, str, str]:
+    releases = fetch_json(TIZEN_SDB_RELEASES_URL)
+    platform_id = tizen_sdb_platform_id()
+    if not isinstance(releases, list):
+        raise HTTPException(status_code=502, detail="TizenSDB release API returned an unexpected response.")
+
+    for release in releases:
+        if not isinstance(release, dict) or release.get("draft"):
+            continue
+        version = str(release.get("tag_name") or "")
+        assets = release.get("assets") or []
+        for asset in assets:
+            if not isinstance(asset, dict):
+                continue
+            name = str(asset.get("name") or "")
+            url = str(asset.get("browser_download_url") or "")
+            if platform_id in name.lower() and url:
+                return version, name, url
+
+    raise HTTPException(status_code=404, detail=f"No TizenSDB release asset found for {platform_id}.")
+
+
+def ensure_tizen_sdb(force: bool = False) -> dict[str, Any]:
+    target = tizen_sdb_path()
+    if target.exists() and not force:
+        return sdb_payload(target)
+
+    version, asset_name, download_url = find_latest_tizen_sdb_asset()
+    TIZEN_SDB_DIR.mkdir(parents=True, exist_ok=True)
+    temp_path = target.with_suffix(".download")
+    try:
+        urlretrieve(download_url, temp_path)
+        temp_path.replace(target)
+        target.chmod(target.stat().st_mode | 0o755)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+
+    payload = sdb_payload(target)
+    payload.update({"version": version, "asset_name": asset_name, "source_url": download_url})
+    return payload
+
+
+def run_tizen_sdb(args: list[str], timeout: int = 45, display_args: list[str] | None = None) -> dict[str, Any]:
+    sdb = tizen_sdb_path()
+    if not sdb.exists():
         raise HTTPException(
             status_code=409,
-            detail="sdb is not installed in the bds-tv runtime, so direct TV install is not available yet.",
+            detail="TizenSDB is not downloaded yet. Use Download/Update SDB first.",
         )
     completed = subprocess.run(
-        [sdb, *args],
+        [str(sdb), *args],
         check=False,
         capture_output=True,
         text=True,
         timeout=timeout,
     )
     return {
-        "command": "sdb " + " ".join(args),
+        "command": sdb.name + " " + " ".join(display_args or args),
         "returncode": completed.returncode,
         "stdout": completed.stdout.strip(),
         "stderr": completed.stderr.strip(),
     }
+
+
+def settings_for_install() -> dict[str, str]:
+    return get_settings(
+        (
+            "tv_app_author_p12_name",
+            "tv_app_author_p12_data",
+            "tv_app_distributor_p12_name",
+            "tv_app_distributor_p12_data",
+            "tv_app_cert_password",
+        )
+    )
+
+
+def write_cert_file(directory: Path, name: str, data: str, fallback: str) -> Path:
+    if not data:
+        raise HTTPException(status_code=409, detail=f"{fallback} is not saved.")
+    filename = Path(name or fallback).name
+    path = directory / filename
+    try:
+        path.write_bytes(base64.b64decode(data, validate=True))
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=f"{fallback} could not be decoded.") from exc
+    return path
+
+
+def resign_wgt(package: Path) -> dict[str, Any]:
+    settings = settings_for_install()
+    password = settings.get("tv_app_cert_password", "")
+    if not password:
+        raise HTTPException(status_code=409, detail="Certificate password is not saved.")
+
+    with tempfile.TemporaryDirectory(prefix="bds-tv-certs-") as tmp:
+        cert_dir = Path(tmp)
+        author = write_cert_file(
+            cert_dir,
+            settings.get("tv_app_author_p12_name", ""),
+            settings.get("tv_app_author_p12_data", ""),
+            "author.p12",
+        )
+        distributor = write_cert_file(
+            cert_dir,
+            settings.get("tv_app_distributor_p12_name", ""),
+            settings.get("tv_app_distributor_p12_data", ""),
+            "distributor.p12",
+        )
+        return run_tizen_sdb(
+            ["resign", str(package), str(author), str(distributor), password],
+            timeout=60,
+            display_args=["resign", str(package), str(author), str(distributor), "********"],
+        )
+
+
+def parse_sdk_tool_path(output: str) -> str:
+    match = re.search(r"sdk_toolpath:\s*([^\r\n]+)", output or "", flags=re.IGNORECASE)
+    return match.group(1).strip() if match else TIZEN_DEFAULT_SDK_TOOL_PATH
+
+
+def capability_for_install(tv_ip: str) -> tuple[dict[str, Any], str]:
+    result = run_tizen_sdb(["capability", tv_ip], timeout=30)
+    output = "\n".join(part for part in (result.get("stdout", ""), result.get("stderr", "")) if part)
+    return result, parse_sdk_tool_path(output)
 
 
 def install_wgt(payload: TvAppInstallIn) -> dict[str, Any]:
@@ -331,15 +476,18 @@ def install_wgt(payload: TvAppInstallIn) -> dict[str, Any]:
         build_wgt()
 
     steps: list[dict[str, Any]] = []
-    steps.append(run_sdb(["connect", tv_ip], timeout=20))
+    ensure_tizen_sdb()
+    capability, sdk_tool_path = capability_for_install(tv_ip)
+    steps.append(capability)
+    steps.append(resign_wgt(package))
     if payload.remove_old_version:
-        steps.append(run_sdb(["uninstall", TV_APP_PACKAGE_ID], timeout=30))
-    steps.append(run_sdb(["install", str(package)], timeout=90))
+        steps.append(run_tizen_sdb(["uninstall", tv_ip, TV_APP_PACKAGE_ID], timeout=30))
+    steps.append(run_tizen_sdb(["install", tv_ip, str(package), sdk_tool_path], timeout=90))
     if payload.launch_after_install:
-        steps.append(run_sdb(["shell", "0", "was_execute", TV_APP_APPLICATION_ID], timeout=20))
+        steps.append(run_tizen_sdb(["launch", tv_ip, TV_APP_APPLICATION_ID], timeout=20))
 
     ok = bool(steps and steps[-1]["returncode"] == 0)
-    return {"ok": ok, "tv_ip": tv_ip, "package": package_payload(package), "steps": steps}
+    return {"ok": ok, "tv_ip": tv_ip, "package": package_payload(package), "sdk_tool_path": sdk_tool_path, "steps": steps}
 
 
 @router.get("/api/tv-app/settings")
@@ -372,6 +520,11 @@ def api_discover_tv_app_devices(payload: TvAppDiscoverIn) -> dict[str, Any]:
 @router.post("/api/tv-app/package")
 def api_build_tv_app_package() -> dict[str, Any]:
     return {"ok": True, "package": build_wgt(), "settings": settings_payload()}
+
+
+@router.post("/api/tv-app/sdb")
+def api_download_tv_app_sdb(payload: TvAppSdbIn) -> dict[str, Any]:
+    return {"ok": True, "sdb": ensure_tizen_sdb(payload.force), "settings": settings_payload()}
 
 
 @router.get("/api/tv-app/package/download")

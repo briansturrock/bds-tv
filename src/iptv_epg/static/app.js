@@ -458,8 +458,10 @@ function formatTvAppPackageStatus(settings = {}) {
   const packageState = settings.package_built
     ? `${settings.package_name || "bds-tv.wgt"} (${formatBytes(settings.package_size || 0)})`
     : "not built";
-  const installer = settings.sdb_available ? "SDB installer available" : "SDB installer not available";
-  return `Package: ${packageState} · ${installer}`;
+  const installer = settings.sdb_available
+    ? `${settings.sdb_name || "TizenSDB"} (${formatBytes(settings.sdb_size || 0)})`
+    : "SDB not downloaded";
+  return `Package: ${packageState} · Installer: ${installer}`;
 }
 
 function setTvAppForm(settings = {}) {
@@ -547,6 +549,18 @@ async function buildTvAppPackage() {
   setTvAppForm(body.settings || {});
   renderJson("tv-app-json", body);
   setMessage("tv-app-message", "TV app package built.");
+  return body;
+}
+
+async function downloadTvAppSdb() {
+  setMessage("tv-app-message", "Downloading TizenSDB installer...");
+  const body = await api("/api/tv-app/sdb", {
+    method: "POST",
+    body: JSON.stringify({ force: true }),
+  });
+  setTvAppForm(body.settings || {});
+  renderJson("tv-app-json", body);
+  setMessage("tv-app-message", "TizenSDB installer ready.");
   return body;
 }
 
@@ -1133,6 +1147,9 @@ function wireEvents() {
   });
   $("tv-app-build-wgt").addEventListener("click", () => {
     buildTvAppPackage().catch((err) => setMessage("tv-app-message", `Build failed: ${err.message}`, true));
+  });
+  $("tv-app-download-sdb").addEventListener("click", () => {
+    downloadTvAppSdb().catch((err) => setMessage("tv-app-message", `SDB download failed: ${err.message}`, true));
   });
   $("tv-app-download-wgt").addEventListener("click", () => {
     downloadTvAppPackage();
