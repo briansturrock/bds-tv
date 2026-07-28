@@ -1,4 +1,4 @@
-var TV_SHELL_VERSION = "0.1.7";
+var TV_SHELL_VERSION = "0.1.8";
 var DEFAULT_SERVER = "http://192.168.0.185:8088";
 var SERVER_KEY = "bdsTvServerUrl";
 
@@ -365,7 +365,7 @@ function showExitConfirm() {
   tvState.exitConfirmOpen = true;
   tvState.exitConfirmYes = true;
   shell.classList.remove("hidden");
-  shell.style.display = "grid";
+  shell.style.display = "block";
   shell.setAttribute("aria-hidden", "false");
   renderExitConfirm();
   setStatus("Back pressed. Close confirmation open.");

@@ -11,4 +11,4 @@ The app is intentionally server-backed:
 
 The default server URL is set in `main.js`.
 
-Version `0.1.7` makes Back handling more visible and robust by only treating real streams as open playback and forcing the close confirmation overlay visible from the top-level app.
+Version `0.1.8` renders the close confirmation with conservative absolute positioning and flex buttons for Samsung TV browser compatibility.

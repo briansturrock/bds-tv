@@ -351,7 +351,7 @@ function showExitConfirm() {
   tvState.exitConfirmOpen = true;
   tvState.exitConfirmYes = true;
   shell.classList.remove("hidden");
-  shell.style.display = "grid";
+  shell.style.display = "block";
   shell.setAttribute("aria-hidden", "false");
   renderExitConfirm();
   setStatus("Back pressed. Close confirmation open.");

@@ -257,12 +257,15 @@ body {
 }
 
 .tv-exit-shell {
-  position: fixed;
-  inset: 0;
-  z-index: 120;
-  display: grid;
-  place-items: center;
-  background: rgba(0, 0, 0, 0.72);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  display: block;
+  background: #000;
+  background: rgba(0, 0, 0, 0.82);
 }
 
 .tv-exit-shell.hidden {
@@ -270,12 +273,18 @@ body {
 }
 
 .tv-exit-dialog {
-  width: min(620px, calc(100vw - 96px));
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 620px;
+  margin-left: -310px;
+  margin-top: -150px;
   padding: 34px;
-  border: 1px solid var(--line);
+  border: 3px solid var(--focus);
   border-radius: 10px;
-  background: var(--panel);
+  background: #171d24;
   text-align: center;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.82);
 }
 
 .tv-exit-dialog h2 {
@@ -290,17 +299,17 @@ body {
 }
 
 .tv-exit-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
   gap: 16px;
 }
 
 .tv-exit-choice {
+  flex: 1;
   min-height: 64px;
-  border: 2px solid var(--line);
+  border: 2px solid #303a46;
   border-radius: 8px;
-  background: var(--panel-2);
-  color: var(--text);
+  background: #202832;
+  color: #f8fafc;
   font-size: 24px;
   font-weight: 700;
 }
