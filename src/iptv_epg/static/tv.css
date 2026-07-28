@@ -55,6 +55,12 @@ body {
   font-size: 32px;
 }
 
+.tv-brand h1 span {
+  color: var(--muted);
+  font-size: 16px;
+  font-weight: 500;
+}
+
 #tv-status,
 #tv-group-meta,
 .tv-clock {

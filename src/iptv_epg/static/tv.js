@@ -449,7 +449,15 @@ function handleKey(event) {
   }
 }
 
+function handleShellMessage(event) {
+  var data = event.data || {};
+  if (data && data.type === "bds-tv-back") {
+    handleBack();
+  }
+}
+
 document.addEventListener("keydown", handleKey);
+window.addEventListener("message", handleShellMessage);
 setInterval(updateClock, 15000);
 updateClock();
 setStatus("TV script loaded");

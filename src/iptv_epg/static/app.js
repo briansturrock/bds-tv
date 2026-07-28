@@ -456,7 +456,7 @@ function formatCertStatus(settings = {}) {
 
 function formatTvAppPackageStatus(settings = {}) {
   const packageState = settings.package_built
-    ? `${settings.package_name || "bds-tv.wgt"} (${formatBytes(settings.package_size || 0)})`
+    ? `${settings.package_name || "bds-tv.wgt"} (${formatBytes(settings.package_size || 0)}, TV shell ${settings.package_shell_version || "unknown"})`
     : "not built";
   const installer = settings.sdb_available
     ? `${settings.sdb_name || "TizenSDB"} (${formatBytes(settings.sdb_size || 0)})`

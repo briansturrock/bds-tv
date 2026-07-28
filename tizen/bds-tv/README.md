@@ -11,4 +11,4 @@ The shell is intentionally small:
 
 The default server URL is set in `main.js`.
 
-Version `0.1.4` keeps a native Tizen shell around the hosted guide, displays the shell version during startup, and lets the hosted `/tv` page ask the shell to close the app.
+Version `0.1.5` shows the shell version in the hosted guide and forwards Samsung Back key events between the native shell and `/tv` so exit handling can be confirmed from the remote.

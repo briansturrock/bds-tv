@@ -1,4 +1,4 @@
-const SHELL_VERSION = "0.1.4";
+const SHELL_VERSION = "0.1.5";
 const DEFAULT_SERVER = "http://192.168.0.185:8088";
 const SERVER_KEY = "bdsTvServerUrl";
 
@@ -25,6 +25,9 @@ function showHostedApp(url) {
 
 function closeNativeApp() {
   setStatus("Closing bds-tv...");
+  hostedEl.src = "about:blank";
+  hostedEl.classList.add("hidden");
+  shellEl.classList.remove("hidden");
 
   try {
     if (window.tizen && tizen.application && tizen.application.getCurrentApplication) {
@@ -72,7 +75,13 @@ function handleKey(event) {
     return;
   }
 
-  if (keyCode === 10009 && hostedEl.classList.contains("hidden")) {
+  if (keyCode === 10009 && !hostedEl.classList.contains("hidden")) {
+    event.preventDefault();
+    hostedEl.contentWindow.postMessage({ type: "bds-tv-back" }, "*");
+    return;
+  }
+
+  if (keyCode === 10009) {
     event.preventDefault();
     closeNativeApp();
   }
@@ -86,7 +95,12 @@ function handleMessage(event) {
 }
 
 function handleTizenHardwareKey(event) {
-  if (event.keyName === "back" && hostedEl.classList.contains("hidden")) {
+  if (event.keyName === "back" && !hostedEl.classList.contains("hidden")) {
+    hostedEl.contentWindow.postMessage({ type: "bds-tv-back" }, "*");
+    return;
+  }
+
+  if (event.keyName === "back") {
     closeNativeApp();
   }
 }

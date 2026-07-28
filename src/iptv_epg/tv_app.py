@@ -19,6 +19,7 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlretrieve, urlopen
+from xml.etree import ElementTree
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
@@ -44,6 +45,7 @@ TV_APP_APPLICATION_ID = "bdstv00001.shell"
 TIZEN_SDB_RELEASES_URL = "https://api.github.com/repos/PatrickSt1991/tizen-sdb/releases"
 TIZEN_SDB_DIR = TV_APP_BUILD_DIR / "sdb"
 TIZEN_DEFAULT_SDK_TOOL_PATH = "/opt/usr/apps/tmp"
+TV_SHELL_VERSION = "0.1.5"
 
 TV_APP_SETTING_KEYS: tuple[str, ...] = (
     "tv_app_author_p12_name",
@@ -150,6 +152,7 @@ def settings_payload() -> dict[str, Any]:
         "package_name": package.name,
         "package_size": package.stat().st_size if package.exists() else 0,
         "package_updated_at": datetime.fromtimestamp(package.stat().st_mtime, UTC).isoformat() if package.exists() else "",
+        "package_shell_version": shell_version(),
         "sdb_available": sdb.exists(),
         "sdb_name": sdb.name,
         "sdb_path": str(sdb),
@@ -284,6 +287,15 @@ def package_path() -> Path:
     return TV_APP_BUILD_DIR / TV_APP_PACKAGE_NAME
 
 
+def shell_version() -> str:
+    try:
+        config = tizen_source_dir() / "config.xml"
+        root = ElementTree.parse(config).getroot()
+        return root.attrib.get("version", TV_SHELL_VERSION)
+    except Exception:
+        return TV_SHELL_VERSION
+
+
 def build_wgt() -> dict[str, Any]:
     source_dir = tizen_source_dir()
     TV_APP_BUILD_DIR.mkdir(parents=True, exist_ok=True)
@@ -307,6 +319,7 @@ def package_payload(path: Path | None = None) -> dict[str, Any]:
         "path": str(candidate),
         "size": candidate.stat().st_size if exists else 0,
         "updated_at": datetime.fromtimestamp(candidate.stat().st_mtime, UTC).isoformat() if exists else "",
+        "shell_version": shell_version(),
     }
 
 
