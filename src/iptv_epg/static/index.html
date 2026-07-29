@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="/static/favicon.png?v=0.13.2" type="image/png" />
   <link rel="icon" href="/static/favicon.ico?v=0.13.2" sizes="any" />
-  <link rel="stylesheet" href="/static/app.css?v=0.13.24" />
+  <link rel="stylesheet" href="/static/app.css?v=0.13.25" />
 </head>
 <body>
   <header class="app-header">
@@ -53,6 +53,10 @@
         <div class="button-row">
           <button id="save-settings">Save settings</button>
           <button id="fetch-m3u">Fetch M3U / rebuild index</button>
+        </div>
+        <div class="upload-row">
+          <input id="upload-m3u-file" type="file" accept=".m3u,.m3u8,audio/x-mpegurl,application/vnd.apple.mpegurl" />
+          <button id="upload-m3u">Upload M3U / rebuild index</button>
         </div>
         <div id="settings-message" class="info-bar">Ready.</div>
       </div>
@@ -534,6 +538,6 @@
 
   </main>
 
-  <script src="/static/app.js?v=0.13.24"></script>
+  <script src="/static/app.js?v=0.13.25"></script>
 </body>
 </html>

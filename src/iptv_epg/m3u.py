@@ -444,6 +444,82 @@ def fetch_and_index_m3u(url: str, job_id: str) -> dict[str, int | bool | str]:
     return {"unchanged": False, **counts}
 
 
+def import_m3u_file(upload_path: Path, job_id: str, source_label: str = "manual upload") -> dict[str, int | bool | str]:
+    update_job(job_id, message="Validating uploaded M3U")
+    validation = validate_m3u_file(upload_path)
+
+    md5 = hashlib.md5()
+    sha256 = hashlib.sha256()
+    with upload_path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 512), b""):
+            md5.update(chunk)
+            sha256.update(chunk)
+
+    metadata: dict[str, str | int] = {
+        "local_path": str(SOURCE_M3U),
+        "size_bytes": validation["size_bytes"],
+        "md5": md5.hexdigest(),
+        "sha256": sha256.hexdigest(),
+    }
+
+    backup_path: Path | None = None
+    if SOURCE_M3U.exists() and SOURCE_M3U.stat().st_size > 0:
+        backup_path = SOURCE_M3U.with_suffix(".m3u.previous")
+        shutil.copy2(SOURCE_M3U, backup_path)
+
+    shutil.move(str(upload_path), str(SOURCE_M3U))
+
+    try:
+        update_job(job_id, message="Uploaded M3U accepted; indexing channels")
+        counts = index_m3u(SOURCE_M3U, job_id=job_id)
+    except Exception:
+        if backup_path and backup_path.exists():
+            shutil.copy2(backup_path, SOURCE_M3U)
+        raise
+    finally:
+        if backup_path and backup_path.exists():
+            backup_path.unlink(missing_ok=True)
+
+    with connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute(
+                """
+                INSERT INTO m3u_sources(id, url, local_path, size_bytes, md5, sha256, fetched_at, last_error)
+                VALUES (1, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, NULL)
+                ON CONFLICT(id) DO UPDATE SET
+                    local_path = excluded.local_path,
+                    size_bytes = excluded.size_bytes,
+                    md5 = excluded.md5,
+                    sha256 = excluded.sha256,
+                    fetched_at = CURRENT_TIMESTAMP,
+                    last_error = NULL
+                """,
+                (
+                    source_label,
+                    metadata["local_path"],
+                    metadata["size_bytes"],
+                    metadata["md5"],
+                    metadata["sha256"],
+                ),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+    update_job(
+        job_id,
+        status="complete",
+        message=f"Indexed {counts['channel_count']:,} channels in {counts['group_count']:,} groups from uploaded M3U",
+        progress_current=counts["channel_count"],
+        progress_total=counts["channel_count"],
+        finish=True,
+    )
+
+    return {"unchanged": False, **counts}
+
+
 def extinf_with_logo(extinf: str, logo_url: str | None) -> str:
     logo = (logo_url or "").strip().replace('"', '%22')
     if not logo:

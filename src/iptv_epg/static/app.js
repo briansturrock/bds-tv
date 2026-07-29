@@ -687,6 +687,31 @@ async function startFetchM3u() {
   });
 }
 
+async function startUploadM3u() {
+  const input = $("upload-m3u-file");
+  const file = input.files && input.files[0];
+  if (!file) {
+    setMessage("settings-message", "Choose an M3U file first.", true);
+    return;
+  }
+  setMessage("settings-message", "Uploading M3U...");
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch("/api/m3u/upload", {
+    method: "POST",
+    body: formData,
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(result.detail || result.error || `HTTP ${response.status}`);
+  }
+  pollJob(result.job_id, "settings-message", async () => {
+    input.value = "";
+    await loadStatus();
+    await loadGroups(false);
+  });
+}
+
 async function generateFilteredM3u() {
   setMessage("channels-info", "Starting BDS-TV M3U generation…");
   const result = await api("/api/m3u/generate-filtered", { method: "POST" });
@@ -1109,6 +1134,9 @@ function wireEvents() {
 
   $("fetch-m3u").addEventListener("click", () => {
     startFetchM3u().catch((err) => setMessage("settings-message", `Fetch failed: ${err.message}`, true));
+  });
+  $("upload-m3u").addEventListener("click", () => {
+    startUploadM3u().catch((err) => setMessage("settings-message", `Upload failed: ${err.message}`, true));
   });
   $("killswitch-country").addEventListener("input", (event) => {
     event.target.value = event.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2);

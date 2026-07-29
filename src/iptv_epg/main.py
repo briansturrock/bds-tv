@@ -4,6 +4,7 @@ import os
 import signal
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
@@ -12,7 +13,7 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -43,7 +44,7 @@ from .epgshare_routes import router as epgshare_router
 from .epgshare_review_routes import router as epgshare_review_router
 from .guide_routes import router as guide_router
 from .hdhr import active_status, router as hdhr_router, start_ssdp_service, start_stream_safety_service, stop_ssdp_service
-from .m3u import fetch_and_index_m3u, generate_filtered_m3u
+from .m3u import fetch_and_index_m3u, generate_filtered_m3u, import_m3u_file
 from .scheduler import router as scheduler_router, start_scheduler_thread
 from .settings import readable_filtered_epg, readable_filtered_m3u, ensure_runtime_dirs
 from .stream_safety import (
@@ -210,6 +211,19 @@ def run_m3u_fetch_job(job_id: str, url: str) -> None:
         update_job(job_id, status="failed", message="M3U fetch/index failed", error=str(exc), finish=True)
 
 
+def run_m3u_upload_job(job_id: str, upload_path: str, source_label: str) -> None:
+    path = Path(upload_path)
+    try:
+        import_m3u_file(path, job_id, source_label)
+    except Exception as exc:
+        if path.exists():
+            path.unlink(missing_ok=True)
+        with connect() as conn:
+            conn.execute("UPDATE m3u_sources SET last_error = ? WHERE id = 1", (str(exc),))
+            conn.commit()
+        update_job(job_id, status="failed", message="Uploaded M3U import failed", error=str(exc), finish=True)
+
+
 @app.post("/api/m3u/fetch")
 def api_fetch_m3u() -> dict:
     url = get_setting("m3u_url")
@@ -221,6 +235,28 @@ def api_fetch_m3u() -> dict:
     executor.submit(run_m3u_fetch_job, job_id, url)
 
     return {"ok": True, "job_id": job_id, "message": "M3U fetch/index job started"}
+
+
+@app.post("/api/m3u/upload")
+async def api_upload_m3u(file: UploadFile = File(...)) -> dict:
+    filename = file.filename or "uploaded.m3u"
+    suffix = ".m3u8" if filename.lower().endswith(".m3u8") else ".m3u"
+    with tempfile.NamedTemporaryFile("wb", delete=False, suffix=suffix) as tmp:
+        tmp_path = Path(tmp.name)
+        try:
+            while True:
+                chunk = await file.read(1024 * 512)
+                if not chunk:
+                    break
+                tmp.write(chunk)
+        finally:
+            await file.close()
+
+    job_id = str(uuid.uuid4())
+    create_job(job_id, "m3u_upload", "Queued uploaded M3U import")
+    executor.submit(run_m3u_upload_job, job_id, str(tmp_path), f"uploaded:{filename}")
+
+    return {"ok": True, "job_id": job_id, "message": "Uploaded M3U import job started"}
 
 
 

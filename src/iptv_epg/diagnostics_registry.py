@@ -42,6 +42,7 @@ DIAGNOSTIC_ENDPOINTS: list[dict[str, Any]] = [
 
     endpoint(category="M3U", name="Get source metadata", method="GET", path="/api/source", description="Returns source M3U metadata.", safe_auto_run=True),
     endpoint(category="M3U", name="Fetch/index M3U", method="POST", path="/api/m3u/fetch", description="Starts a backend job to download and index the source M3U."),
+    endpoint(category="M3U", name="Upload/import M3U", method="POST", path="/api/m3u/upload", description="Uploads a local M3U and indexes it through the same safe validation path."),
     endpoint(category="M3U", name="Generate BDS-TV M3U", method="POST", path="/api/m3u/generate-filtered", description="Starts a backend job to generate bds-tv.m3u."),
     endpoint(category="M3U", name="Open BDS-TV M3U", method="GET", path="/bds-tv.m3u", description="Returns generated bds-tv.m3u."),
 

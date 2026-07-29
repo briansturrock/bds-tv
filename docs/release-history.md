@@ -33,6 +33,7 @@ Recent source-controlled milestones:
 - `0.13.13`: adds 2-hour TV guide windows, programme-level focus, and left/right time navigation to the TV app.
 - `0.13.14`: makes Back return from the programme grid to the active group before prompting to close the TV app.
 - `0.13.15`: resets the TV guide window to today/now when selecting a channel group.
+- `0.13.25`: adds Settings-page M3U upload/import as a safe manual recovery path.
 - `0.13.24`: protects M3U refreshes by validating downloaded playlists before replacing the last known-good source.
 - `0.13.23`: applies the TV-safe inset focus highlight to the programme context menu.
 - `0.13.22`: fixes Samsung TV exit confirmation focus rendering by using an inset highlight.
