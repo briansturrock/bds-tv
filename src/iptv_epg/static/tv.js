@@ -141,8 +141,8 @@ function currentWindowEnd() {
   return addHours(currentWindowStart(), GUIDE_WINDOW_HOURS);
 }
 
-function dateWithPreservedClock(dateValue) {
-  var current = currentWindowStart();
+function dateWithPreservedClock(dateValue, current) {
+  current = current || currentWindowStart();
   var parts = String(dateValue || "").split("-");
   if (parts.length !== 3) return currentWindowStart();
   return normaliseWindowStart(new Date(Date.UTC(
@@ -244,6 +244,7 @@ function selectGuideDate(index) {
 
   var safeIndex = Math.max(0, Math.min(index, tvState.guideDates.length - 1));
   var selected = tvState.guideDates[safeIndex];
+  var preservedClock = currentWindowStart();
   if (!selected) return;
   if (selected.date === tvState.selectedDate) {
     tvState.focusedDayIndex = safeIndex;
@@ -253,7 +254,7 @@ function selectGuideDate(index) {
 
   tvState.focusedDayIndex = safeIndex;
   tvState.selectedDate = selected.date;
-  tvState.windowStart = dateWithPreservedClock(selected.date).toISOString();
+  tvState.windowStart = dateWithPreservedClock(selected.date, preservedClock).toISOString();
   tvState.focusedChannelIndex = 0;
   tvState.focusedProgrammeIndex = 0;
   renderDays();

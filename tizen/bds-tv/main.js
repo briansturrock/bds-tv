@@ -1,4 +1,4 @@
-var TV_SHELL_VERSION = "0.1.16";
+var TV_SHELL_VERSION = "0.1.17";
 var DEFAULT_SERVER = "http://192.168.0.185:8088";
 var SERVER_KEY = "bdsTvServerUrl";
 var GUIDE_WINDOW_HOURS = 2;
@@ -149,8 +149,8 @@ function currentWindowEnd() {
   return addHours(currentWindowStart(), GUIDE_WINDOW_HOURS);
 }
 
-function dateWithPreservedClock(dateValue) {
-  var current = currentWindowStart();
+function dateWithPreservedClock(dateValue, current) {
+  current = current || currentWindowStart();
   var parts = String(dateValue || "").split("-");
   if (parts.length !== 3) return currentWindowStart();
   return normaliseWindowStart(new Date(Date.UTC(
@@ -257,6 +257,7 @@ function selectGuideDate(index) {
 
   var safeIndex = Math.max(0, Math.min(index, tvState.guideDates.length - 1));
   var selected = tvState.guideDates[safeIndex];
+  var preservedClock = currentWindowStart();
   if (!selected) return;
   if (selected.date === tvState.selectedDate) {
     tvState.focusedDayIndex = safeIndex;
@@ -266,7 +267,7 @@ function selectGuideDate(index) {
 
   tvState.focusedDayIndex = safeIndex;
   tvState.selectedDate = selected.date;
-  tvState.windowStart = dateWithPreservedClock(selected.date).toISOString();
+  tvState.windowStart = dateWithPreservedClock(selected.date, preservedClock).toISOString();
   tvState.focusedChannelIndex = 0;
   tvState.focusedProgrammeIndex = 0;
   renderDays();

@@ -11,4 +11,4 @@ The app is intentionally server-backed:
 
 The default server URL is set in `main.js`.
 
-Version `0.1.16` improves day selector focus memory so the guide can move up to days and back down to the current channel list.
+Version `0.1.17` preserves the current guide time when changing days.
