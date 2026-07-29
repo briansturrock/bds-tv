@@ -113,15 +113,16 @@ function scrollFocusedIntoView(selector, containerId) {
   var container = containerId ? $(containerId) : null;
   if (!focused || !container) return;
 
+  var margin = 14;
   var itemTop = focused.offsetTop;
   var itemBottom = itemTop + focused.offsetHeight;
-  var visibleTop = container.scrollTop;
-  var visibleBottom = visibleTop + container.clientHeight;
+  var visibleTop = container.scrollTop + margin;
+  var visibleBottom = container.scrollTop + container.clientHeight - margin;
 
   if (itemTop < visibleTop) {
-    container.scrollTop = itemTop;
+    container.scrollTop = Math.max(0, itemTop - margin);
   } else if (itemBottom > visibleBottom) {
-    container.scrollTop = itemBottom - container.clientHeight;
+    container.scrollTop = Math.max(0, itemBottom - container.clientHeight + margin);
   }
 }
 

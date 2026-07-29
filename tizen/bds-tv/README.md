@@ -11,4 +11,4 @@ The app is intentionally server-backed:
 
 The default server URL is set in `main.js`.
 
-Version `0.1.9` pins the TV app layout to the viewport so group navigation cannot scroll the header or hide the active guide area.
+Version `0.1.10` keeps focused groups and channels inside the visible padded pane when navigating back to the top.
