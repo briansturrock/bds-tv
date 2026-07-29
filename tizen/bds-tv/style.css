@@ -301,7 +301,10 @@ body {
 
 .tv-player-shell {
   position: fixed;
-  inset: 0;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  height: 1080px;
   background: #000;
   z-index: 8000;
 }
@@ -310,10 +313,19 @@ body {
   display: none;
 }
 
+.av-player,
 .tv-player {
+  position: absolute;
+  left: 0;
+  top: 0;
   width: 100%;
   height: 100%;
   background: #000;
+}
+
+.av-player {
+  width: 1920px;
+  height: 1080px;
 }
 
 .tv-player-overlay {
@@ -342,11 +354,12 @@ body {
 
 .tv-context-shell {
   position: fixed;
-  inset: 0;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  height: 1080px;
   z-index: 9000;
-  display: grid;
-  place-items: center;
-  padding: 48px;
+  display: block;
   background: rgba(0, 0, 0, 0.74);
 }
 
@@ -355,6 +368,9 @@ body {
 }
 
 .tv-context-menu {
+  position: absolute;
+  left: 700px;
+  top: 270px;
   width: 520px;
   padding: 30px;
   border: 3px solid var(--focus);
@@ -393,11 +409,12 @@ body {
 
 .tv-exit-shell {
   position: fixed;
-  inset: 0;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  height: 1080px;
   z-index: 9999;
-  display: grid;
-  place-items: center;
-  padding: 48px;
+  display: block;
   background: #000;
   background: rgba(0, 0, 0, 0.82);
 }
@@ -407,7 +424,10 @@ body {
 }
 
 .tv-exit-dialog {
-  width: 620px;
+  position: absolute;
+  left: 600px;
+  top: 270px;
+  width: 720px;
   padding: 34px;
   border: 3px solid var(--focus);
   border-radius: 10px;
@@ -429,11 +449,12 @@ body {
 
 .tv-exit-actions {
   display: flex;
-  gap: 42px;
+  gap: 72px;
+  justify-content: center;
 }
 
 .tv-exit-choice {
-  flex: 1;
+  flex: 0 0 270px;
   min-height: 64px;
   border: 2px solid #303a46;
   border-radius: 8px;

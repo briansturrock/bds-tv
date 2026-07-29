@@ -11,7 +11,7 @@
   <main class="tv-app">
     <aside class="tv-sidebar">
       <div class="tv-brand">
-        <h1>bds-tv <span id="tv-shell-version">TV shell 0.1.19</span></h1>
+        <h1>bds-tv <span id="tv-shell-version">TV shell 0.1.20</span></h1>
         <div id="tv-status">Loading guide...</div>
         <div id="tv-last-key" class="tv-key-debug">Last key: none</div>
       </div>
@@ -35,6 +35,7 @@
   </main>
 
   <section id="tv-player-shell" class="tv-player-shell hidden" aria-label="Player">
+    <object id="av-player" class="av-player" type="application/avplayer"></object>
     <video id="tv-player" class="tv-player" controls autoplay playsinline></video>
     <div class="tv-player-overlay">
       <strong id="tv-player-title">Channel</strong>

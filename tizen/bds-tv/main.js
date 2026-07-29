@@ -1,4 +1,4 @@
-var TV_SHELL_VERSION = "0.1.19";
+var TV_SHELL_VERSION = "0.1.20";
 var DEFAULT_SERVER = "http://192.168.0.185:8088";
 var SERVER_KEY = "bdsTvServerUrl";
 var GUIDE_WINDOW_HOURS = 2;
@@ -636,6 +636,15 @@ function hasNativePlayer() {
   return !!(window.webapis && webapis.avplay);
 }
 
+function prepareNativePlayerSurface() {
+  var avObject = $("av-player");
+  if (!avObject) return;
+  avObject.style.left = "0px";
+  avObject.style.top = "0px";
+  avObject.style.width = "1920px";
+  avObject.style.height = "1080px";
+}
+
 function playChannel(channel) {
   var playerShell = $("tv-player-shell");
   var player = $("tv-player");
@@ -648,6 +657,7 @@ function playChannel(channel) {
   if (hasNativePlayer()) {
     tvState.playbackMode = "avplay";
     playerShell.classList.add("native");
+    prepareNativePlayerSurface();
     player.removeAttribute("src");
     player.style.display = "none";
     try {
@@ -663,7 +673,12 @@ function playChannel(channel) {
         onstreamcompleted: function() { stopPlayback(); },
         onerror: function(eventType) { setStatus("Playback failed: " + eventType); }
       });
-      webapis.avplay.setDisplayRect(0, 0, screen.width || 1920, screen.height || 1080);
+      webapis.avplay.setDisplayRect(0, 0, 1920, 1080);
+      try {
+        webapis.avplay.setDisplayMethod("PLAYER_DISPLAY_MODE_FULL_SCREEN");
+      } catch (_displayErr) {
+        // Some runtimes do not expose display method control.
+      }
       webapis.avplay.prepareAsync(
         function() {
           webapis.avplay.play();

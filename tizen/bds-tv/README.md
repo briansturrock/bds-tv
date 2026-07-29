@@ -11,4 +11,4 @@ The app is intentionally server-backed:
 
 The default server URL is set in `main.js`.
 
-Version `0.1.19` fixes TV overlay centering and switches native playback into a full-screen AVPlay surface.
+Version `0.1.20` adds the documented AVPlay object surface and fixed TV-safe overlay positioning.
