@@ -149,6 +149,40 @@ body {
   font-size: 30px;
 }
 
+.tv-header-actions {
+  min-width: 420px;
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.tv-days {
+  display: flex;
+  gap: 8px;
+}
+
+.tv-day {
+  min-width: 104px;
+  height: 38px;
+  padding: 0 12px;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.tv-day.active {
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+.tv-day.focused {
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+}
+
 .tv-guide {
   height: calc(100vh - 94px);
   min-height: 0;

@@ -11,4 +11,4 @@ The app is intentionally server-backed:
 
 The default server URL is set in `main.js`.
 
-Version `0.1.14` resets the guide window to today/now whenever a channel group is selected.
+Version `0.1.15` adds configurable visible guide days and remote navigation for the TV guide day selector.

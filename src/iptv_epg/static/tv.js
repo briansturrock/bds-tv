@@ -9,8 +9,11 @@ var tvState = {
   focusedGroupIndex: 0,
   focusedChannelIndex: 0,
   focusedProgrammeIndex: 0,
+  focusedDayIndex: 0,
   windowStart: null,
   selectedDate: null,
+  guideDates: [],
+  visibleGuideDays: 4,
   loading: false,
   exitConfirmOpen: false,
   exitConfirmYes: true
@@ -102,9 +105,13 @@ function isoDate(date) {
   return date.toISOString().slice(0, 10);
 }
 
+function todayDate() {
+  return isoDate(new Date());
+}
+
 function earliestWindowStart() {
   var now = new Date();
-  var today = isoDate(now);
+  var today = todayDate();
   var selected = tvState.selectedDate || today;
   if (selected === today) {
     return floorDateToHalfHour(now);
@@ -131,6 +138,21 @@ function currentWindowStart() {
 
 function currentWindowEnd() {
   return addHours(currentWindowStart(), GUIDE_WINDOW_HOURS);
+}
+
+function dateWithPreservedClock(dateValue) {
+  var current = currentWindowStart();
+  var parts = String(dateValue || "").split("-");
+  if (parts.length !== 3) return currentWindowStart();
+  return normaliseWindowStart(new Date(Date.UTC(
+    Number(parts[0]),
+    Number(parts[1]) - 1,
+    Number(parts[2]),
+    current.getUTCHours(),
+    current.getUTCMinutes(),
+    0,
+    0
+  )));
 }
 
 function setStatus(message) {
@@ -191,6 +213,50 @@ function renderGroups() {
 
   groupsEl.innerHTML = html;
   scrollFocusedIntoView(".tv-group.focused", "tv-groups");
+}
+
+function renderDays() {
+  var daysEl = $("tv-days");
+  var html = "";
+  var i;
+
+  if (!daysEl) return;
+
+  for (i = 0; i < tvState.guideDates.length; i += 1) {
+    var item = tvState.guideDates[i];
+    var className = "tv-day";
+    if (item.date === tvState.selectedDate) className += " active";
+    if (tvState.focusedPane === "days" && i === tvState.focusedDayIndex) className += " focused";
+    html += '<button class="' + className + '" type="button" data-date="' + escapeAttr(item.date) + '">' + escapeHtml(item.label || item.date) + '</button>';
+  }
+
+  daysEl.innerHTML = html;
+  Array.prototype.forEach.call(daysEl.querySelectorAll(".tv-day"), function(button, index) {
+    button.addEventListener("click", function() {
+      selectGuideDate(index);
+    });
+  });
+}
+
+function selectGuideDate(index) {
+  if (!tvState.guideDates.length) return;
+
+  var safeIndex = Math.max(0, Math.min(index, tvState.guideDates.length - 1));
+  var selected = tvState.guideDates[safeIndex];
+  if (!selected) return;
+  if (selected.date === tvState.selectedDate) {
+    tvState.focusedDayIndex = safeIndex;
+    renderDays();
+    return;
+  }
+
+  tvState.focusedDayIndex = safeIndex;
+  tvState.selectedDate = selected.date;
+  tvState.windowStart = dateWithPreservedClock(selected.date).toISOString();
+  tvState.focusedChannelIndex = 0;
+  tvState.focusedProgrammeIndex = 0;
+  renderDays();
+  loadActiveGroup();
 }
 
 function programmeOverlaps(programme, windowStart, windowEnd) {
@@ -327,6 +393,40 @@ function loadGroups() {
   });
 }
 
+function loadTvOptions(callback) {
+  api("/api/tv-app/settings", function(err, body) {
+    if (!err && body && body.settings) {
+      tvState.visibleGuideDays = Math.max(1, Math.min(7, Number(body.settings.visible_guide_days || 4)));
+    }
+    callback();
+  });
+}
+
+function loadGuideDates(callback) {
+  api("/api/guide/dates", function(err, body) {
+    var today = todayDate();
+    var dates = (!err && body && body.dates && body.dates.length)
+      ? body.dates.slice(0, tvState.visibleGuideDays)
+      : [{ date: today, label: "Today" }];
+    var todayIndex;
+
+    tvState.guideDates = dates;
+    todayIndex = dates.map(function(item) { return item.date; }).indexOf(today);
+    tvState.focusedDayIndex = todayIndex >= 0 ? todayIndex : 0;
+    tvState.selectedDate = dates[tvState.focusedDayIndex] ? dates[tvState.focusedDayIndex].date : today;
+    renderDays();
+    callback();
+  });
+}
+
+function startTvGuide() {
+  loadTvOptions(function() {
+    loadGuideDates(function() {
+      loadGroups();
+    });
+  });
+}
+
 function loadActiveGroup() {
   if (tvState.loading) return;
 
@@ -338,6 +438,7 @@ function loadActiveGroup() {
 
   var start = currentWindowStart().toISOString();
   var path = "/api/guide?group_id=" + encodeURIComponent(group.id)
+    + "&date=" + encodeURIComponent(tvState.selectedDate || todayDate())
     + "&start=" + encodeURIComponent(start)
     + "&hours=" + GUIDE_WINDOW_HOURS;
 
@@ -366,6 +467,12 @@ function clampProgrammeFocus() {
 
 function moveFocus(delta) {
   if (tvState.focusedPane === "groups") {
+    if (delta < 0 && tvState.focusedGroupIndex === 0 && tvState.guideDates.length) {
+      tvState.focusedPane = "days";
+      renderDays();
+      renderGroups();
+      return;
+    }
     tvState.focusedGroupIndex = Math.max(0, Math.min(tvState.groups.length - 1, tvState.focusedGroupIndex + delta));
     renderGroups();
     return;
@@ -422,7 +529,9 @@ function activateFocused() {
     tvState.focusedChannelIndex = 0;
     tvState.focusedProgrammeIndex = 0;
     tvState.windowStart = null;
-    tvState.selectedDate = null;
+    tvState.selectedDate = todayDate();
+    tvState.focusedDayIndex = Math.max(0, tvState.guideDates.map(function(item) { return item.date; }).indexOf(tvState.selectedDate));
+    renderDays();
     loadActiveGroup();
     return;
   }
@@ -568,6 +677,14 @@ function handleBack() {
     return;
   }
 
+  if (tvState.focusedPane === "days") {
+    tvState.focusedPane = "groups";
+    renderDays();
+    renderGroups();
+    setStatus("Group list focused.");
+    return;
+  }
+
   showExitConfirm();
 }
 
@@ -614,9 +731,19 @@ function handleKey(event) {
   }
 
   if (normalisedKey === "ArrowUp") moveFocus(-1);
-  if (normalisedKey === "ArrowDown") moveFocus(1);
+  if (normalisedKey === "ArrowDown") {
+    if (tvState.focusedPane === "days") {
+      tvState.focusedPane = "groups";
+      renderDays();
+      renderGroups();
+    } else {
+      moveFocus(1);
+    }
+  }
   if (normalisedKey === "ArrowRight") {
-    if (tvState.focusedPane === "groups") {
+    if (tvState.focusedPane === "days") {
+      selectGuideDate(tvState.focusedDayIndex + 1);
+    } else if (tvState.focusedPane === "groups") {
       tvState.focusedPane = "programmes";
       clampProgrammeFocus();
       renderGroups();
@@ -626,7 +753,9 @@ function handleKey(event) {
     }
   }
   if (normalisedKey === "ArrowLeft") {
-    if (tvState.focusedPane === "programmes") {
+    if (tvState.focusedPane === "days") {
+      selectGuideDate(tvState.focusedDayIndex - 1);
+    } else if (tvState.focusedPane === "programmes") {
       moveProgramme(-1);
     }
   }
@@ -650,4 +779,4 @@ window.addEventListener("message", handleShellMessage);
 setInterval(updateClock, 15000);
 updateClock();
 setStatus("TV script loaded");
-loadGroups();
+startTvGuide();

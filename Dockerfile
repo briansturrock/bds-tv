@@ -13,7 +13,7 @@ COPY src /app/src
 COPY tizen /app/tizen
 
 ENV PYTHONPATH=/app/src
-ENV IPTV_EPG_VERSION=0.13.15
+ENV IPTV_EPG_VERSION=0.13.16
 ENV CONFIG_DIR=/config
 ENV DATA_DIR=/data
 ENV DB_PATH=/db/iptv_epg.db

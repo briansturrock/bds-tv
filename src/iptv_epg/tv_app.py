@@ -45,7 +45,7 @@ TV_APP_APPLICATION_ID = "bdstv00001.shell"
 TIZEN_SDB_RELEASES_URL = "https://api.github.com/repos/PatrickSt1991/tizen-sdb/releases"
 TIZEN_SDB_DIR = TV_APP_BUILD_DIR / "sdb"
 TIZEN_DEFAULT_SDK_TOOL_PATH = "/opt/usr/apps/tmp"
-TV_SHELL_VERSION = "0.1.14"
+TV_SHELL_VERSION = "0.1.15"
 
 TV_APP_SETTING_KEYS: tuple[str, ...] = (
     "tv_app_author_p12_name",
@@ -56,6 +56,7 @@ TV_APP_SETTING_KEYS: tuple[str, ...] = (
     "tv_app_manual_tv_ip",
     "tv_app_remove_old_version",
     "tv_app_launch_after_install",
+    "tv_app_visible_guide_days",
 )
 
 
@@ -68,6 +69,7 @@ class TvAppSettingsIn(BaseModel):
     manual_tv_ip: str = ""
     remove_old_version: bool = True
     launch_after_install: bool = False
+    visible_guide_days: int = 4
 
 
 class TvAppDiscoverIn(BaseModel):
@@ -122,6 +124,14 @@ def bool_value(value: str | None, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def int_value(value: str | None, default: int, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int(value or default)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(minimum, min(maximum, parsed))
+
+
 def decoded_size(value: str | None) -> int:
     if not value:
         return 0
@@ -148,6 +158,7 @@ def settings_payload() -> dict[str, Any]:
         "manual_tv_ip": settings.get("tv_app_manual_tv_ip", ""),
         "remove_old_version": bool_value(settings.get("tv_app_remove_old_version"), True),
         "launch_after_install": bool_value(settings.get("tv_app_launch_after_install"), False),
+        "visible_guide_days": int_value(settings.get("tv_app_visible_guide_days"), 4, 1, 7),
         "package_built": package.exists(),
         "package_name": package.name,
         "package_size": package.stat().st_size if package.exists() else 0,
@@ -521,6 +532,7 @@ def api_save_tv_app_settings(payload: TvAppSettingsIn) -> dict[str, Any]:
     set_setting("tv_app_manual_tv_ip", clean_ip(payload.manual_tv_ip))
     set_setting("tv_app_remove_old_version", "true" if payload.remove_old_version else "false")
     set_setting("tv_app_launch_after_install", "true" if payload.launch_after_install else "false")
+    set_setting("tv_app_visible_guide_days", str(max(1, min(7, int(payload.visible_guide_days or 4)))))
     return {"ok": True, "settings": settings_payload()}
 
 

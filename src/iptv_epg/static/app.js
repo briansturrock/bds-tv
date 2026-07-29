@@ -485,6 +485,7 @@ function renderTvAppPackageStatus(settings = {}, packageInfo = null) {
 
 function setTvAppForm(settings = {}) {
   $("tv-app-manual-ip").value = settings.manual_tv_ip || "";
+  $("tv-app-visible-guide-days").value = settings.visible_guide_days || 4;
   $("tv-app-remove-old-version").checked = settings.remove_old_version !== false;
   $("tv-app-launch-after-install").checked = !!settings.launch_after_install;
   $("tv-app-cert-password").value = settings.cert_password_saved ? "" : "";
@@ -505,6 +506,7 @@ async function tvAppPayloadFromForm() {
     distributor_p12_data: distributorData,
     cert_password: $("tv-app-cert-password").value,
     manual_tv_ip: $("tv-app-manual-ip").value.trim(),
+    visible_guide_days: Number($("tv-app-visible-guide-days").value || 4),
     remove_old_version: $("tv-app-remove-old-version").checked,
     launch_after_install: $("tv-app-launch-after-install").checked,
   };
