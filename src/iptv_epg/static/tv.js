@@ -16,6 +16,9 @@ var tvState = {
   guideDates: [],
   visibleGuideDays: 4,
   loading: false,
+  contextOpen: false,
+  contextChannel: null,
+  contextProgramme: null,
   exitConfirmOpen: false,
   exitConfirmYes: true
 };
@@ -562,10 +565,10 @@ function activateFocused() {
 
   var channel = tvState.channels[tvState.focusedChannelIndex];
   var programme = focusedProgramme();
-  if (channel && programme && programme.is_now) {
-    playChannel(channel);
+  if (channel && programme) {
+    showContextMenu(channel, programme);
   } else if (programme) {
-    setStatus("Programme is not currently airing.");
+    setStatus("No channel selected.");
   } else {
     setStatus("No programme selected.");
   }
@@ -577,13 +580,45 @@ function focusedProgramme() {
   return programmes[tvState.focusedProgrammeIndex] || null;
 }
 
+function showContextMenu(channel, programme) {
+  var shell = $("tv-context-shell");
+  tvState.contextOpen = true;
+  tvState.contextChannel = channel;
+  tvState.contextProgramme = programme;
+  $("tv-context-title").textContent = programme.title || "Programme";
+  $("tv-context-subtitle").textContent = channel.name || "Channel";
+  shell.classList.remove("hidden");
+  shell.style.display = "block";
+  shell.setAttribute("aria-hidden", "false");
+  setStatus("Programme actions open.");
+}
+
+function hideContextMenu() {
+  var shell = $("tv-context-shell");
+  tvState.contextOpen = false;
+  shell.classList.add("hidden");
+  shell.style.display = "none";
+  shell.setAttribute("aria-hidden", "true");
+}
+
+function startContextStream() {
+  var channel = tvState.contextChannel;
+  if (!channel) {
+    hideContextMenu();
+    setStatus("No channel selected.");
+    return;
+  }
+  hideContextMenu();
+  playChannel(channel);
+}
+
 function playChannel(channel) {
   var playerShell = $("tv-player-shell");
   var player = $("tv-player");
   $("tv-player-title").textContent = channel.name || "Channel";
   playerShell.classList.remove("hidden");
   playerShell.style.display = "block";
-  player.src = "/dlna/channel/" + encodeURIComponent(channel.channel_id) + ".mpg";
+  player.src = "/tv/stream/" + encodeURIComponent(channel.channel_id) + ".mpg";
 
   try {
     var playPromise = player.play();
@@ -693,6 +728,12 @@ function handleBack() {
     return;
   }
 
+  if (tvState.contextOpen) {
+    hideContextMenu();
+    setStatus("Programme actions closed.");
+    return;
+  }
+
   if (tvState.focusedPane === "programmes") {
     tvState.focusedPane = "groups";
     tvState.focusedGroupIndex = tvState.activeGroupIndex;
@@ -753,6 +794,13 @@ function handleKey(event) {
     return;
   }
 
+  if (tvState.contextOpen) {
+    if (normalisedKey === "Enter") {
+      startContextStream();
+    }
+    return;
+  }
+
   if (normalisedKey === "ArrowUp") moveFocus(-1);
   if (normalisedKey === "ArrowDown") {
     if (tvState.focusedPane === "days") {
@@ -796,6 +844,7 @@ document.addEventListener("keydown", handleKey, true);
 window.addEventListener("keydown", handleKey, true);
 $("tv-exit-yes").addEventListener("click", exitApp);
 $("tv-exit-no").addEventListener("click", hideExitConfirm);
+$("tv-context-start").addEventListener("click", startContextStream);
 window.addEventListener("message", handleShellMessage);
 setInterval(updateClock, 15000);
 updateClock();

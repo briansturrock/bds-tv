@@ -22,10 +22,11 @@ from urllib.request import Request, urlretrieve, urlopen
 from xml.etree import ElementTree
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from .db import get_settings, set_setting
+from .hdhr import get_hdhr_settings, selected_channel_row, stream_selected_channel
 
 
 router = APIRouter(tags=["tv-app"])
@@ -45,7 +46,7 @@ TV_APP_APPLICATION_ID = "bdstv00001.shell"
 TIZEN_SDB_RELEASES_URL = "https://api.github.com/repos/PatrickSt1991/tizen-sdb/releases"
 TIZEN_SDB_DIR = TV_APP_BUILD_DIR / "sdb"
 TIZEN_DEFAULT_SDK_TOOL_PATH = "/opt/usr/apps/tmp"
-TV_SHELL_VERSION = "0.1.17"
+TV_SHELL_VERSION = "0.1.18"
 
 TV_APP_SETTING_KEYS: tuple[str, ...] = (
     "tv_app_author_p12_name",
@@ -517,6 +518,36 @@ def install_wgt(payload: TvAppInstallIn) -> dict[str, Any]:
 @router.get("/api/tv-app/settings")
 def api_tv_app_settings() -> dict[str, Any]:
     return {"ok": True, "settings": settings_payload()}
+
+
+TV_STREAM_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Cache-Control": "no-cache",
+    "Connection": "close",
+    "transferMode.dlna.org": "Streaming",
+    "X-Accel-Buffering": "no",
+}
+
+
+@router.get("/tv/stream/{channel_id}", response_model=None)
+@router.get("/tv/stream/{channel_id}.mpg", response_model=None)
+def tv_stream_channel(channel_id: str) -> StreamingResponse:
+    clean_channel_id = channel_id[:-4] if channel_id.endswith(".mpg") else channel_id
+    response = stream_selected_channel(clean_channel_id, get_hdhr_settings())
+    response.media_type = "video/mpeg"
+    response.headers["Content-Type"] = "video/mpeg"
+    response.headers["Content-Disposition"] = f'inline; filename="{clean_channel_id}.mpg"'
+    for key, value in TV_STREAM_HEADERS.items():
+        response.headers[key] = value
+    return response
+
+
+@router.head("/tv/stream/{channel_id}", response_model=None)
+@router.head("/tv/stream/{channel_id}.mpg", response_model=None)
+def tv_stream_head(channel_id: str) -> Response:
+    clean_channel_id = channel_id[:-4] if channel_id.endswith(".mpg") else channel_id
+    selected_channel_row(clean_channel_id)
+    return Response(status_code=200, headers={**TV_STREAM_HEADERS, "Content-Type": "video/mpeg"})
 
 
 @router.post("/api/tv-app/settings")

@@ -1,4 +1,4 @@
-var TV_SHELL_VERSION = "0.1.17";
+var TV_SHELL_VERSION = "0.1.18";
 var DEFAULT_SERVER = "http://192.168.0.185:8088";
 var SERVER_KEY = "bdsTvServerUrl";
 var GUIDE_WINDOW_HOURS = 2;
@@ -19,6 +19,11 @@ var tvState = {
   guideDates: [],
   visibleGuideDays: 4,
   loading: false,
+  contextOpen: false,
+  contextChannel: null,
+  contextProgramme: null,
+  playbackOpen: false,
+  playbackMode: "",
   exitConfirmOpen: false,
   exitConfirmYes: true
 };
@@ -575,10 +580,10 @@ function activateFocused() {
 
   var channel = tvState.channels[tvState.focusedChannelIndex];
   var programme = focusedProgramme();
-  if (channel && programme && programme.is_now) {
-    playChannel(channel);
+  if (channel && programme) {
+    showContextMenu(channel, programme);
   } else if (programme) {
-    setStatus("Programme is not currently airing.");
+    setStatus("No channel selected.");
   } else {
     setStatus("No programme selected.");
   }
@@ -590,13 +595,96 @@ function focusedProgramme() {
   return programmes[tvState.focusedProgrammeIndex] || null;
 }
 
+function showContextMenu(channel, programme) {
+  var shell = $("tv-context-shell");
+  tvState.contextOpen = true;
+  tvState.contextChannel = channel;
+  tvState.contextProgramme = programme;
+  $("tv-context-title").textContent = programme.title || "Programme";
+  $("tv-context-subtitle").textContent = channel.name || "Channel";
+  shell.classList.remove("hidden");
+  shell.style.display = "block";
+  shell.setAttribute("aria-hidden", "false");
+  setStatus("Programme actions open.");
+  try {
+    $("tv-context-start").focus();
+  } catch (_err) {
+    // Older TV runtimes may not expose focus on button elements.
+  }
+}
+
+function hideContextMenu() {
+  var shell = $("tv-context-shell");
+  tvState.contextOpen = false;
+  shell.classList.add("hidden");
+  shell.style.display = "none";
+  shell.setAttribute("aria-hidden", "true");
+}
+
+function startContextStream() {
+  var channel = tvState.contextChannel;
+  if (!channel) {
+    hideContextMenu();
+    setStatus("No channel selected.");
+    return;
+  }
+  hideContextMenu();
+  playChannel(channel);
+}
+
+function hasNativePlayer() {
+  return !!(window.webapis && webapis.avplay);
+}
+
 function playChannel(channel) {
   var playerShell = $("tv-player-shell");
   var player = $("tv-player");
+  var url = serverBaseUrl() + "/tv/stream/" + encodeURIComponent(channel.channel_id) + ".mpg";
   $("tv-player-title").textContent = channel.name || "Channel";
   playerShell.classList.remove("hidden");
   playerShell.style.display = "block";
-  player.src = serverBaseUrl() + "/dlna/channel/" + encodeURIComponent(channel.channel_id) + ".mpg";
+  tvState.playbackOpen = true;
+
+  if (hasNativePlayer()) {
+    tvState.playbackMode = "avplay";
+    player.removeAttribute("src");
+    player.style.display = "none";
+    try {
+      try {
+        webapis.avplay.close();
+      } catch (_closeErr) {
+        // Close can fail if AVPlay has not been opened yet.
+      }
+      webapis.avplay.open(url);
+      webapis.avplay.setListener({
+        onbufferingstart: function() { setStatus("Buffering stream..."); },
+        onbufferingcomplete: function() { setStatus("Playing " + (channel.name || "channel") + "."); },
+        onstreamcompleted: function() { stopPlayback(); },
+        onerror: function(eventType) { setStatus("Playback failed: " + eventType); }
+      });
+      webapis.avplay.setDisplayRect(0, 0, window.innerWidth, window.innerHeight);
+      webapis.avplay.prepareAsync(
+        function() {
+          webapis.avplay.play();
+          setStatus("Playing " + (channel.name || "channel") + ".");
+        },
+        function(err) {
+          setStatus("Playback failed: " + (err && err.message ? err.message : err));
+          stopPlayback();
+        }
+      );
+      return;
+    } catch (err) {
+      setStatus("Native playback failed: " + err.message);
+      tvState.playbackMode = "html5";
+      player.style.display = "block";
+    }
+  } else {
+    tvState.playbackMode = "html5";
+    player.style.display = "block";
+  }
+
+  player.src = url;
 
   try {
     var playPromise = player.play();
@@ -613,16 +701,31 @@ function playChannel(channel) {
 function stopPlayback() {
   var playerShell = $("tv-player-shell");
   var player = $("tv-player");
+  if (tvState.playbackMode === "avplay" && hasNativePlayer()) {
+    try {
+      webapis.avplay.stop();
+    } catch (_stopErr) {
+      // Ignore invalid-state errors while closing.
+    }
+    try {
+      webapis.avplay.close();
+    } catch (_closeErr) {
+      // Ignore invalid-state errors while closing.
+    }
+  }
   player.pause();
   player.removeAttribute("src");
   player.load();
+  player.style.display = "block";
   playerShell.classList.add("hidden");
   playerShell.style.display = "none";
+  tvState.playbackOpen = false;
+  tvState.playbackMode = "";
 }
 
 function playerOpen() {
   var player = $("tv-player");
-  return !!(player && (player.currentSrc || player.getAttribute("src")));
+  return tvState.playbackOpen || !!(player && (player.currentSrc || player.getAttribute("src")));
 }
 
 function renderExitConfirm() {
@@ -697,6 +800,12 @@ function handleBack() {
     return;
   }
 
+  if (tvState.contextOpen) {
+    hideContextMenu();
+    setStatus("Programme actions closed.");
+    return;
+  }
+
   if (tvState.focusedPane === "programmes") {
     tvState.focusedPane = "groups";
     tvState.focusedGroupIndex = tvState.activeGroupIndex;
@@ -757,6 +866,13 @@ function handleKey(event) {
     return;
   }
 
+  if (tvState.contextOpen) {
+    if (normalisedKey === "Enter") {
+      startContextStream();
+    }
+    return;
+  }
+
   if (normalisedKey === "ArrowUp") moveFocus(-1);
   if (normalisedKey === "ArrowDown") {
     if (tvState.focusedPane === "days") {
@@ -793,6 +909,7 @@ document.addEventListener("keydown", handleKey, true);
 window.addEventListener("keydown", handleKey, true);
 $("tv-exit-yes").addEventListener("click", exitApp);
 $("tv-exit-no").addEventListener("click", hideExitConfirm);
+$("tv-context-start").addEventListener("click", startContextStream);
 setInterval(updateClock, 15000);
 setShellVersion();
 updateClock();

@@ -5,12 +5,13 @@
   <title>bds-tv</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="style.css" />
+  <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
 </head>
 <body>
   <main class="tv-app">
     <aside class="tv-sidebar">
       <div class="tv-brand">
-        <h1>bds-tv <span id="tv-shell-version">TV shell 0.1.17</span></h1>
+        <h1>bds-tv <span id="tv-shell-version">TV shell 0.1.18</span></h1>
         <div id="tv-status">Loading guide...</div>
         <div id="tv-last-key" class="tv-key-debug">Last key: none</div>
       </div>
@@ -38,6 +39,14 @@
     <div class="tv-player-overlay">
       <strong id="tv-player-title">Channel</strong>
       <span>Back closes playback</span>
+    </div>
+  </section>
+
+  <section id="tv-context-shell" class="tv-context-shell hidden" aria-label="Programme actions" aria-hidden="true">
+    <div class="tv-context-menu">
+      <h2 id="tv-context-title">Programme</h2>
+      <p id="tv-context-subtitle">Channel</p>
+      <button id="tv-context-start" class="tv-context-choice focused" type="button">Start stream</button>
     </div>
   </section>
 

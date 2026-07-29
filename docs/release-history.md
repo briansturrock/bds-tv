@@ -33,6 +33,7 @@ Recent source-controlled milestones:
 - `0.13.13`: adds 2-hour TV guide windows, programme-level focus, and left/right time navigation to the TV app.
 - `0.13.14`: makes Back return from the programme grid to the active group before prompting to close the TV app.
 - `0.13.15`: resets the TV guide window to today/now when selecting a channel group.
+- `0.13.19`: adds a TV programme context menu and Samsung AVPlay-based stream startup through bds-tv stream endpoints.
 - `0.13.18`: fixes TV guide day switching so it preserves the current guide time instead of jumping to midnight.
 - `0.13.17`: improves TV guide day-selector navigation so focus can move from programmes to days and return to the active channel group.
 - `0.13.16`: adds configurable TV guide day count and a remote-accessible day selector to the TV app.
