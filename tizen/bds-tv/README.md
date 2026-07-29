@@ -11,4 +11,4 @@ The app is intentionally server-backed:
 
 The default server URL is set in `main.js`.
 
-Version `0.1.15` adds configurable visible guide days and remote navigation for the TV guide day selector.
+Version `0.1.16` improves day selector focus memory so the guide can move up to days and back down to the current channel list.

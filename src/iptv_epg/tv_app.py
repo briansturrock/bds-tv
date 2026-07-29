@@ -45,7 +45,7 @@ TV_APP_APPLICATION_ID = "bdstv00001.shell"
 TIZEN_SDB_RELEASES_URL = "https://api.github.com/repos/PatrickSt1991/tizen-sdb/releases"
 TIZEN_SDB_DIR = TV_APP_BUILD_DIR / "sdb"
 TIZEN_DEFAULT_SDK_TOOL_PATH = "/opt/usr/apps/tmp"
-TV_SHELL_VERSION = "0.1.15"
+TV_SHELL_VERSION = "0.1.16"
 
 TV_APP_SETTING_KEYS: tuple[str, ...] = (
     "tv_app_author_p12_name",

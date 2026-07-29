@@ -6,6 +6,7 @@ var tvState = {
   channels: [],
   activeGroupIndex: 0,
   focusedPane: "groups",
+  focusBeforeDays: "groups",
   focusedGroupIndex: 0,
   focusedChannelIndex: 0,
   focusedProgrammeIndex: 0,
@@ -259,6 +260,25 @@ function selectGuideDate(index) {
   loadActiveGroup();
 }
 
+function focusDays(fromPane) {
+  tvState.focusBeforeDays = fromPane || tvState.focusedPane || "groups";
+  tvState.focusedPane = "days";
+  renderDays();
+  renderGroups();
+  renderChannels();
+}
+
+function leaveDays() {
+  var target = tvState.focusBeforeDays === "programmes" ? "programmes" : "groups";
+  tvState.focusedPane = target;
+  renderDays();
+  if (target === "programmes") {
+    renderChannels();
+  } else {
+    renderGroups();
+  }
+}
+
 function programmeOverlaps(programme, windowStart, windowEnd) {
   var start = new Date(programme.start);
   var stop = new Date(programme.stop);
@@ -468,13 +488,16 @@ function clampProgrammeFocus() {
 function moveFocus(delta) {
   if (tvState.focusedPane === "groups") {
     if (delta < 0 && tvState.focusedGroupIndex === 0 && tvState.guideDates.length) {
-      tvState.focusedPane = "days";
-      renderDays();
-      renderGroups();
+      focusDays("groups");
       return;
     }
     tvState.focusedGroupIndex = Math.max(0, Math.min(tvState.groups.length - 1, tvState.focusedGroupIndex + delta));
     renderGroups();
+    return;
+  }
+
+  if (delta < 0 && tvState.focusedChannelIndex === 0 && tvState.guideDates.length) {
+    focusDays("programmes");
     return;
   }
 
@@ -671,6 +694,7 @@ function handleBack() {
 
   if (tvState.focusedPane === "programmes") {
     tvState.focusedPane = "groups";
+    tvState.focusedGroupIndex = tvState.activeGroupIndex;
     renderGroups();
     renderChannels();
     setStatus("Group list focused.");
@@ -678,10 +702,8 @@ function handleBack() {
   }
 
   if (tvState.focusedPane === "days") {
-    tvState.focusedPane = "groups";
-    renderDays();
-    renderGroups();
-    setStatus("Group list focused.");
+    leaveDays();
+    setStatus(tvState.focusedPane === "programmes" ? "Guide focused." : "Group list focused.");
     return;
   }
 
@@ -733,9 +755,7 @@ function handleKey(event) {
   if (normalisedKey === "ArrowUp") moveFocus(-1);
   if (normalisedKey === "ArrowDown") {
     if (tvState.focusedPane === "days") {
-      tvState.focusedPane = "groups";
-      renderDays();
-      renderGroups();
+      leaveDays();
     } else {
       moveFocus(1);
     }
