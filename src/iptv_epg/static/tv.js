@@ -1,3 +1,6 @@
+var GUIDE_WINDOW_HOURS = 2;
+var GUIDE_SHIFT_HOURS = 1;
+
 var tvState = {
   groups: [],
   channels: [],
@@ -5,7 +8,9 @@ var tvState = {
   focusedPane: "groups",
   focusedGroupIndex: 0,
   focusedChannelIndex: 0,
+  focusedProgrammeIndex: 0,
   windowStart: null,
+  selectedDate: null,
   loading: false,
   exitConfirmOpen: false,
   exitConfirmYes: true
@@ -89,6 +94,45 @@ function floorDateToHalfHour(date) {
   return copy;
 }
 
+function addHours(date, hours) {
+  return new Date(date.getTime() + hours * 3600000);
+}
+
+function isoDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function earliestWindowStart() {
+  var now = new Date();
+  var today = isoDate(now);
+  var selected = tvState.selectedDate || today;
+  if (selected === today) {
+    return floorDateToHalfHour(now);
+  }
+
+  var parts = selected.split("-");
+  if (parts.length !== 3) return floorDateToHalfHour(now);
+  return new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 0, 0, 0, 0));
+}
+
+function normaliseWindowStart(date) {
+  var start = floorDateToHalfHour(date);
+  var earliest = earliestWindowStart();
+  return start < earliest ? earliest : start;
+}
+
+function currentWindowStart() {
+  var current = tvState.windowStart ? new Date(tvState.windowStart) : null;
+  if (current && !isNaN(current.getTime())) {
+    return normaliseWindowStart(current);
+  }
+  return normaliseWindowStart(new Date());
+}
+
+function currentWindowEnd() {
+  return addHours(currentWindowStart(), GUIDE_WINDOW_HOURS);
+}
+
 function setStatus(message) {
   $("tv-status").textContent = message;
 }
@@ -149,39 +193,59 @@ function renderGroups() {
   scrollFocusedIntoView(".tv-group.focused", "tv-groups");
 }
 
-function programmeCard(programme, fallback) {
+function programmeOverlaps(programme, windowStart, windowEnd) {
+  var start = new Date(programme.start);
+  var stop = new Date(programme.stop);
+  if (isNaN(start.getTime()) || isNaN(stop.getTime())) return false;
+  return stop > windowStart && start < windowEnd;
+}
+
+function visibleProgrammes(channel) {
+  var windowStart = currentWindowStart();
+  var windowEnd = currentWindowEnd();
+  return (channel.programmes || []).filter(function(programme) {
+    return programmeOverlaps(programme, windowStart, windowEnd);
+  });
+}
+
+function programmeLeft(programme, windowStart) {
+  var start = new Date(programme.start);
+  var leftDate = start < windowStart ? windowStart : start;
+  return ((leftDate.getTime() - windowStart.getTime()) / 3600000 / GUIDE_WINDOW_HOURS) * 100;
+}
+
+function programmeWidth(programme, windowStart, windowEnd) {
+  var start = new Date(programme.start);
+  var stop = new Date(programme.stop);
+  var leftDate = start < windowStart ? windowStart : start;
+  var rightDate = stop > windowEnd ? windowEnd : stop;
+  return Math.max(12, ((rightDate.getTime() - leftDate.getTime()) / 3600000 / GUIDE_WINDOW_HOURS) * 100);
+}
+
+function programmeCard(programme, channel, index, windowStart, windowEnd) {
   if (!programme) {
     return ''
       + '<div class="tv-programme">'
-      + '<strong>' + escapeHtml(fallback) + '</strong>'
+      + '<strong>Unknown</strong>'
       + '<span>No programme data</span>'
       + '</div>';
   }
 
   var time = formatTime(programme.start) + " - " + formatTime(programme.stop);
+  var className = "tv-programme";
+  var left = programmeLeft(programme, windowStart);
+  var width = programmeWidth(programme, windowStart, windowEnd);
+  if (programme.is_now) className += " now";
+  if (tvState.focusedPane === "programmes"
+    && tvState.channels[tvState.focusedChannelIndex] === channel
+    && tvState.focusedProgrammeIndex === index) {
+    className += " focused";
+  }
   return ''
-    + '<div class="tv-programme' + (programme.is_now ? " now" : "") + '">'
+    + '<div class="' + className + '" style="left:' + left + '%;width:calc(' + width + '% - 6px)">'
     + '<strong>' + escapeHtml(programme.title || "Unknown") + '</strong>'
     + '<span>' + escapeHtml(time) + (programme.is_now ? " · Now" : "") + '</span>'
     + '</div>';
-}
-
-function firstCurrentProgramme(programmes) {
-  var i;
-  for (i = 0; i < programmes.length; i += 1) {
-    if (programmes[i].is_now) return programmes[i];
-  }
-  return programmes[0] || null;
-}
-
-function firstNextProgramme(programmes, current) {
-  var i;
-  for (i = 0; i < programmes.length; i += 1) {
-    if (!programmes[i].is_now && programmes[i].start && (!(current && current.stop) || programmes[i].start >= current.stop)) {
-      return programmes[i];
-    }
-  }
-  return null;
 }
 
 function renderChannels() {
@@ -189,10 +253,12 @@ function renderChannels() {
   var group = tvState.groups[tvState.activeGroupIndex];
   var html = "";
   var i;
+  var windowStart = currentWindowStart();
+  var windowEnd = currentWindowEnd();
 
   $("tv-group-title").textContent = (group && group.name) || "Guide";
   $("tv-group-meta").textContent = tvState.channels.length
-    ? tvState.channels.length + " channels · Enter plays highlighted channel"
+    ? tvState.channels.length + " channels · " + formatTime(windowStart.toISOString()) + " - " + formatTime(windowEnd.toISOString())
     : "No channels in this group";
 
   if (!tvState.channels.length) {
@@ -200,36 +266,43 @@ function renderChannels() {
     return;
   }
 
+  html += ''
+    + '<div class="tv-time-axis">'
+    + '<span>' + escapeHtml(formatTime(windowStart.toISOString())) + '</span>'
+    + '<span>' + escapeHtml(formatTime(addHours(windowStart, 0.5).toISOString())) + '</span>'
+    + '<span>' + escapeHtml(formatTime(addHours(windowStart, 1).toISOString())) + '</span>'
+    + '<span>' + escapeHtml(formatTime(addHours(windowStart, 1.5).toISOString())) + '</span>'
+    + '<span>' + escapeHtml(formatTime(windowEnd.toISOString())) + '</span>'
+    + '</div>';
+
   for (i = 0; i < tvState.channels.length; i += 1) {
     var channel = tvState.channels[i];
-    var programmes = channel.programmes || [];
-    var current = firstCurrentProgramme(programmes);
-    var next = firstNextProgramme(programmes, current);
-    var className = "tv-channel";
+    var programmes = visibleProgrammes(channel);
     var logo;
-
-    if (tvState.focusedPane === "channels" && i === tvState.focusedChannelIndex) className += " focused";
 
     logo = channel.logo_url
       ? '<img class="tv-logo" src="' + escapeAttr(channel.logo_url) + '" alt="" referrerpolicy="no-referrer" onerror="this.style.visibility=&quot;hidden&quot;" />'
       : '<div class="tv-logo-fallback">TV</div>';
 
     html += ''
-      + '<div class="' + className + '" data-index="' + i + '">'
+      + '<div class="tv-channel" data-index="' + i + '">'
       + '<div>' + logo + '</div>'
       + '<div>'
       + '<div class="tv-channel-name">' + escapeHtml(channel.name) + '</div>'
       + '<div class="tv-channel-meta">' + escapeHtml(channel.tvg_id || channel.group_name || "") + '</div>'
       + '</div>'
       + '<div class="tv-programmes">'
-      + programmeCard(current, "Unknown")
-      + programmeCard(next, "Next")
+      + (programmes.length
+        ? programmes.map(function(programme, programmeIndex) {
+            return programmeCard(programme, channel, programmeIndex, windowStart, windowEnd);
+          }).join("")
+        : '<div class="tv-programme tv-programme-empty"><strong>Unknown</strong><span>No programme data</span></div>')
       + '</div>'
       + '</div>';
   }
 
   guideEl.innerHTML = html;
-  scrollFocusedIntoView(".tv-channel.focused", "tv-guide");
+  scrollFocusedIntoView(".tv-programme.focused", "tv-guide");
 }
 
 function loadGroups() {
@@ -263,10 +336,10 @@ function loadActiveGroup() {
   tvState.loading = true;
   setStatus("Loading " + group.name + "...");
 
-  var start = floorDateToHalfHour(new Date()).toISOString();
+  var start = currentWindowStart().toISOString();
   var path = "/api/guide?group_id=" + encodeURIComponent(group.id)
     + "&start=" + encodeURIComponent(start)
-    + "&hours=6";
+    + "&hours=" + GUIDE_WINDOW_HOURS;
 
   api(path, function(err, body) {
     tvState.loading = false;
@@ -277,11 +350,18 @@ function loadActiveGroup() {
 
     tvState.channels = body.channels || [];
     tvState.focusedChannelIndex = Math.min(tvState.focusedChannelIndex, Math.max(0, tvState.channels.length - 1));
+    clampProgrammeFocus();
     tvState.windowStart = body.window_start;
     renderGroups();
     renderChannels();
     setStatus("Ready");
   });
+}
+
+function clampProgrammeFocus() {
+  var channel = tvState.channels[tvState.focusedChannelIndex];
+  var count = channel ? visibleProgrammes(channel).length : 0;
+  tvState.focusedProgrammeIndex = Math.max(0, Math.min(tvState.focusedProgrammeIndex, Math.max(0, count - 1)));
 }
 
 function moveFocus(delta) {
@@ -292,6 +372,42 @@ function moveFocus(delta) {
   }
 
   tvState.focusedChannelIndex = Math.max(0, Math.min(tvState.channels.length - 1, tvState.focusedChannelIndex + delta));
+  clampProgrammeFocus();
+  renderChannels();
+}
+
+function shiftGuideWindow(deltaHours) {
+  var current = currentWindowStart();
+  var next = normaliseWindowStart(addHours(current, deltaHours));
+  if (next.getTime() === current.getTime()) {
+    setStatus("Start of guide reached.");
+    return false;
+  }
+  tvState.windowStart = next.toISOString();
+  loadActiveGroup();
+  return true;
+}
+
+function moveProgramme(delta) {
+  var channel = tvState.channels[tvState.focusedChannelIndex];
+  var programmes = channel ? visibleProgrammes(channel) : [];
+  var nextIndex = tvState.focusedProgrammeIndex + delta;
+
+  if (delta > 0 && nextIndex >= programmes.length) {
+    shiftGuideWindow(GUIDE_SHIFT_HOURS);
+    return;
+  }
+
+  if (delta < 0 && nextIndex < 0) {
+    if (!shiftGuideWindow(-GUIDE_SHIFT_HOURS)) {
+      tvState.focusedPane = "groups";
+      renderGroups();
+      renderChannels();
+    }
+    return;
+  }
+
+  tvState.focusedProgrammeIndex = Math.max(0, Math.min(nextIndex, Math.max(0, programmes.length - 1)));
   renderChannels();
 }
 
@@ -304,14 +420,26 @@ function activateFocused() {
   if (tvState.focusedPane === "groups") {
     tvState.activeGroupIndex = tvState.focusedGroupIndex;
     tvState.focusedChannelIndex = 0;
+    tvState.focusedProgrammeIndex = 0;
     loadActiveGroup();
     return;
   }
 
   var channel = tvState.channels[tvState.focusedChannelIndex];
-  if (channel) {
+  var programme = focusedProgramme();
+  if (channel && programme && programme.is_now) {
     playChannel(channel);
+  } else if (programme) {
+    setStatus("Programme is not currently airing.");
+  } else {
+    setStatus("No programme selected.");
   }
+}
+
+function focusedProgramme() {
+  var channel = tvState.channels[tvState.focusedChannelIndex];
+  var programmes = channel ? visibleProgrammes(channel) : [];
+  return programmes[tvState.focusedProgrammeIndex] || null;
 }
 
 function playChannel(channel) {
@@ -478,14 +606,19 @@ function handleKey(event) {
   if (normalisedKey === "ArrowUp") moveFocus(-1);
   if (normalisedKey === "ArrowDown") moveFocus(1);
   if (normalisedKey === "ArrowRight") {
-    tvState.focusedPane = "channels";
-    renderGroups();
-    renderChannels();
+    if (tvState.focusedPane === "groups") {
+      tvState.focusedPane = "programmes";
+      clampProgrammeFocus();
+      renderGroups();
+      renderChannels();
+    } else {
+      moveProgramme(1);
+    }
   }
   if (normalisedKey === "ArrowLeft") {
-    tvState.focusedPane = "groups";
-    renderGroups();
-    renderChannels();
+    if (tvState.focusedPane === "programmes") {
+      moveProgramme(-1);
+    }
   }
   if (normalisedKey === "Enter") {
     activateFocused();

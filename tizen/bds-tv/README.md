@@ -11,4 +11,4 @@ The app is intentionally server-backed:
 
 The default server URL is set in `main.js`.
 
-Version `0.1.11` gives the group and guide panes explicit viewport heights and uses rendered row positions for focus scrolling.
+Version `0.1.12` adds a 2-hour TV guide window with programme-level focus and left/right time navigation.
