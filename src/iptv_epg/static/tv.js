@@ -421,6 +421,8 @@ function activateFocused() {
     tvState.activeGroupIndex = tvState.focusedGroupIndex;
     tvState.focusedChannelIndex = 0;
     tvState.focusedProgrammeIndex = 0;
+    tvState.windowStart = null;
+    tvState.selectedDate = null;
     loadActiveGroup();
     return;
   }

@@ -1,4 +1,4 @@
-var TV_SHELL_VERSION = "0.1.13";
+var TV_SHELL_VERSION = "0.1.14";
 var DEFAULT_SERVER = "http://192.168.0.185:8088";
 var SERVER_KEY = "bdsTvServerUrl";
 var GUIDE_WINDOW_HOURS = 2;
@@ -434,6 +434,8 @@ function activateFocused() {
     tvState.activeGroupIndex = tvState.focusedGroupIndex;
     tvState.focusedChannelIndex = 0;
     tvState.focusedProgrammeIndex = 0;
+    tvState.windowStart = null;
+    tvState.selectedDate = null;
     loadActiveGroup();
     return;
   }

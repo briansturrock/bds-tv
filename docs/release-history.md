@@ -32,6 +32,7 @@ Recent source-controlled milestones:
 - `0.13.12`: gives TV app panes explicit viewport heights and uses rendered row geometry for focus scrolling.
 - `0.13.13`: adds 2-hour TV guide windows, programme-level focus, and left/right time navigation to the TV app.
 - `0.13.14`: makes Back return from the programme grid to the active group before prompting to close the TV app.
+- `0.13.15`: resets the TV guide window to today/now when selecting a channel group.
 The current release line is source-controlled and deployed from `main` using `deploy.sh`.
 
 Normal deploy:
