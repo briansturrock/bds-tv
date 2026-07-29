@@ -40,16 +40,19 @@ body {
 .tv-sidebar {
   min-width: 0;
   min-height: 0;
+  height: 100vh;
   overflow: hidden;
   border-right: 1px solid var(--line);
   background: var(--panel);
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: 126px minmax(0, calc(100vh - 126px));
 }
 
 .tv-brand {
+  height: 126px;
   padding: 26px 24px 18px;
   border-bottom: 1px solid var(--line);
+  overflow: hidden;
 }
 
 .tv-brand h1,
@@ -80,6 +83,7 @@ body {
 }
 
 .tv-groups {
+  height: calc(100vh - 126px);
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
@@ -125,9 +129,10 @@ body {
 .tv-main {
   min-width: 0;
   min-height: 0;
+  height: 100vh;
   overflow: hidden;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: 94px minmax(0, calc(100vh - 94px));
 }
 
 .tv-header {
@@ -145,6 +150,7 @@ body {
 }
 
 .tv-guide {
+  height: calc(100vh - 94px);
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;

@@ -29,6 +29,7 @@ Recent source-controlled milestones:
 - `0.13.9`: makes the Tizen close confirmation dialog render with conservative absolute positioning for Samsung TV compatibility.
 - `0.13.10`: pins TV app scrolling inside the group and guide panes so the header and active guide area remain visible.
 - `0.13.11`: fixes top-edge TV app focus scrolling so the first groups/channels remain visible when navigating back up.
+- `0.13.12`: gives TV app panes explicit viewport heights and uses rendered row geometry for focus scrolling.
 The current release line is source-controlled and deployed from `main` using `deploy.sh`.
 
 Normal deploy:

@@ -11,4 +11,4 @@ The app is intentionally server-backed:
 
 The default server URL is set in `main.js`.
 
-Version `0.1.10` keeps focused groups and channels inside the visible padded pane when navigating back to the top.
+Version `0.1.11` gives the group and guide panes explicit viewport heights and uses rendered row positions for focus scrolling.
