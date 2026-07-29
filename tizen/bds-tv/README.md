@@ -11,4 +11,4 @@ The app is intentionally server-backed:
 
 The default server URL is set in `main.js`.
 
-Version `0.1.20` adds the documented AVPlay object surface and fixed TV-safe overlay positioning.
+Version `0.1.21` fixes TV exit confirmation focus highlighting.
