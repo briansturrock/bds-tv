@@ -1,4 +1,4 @@
-var TV_SHELL_VERSION = "0.1.21";
+var TV_SHELL_VERSION = "0.1.22";
 var DEFAULT_SERVER = "http://192.168.0.185:8088";
 var SERVER_KEY = "bdsTvServerUrl";
 var GUIDE_WINDOW_HOURS = 2;
