@@ -558,6 +558,14 @@ function handleBack() {
     return;
   }
 
+  if (tvState.focusedPane === "programmes") {
+    tvState.focusedPane = "groups";
+    renderGroups();
+    renderChannels();
+    setStatus("Group list focused.");
+    return;
+  }
+
   showExitConfirm();
 }
 
