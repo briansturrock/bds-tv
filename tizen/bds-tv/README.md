@@ -11,4 +11,4 @@ The app is intentionally server-backed:
 
 The default server URL is set in `main.js`.
 
-Version `0.1.8` renders the close confirmation with conservative absolute positioning and flex buttons for Samsung TV browser compatibility.
+Version `0.1.9` pins the TV app layout to the viewport so group navigation cannot scroll the header or hide the active guide area.

@@ -27,6 +27,7 @@ Recent source-controlled milestones:
 - `0.13.7`: moves the TV guide into the packaged Tizen app, removes the iframe wrapper, and captures Samsung Back key events in the top-level app.
 - `0.13.8`: refreshes the TV App package status immediately after WGT build or install actions and hardens the Tizen Back-to-close path.
 - `0.13.9`: makes the Tizen close confirmation dialog render with conservative absolute positioning for Samsung TV compatibility.
+- `0.13.10`: pins TV app scrolling inside the group and guide panes so the header and active guide area remain visible.
 The current release line is source-controlled and deployed from `main` using `deploy.sh`.
 
 Normal deploy:

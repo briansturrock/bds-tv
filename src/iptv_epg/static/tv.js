@@ -108,10 +108,20 @@ function updateClock() {
   });
 }
 
-function scrollFocusedIntoView(selector) {
+function scrollFocusedIntoView(selector, containerId) {
   var focused = document.querySelector(selector);
-  if (focused && focused.scrollIntoView) {
-    focused.scrollIntoView({ block: "nearest" });
+  var container = containerId ? $(containerId) : null;
+  if (!focused || !container) return;
+
+  var itemTop = focused.offsetTop;
+  var itemBottom = itemTop + focused.offsetHeight;
+  var visibleTop = container.scrollTop;
+  var visibleBottom = visibleTop + container.clientHeight;
+
+  if (itemTop < visibleTop) {
+    container.scrollTop = itemTop;
+  } else if (itemBottom > visibleBottom) {
+    container.scrollTop = itemBottom - container.clientHeight;
   }
 }
 
@@ -138,7 +148,7 @@ function renderGroups() {
   }
 
   groupsEl.innerHTML = html;
-  scrollFocusedIntoView(".tv-group.focused");
+  scrollFocusedIntoView(".tv-group.focused", "tv-groups");
 }
 
 function programmeCard(programme, fallback) {
@@ -221,7 +231,7 @@ function renderChannels() {
   }
 
   guideEl.innerHTML = html;
-  scrollFocusedIntoView(".tv-channel.focused");
+  scrollFocusedIntoView(".tv-channel.focused", "tv-guide");
 }
 
 function loadGroups() {
