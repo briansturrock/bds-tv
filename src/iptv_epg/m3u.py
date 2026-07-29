@@ -48,6 +48,10 @@ class JobProgressThrottle:
         self.last_time = now
 
 
+class InvalidM3UError(ValueError):
+    pass
+
+
 def parse_attrs(line: str) -> dict[str, str]:
     return dict(ATTR_RE.findall(line))
 
@@ -141,15 +145,51 @@ def parse_m3u_file(path: Path) -> Iterator[M3UEntry]:
                 pending_extinf = None
 
 
-def download_m3u(url: str, destination: Path, job_id: str | None = None) -> dict[str, str | int]:
-    destination.parent.mkdir(parents=True, exist_ok=True)
+def validate_m3u_file(path: Path, min_channels: int = 1) -> dict[str, int]:
+    size = path.stat().st_size if path.exists() else 0
+    if size == 0:
+        raise InvalidM3UError("Provider returned an empty M3U; existing source was kept")
+
+    saw_header = False
+    extinf_count = 0
+    channel_count = 0
+
+    with path.open("r", encoding="utf-8", errors="replace") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line:
+                continue
+            if not saw_header:
+                if not line.startswith("#EXTM3U"):
+                    raise InvalidM3UError("Provider response is not an M3U playlist; existing source was kept")
+                saw_header = True
+                continue
+            if line.startswith("#EXTINF"):
+                extinf_count += 1
+
+    if extinf_count < min_channels:
+        raise InvalidM3UError("Provider M3U contains no channel entries; existing source was kept")
+
+    channel_count = sum(1 for _entry in parse_m3u_file(path))
+    if channel_count < min_channels:
+        raise InvalidM3UError("Provider M3U could not be parsed into channels; existing source was kept")
+
+    return {
+        "size_bytes": size,
+        "extinf_count": extinf_count,
+        "channel_count": channel_count,
+    }
+
+
+def download_m3u_to_temp(url: str, destination_dir: Path, job_id: str | None = None) -> tuple[Path, dict[str, str | int]]:
+    destination_dir.mkdir(parents=True, exist_ok=True)
 
     md5 = hashlib.md5()
     sha256 = hashlib.sha256()
     size = 0
     progress = JobProgressThrottle(job_id, seconds=5.0)
 
-    with tempfile.NamedTemporaryFile("wb", delete=False, dir=str(destination.parent)) as tmp:
+    with tempfile.NamedTemporaryFile("wb", delete=False, dir=str(destination_dir), prefix="source-", suffix=".m3u.tmp") as tmp:
         tmp_path = Path(tmp.name)
         with requests.get(url, stream=True, timeout=(20, 180), headers={"User-Agent": "bds-tv/0.12"}) as r:
             r.raise_for_status()
@@ -162,12 +202,10 @@ def download_m3u(url: str, destination: Path, job_id: str | None = None) -> dict
                 size += len(chunk)
                 progress.update(f"Downloading source M3U ({size // (1024 * 1024)} MB)")
 
-    shutil.move(str(tmp_path), str(destination))
-
     progress.update(f"Downloaded source M3U ({size // (1024 * 1024)} MB)", force=True)
 
-    return {
-        "local_path": str(destination),
+    return tmp_path, {
+        "local_path": str(tmp_path),
         "size_bytes": size,
         "md5": md5.hexdigest(),
         "sha256": sha256.hexdigest(),
@@ -194,7 +232,8 @@ def index_m3u(source_path: Path = SOURCE_M3U, job_id: str | None = None) -> dict
             conn.execute("UPDATE groups SET missing = 1")
             conn.execute("UPDATE channels SET missing = 1")
 
-            for entry in parse_m3u_file(source_path):
+            entries = parse_m3u_file(source_path)
+            for entry in entries:
                 group_name = entry.group_name
                 group_id = group_id_for_name(group_name)
 
@@ -278,6 +317,9 @@ def index_m3u(source_path: Path = SOURCE_M3U, job_id: str | None = None) -> dict
                 group_selected_counts[group_id] = group_selected_counts.get(group_id, 0) + selected
                 channel_count += 1
 
+            if channel_count == 0:
+                raise InvalidM3UError("Source M3U parsed to zero channels; existing index was kept")
+
             for group_id, count in group_channel_counts.items():
                 conn.execute(
                     """
@@ -319,13 +361,49 @@ def index_m3u(source_path: Path = SOURCE_M3U, job_id: str | None = None) -> dict
 def fetch_and_index_m3u(url: str, job_id: str) -> dict[str, int | bool | str]:
     update_job(job_id, message="Downloading source M3U")
 
-    metadata = download_m3u(url, SOURCE_M3U, job_id=job_id)
+    tmp_path: Path | None = None
+    backup_path: Path | None = None
+    try:
+        tmp_path, metadata = download_m3u_to_temp(url, SOURCE_M3U.parent, job_id=job_id)
+        validation = validate_m3u_file(tmp_path)
+        metadata["size_bytes"] = validation["size_bytes"]
+    except Exception as exc:
+        if tmp_path and tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
+        with connect() as conn:
+            conn.execute("UPDATE m3u_sources SET last_error = ? WHERE id = 1", (str(exc),))
+        raise
 
     with connect() as conn:
         previous = conn.execute("SELECT sha256 FROM m3u_sources WHERE id = 1").fetchone()
         previous_sha = previous["sha256"] if previous else None
         unchanged = previous_sha == metadata["sha256"]
 
+    if unchanged and SOURCE_M3U.exists() and SOURCE_M3U.stat().st_size > 0:
+        if tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
+        update_job(job_id, status="complete", message="Source M3U unchanged; existing index kept", finish=True)
+        return {"unchanged": True, "channel_count": 0, "group_count": 0}
+
+    if SOURCE_M3U.exists() and SOURCE_M3U.stat().st_size > 0:
+        backup_path = SOURCE_M3U.with_suffix(".m3u.previous")
+        shutil.copy2(SOURCE_M3U, backup_path)
+
+    shutil.move(str(tmp_path), str(SOURCE_M3U))
+    metadata["local_path"] = str(SOURCE_M3U)
+
+    try:
+        update_job(job_id, message="Source M3U changed; indexing channels")
+        counts = index_m3u(SOURCE_M3U, job_id=job_id)
+    except Exception:
+        if backup_path and backup_path.exists():
+            shutil.copy2(backup_path, SOURCE_M3U)
+        raise
+    finally:
+        if backup_path and backup_path.exists():
+            backup_path.unlink(missing_ok=True)
+
+    with connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
         try:
             conn.execute(
@@ -353,13 +431,6 @@ def fetch_and_index_m3u(url: str, job_id: str) -> dict[str, int | bool | str]:
         except Exception:
             conn.rollback()
             raise
-
-    if unchanged:
-        update_job(job_id, status="complete", message="Source M3U unchanged; existing index kept", finish=True)
-        return {"unchanged": True, "channel_count": 0, "group_count": 0}
-
-    update_job(job_id, message="Source M3U changed; indexing channels")
-    counts = index_m3u(SOURCE_M3U, job_id=job_id)
 
     update_job(
         job_id,
