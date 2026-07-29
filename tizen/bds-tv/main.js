@@ -1,4 +1,4 @@
-var TV_SHELL_VERSION = "0.1.18";
+var TV_SHELL_VERSION = "0.1.19";
 var DEFAULT_SERVER = "http://192.168.0.185:8088";
 var SERVER_KEY = "bdsTvServerUrl";
 var GUIDE_WINDOW_HOURS = 2;
@@ -647,6 +647,7 @@ function playChannel(channel) {
 
   if (hasNativePlayer()) {
     tvState.playbackMode = "avplay";
+    playerShell.classList.add("native");
     player.removeAttribute("src");
     player.style.display = "none";
     try {
@@ -662,7 +663,7 @@ function playChannel(channel) {
         onstreamcompleted: function() { stopPlayback(); },
         onerror: function(eventType) { setStatus("Playback failed: " + eventType); }
       });
-      webapis.avplay.setDisplayRect(0, 0, window.innerWidth, window.innerHeight);
+      webapis.avplay.setDisplayRect(0, 0, screen.width || 1920, screen.height || 1080);
       webapis.avplay.prepareAsync(
         function() {
           webapis.avplay.play();
@@ -677,10 +678,12 @@ function playChannel(channel) {
     } catch (err) {
       setStatus("Native playback failed: " + err.message);
       tvState.playbackMode = "html5";
+      playerShell.classList.remove("native");
       player.style.display = "block";
     }
   } else {
     tvState.playbackMode = "html5";
+    playerShell.classList.remove("native");
     player.style.display = "block";
   }
 
@@ -716,6 +719,7 @@ function stopPlayback() {
   player.pause();
   player.removeAttribute("src");
   player.load();
+  playerShell.classList.remove("native");
   player.style.display = "block";
   playerShell.classList.add("hidden");
   playerShell.style.display = "none";

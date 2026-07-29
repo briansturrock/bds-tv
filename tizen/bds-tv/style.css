@@ -303,7 +303,7 @@ body {
   position: fixed;
   inset: 0;
   background: #000;
-  z-index: 100;
+  z-index: 8000;
 }
 
 .tv-player-shell.hidden {
@@ -328,15 +328,25 @@ body {
   color: var(--text);
 }
 
+.tv-player-shell.native .tv-player {
+  display: none;
+}
+
+.tv-player-shell.native .tv-player-overlay {
+  display: none;
+}
+
 .tv-player-overlay span {
   color: var(--muted);
 }
 
 .tv-context-shell {
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: 9000;
-  display: block;
+  display: grid;
+  place-items: center;
+  padding: 48px;
   background: rgba(0, 0, 0, 0.74);
 }
 
@@ -345,12 +355,7 @@ body {
 }
 
 .tv-context-menu {
-  position: absolute;
-  left: 50%;
-  top: 50%;
   width: 520px;
-  margin-left: -260px;
-  margin-top: -135px;
   padding: 30px;
   border: 3px solid var(--focus);
   border-radius: 10px;
@@ -387,13 +392,12 @@ body {
 }
 
 .tv-exit-shell {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100vw;
-  height: 100vh;
+  position: fixed;
+  inset: 0;
   z-index: 9999;
-  display: block;
+  display: grid;
+  place-items: center;
+  padding: 48px;
   background: #000;
   background: rgba(0, 0, 0, 0.82);
 }
@@ -403,12 +407,7 @@ body {
 }
 
 .tv-exit-dialog {
-  position: absolute;
-  left: 50%;
-  top: 50%;
   width: 620px;
-  margin-left: -310px;
-  margin-top: -150px;
   padding: 34px;
   border: 3px solid var(--focus);
   border-radius: 10px;

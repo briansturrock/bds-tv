@@ -11,4 +11,4 @@ The app is intentionally server-backed:
 
 The default server URL is set in `main.js`.
 
-Version `0.1.18` adds the programme context menu and native Samsung AVPlay stream startup.
+Version `0.1.19` fixes TV overlay centering and switches native playback into a full-screen AVPlay surface.
