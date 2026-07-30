@@ -179,7 +179,7 @@ function setStatus(message) {
 
 function setShellVersion() {
   var el = $("tv-shell-version");
-  if (el) el.textContent = "TV shell " + TV_SHELL_VERSION;
+  if (el) el.textContent = "v" + TV_SHELL_VERSION;
 }
 
 function setLastKey(event, normalisedKey) {
@@ -536,7 +536,6 @@ function renderChannels() {
       + '<div>' + logo + '</div>'
       + '<div>'
       + '<div class="' + nameClass + '"><span>' + escapeHtml(channel.name) + '</span></div>'
-      + '<div class="tv-channel-meta">' + escapeHtml(channel.tvg_id || channel.group_name || "") + '</div>'
       + '</div>'
       + '<div class="tv-programmes">'
       + (programmes.length

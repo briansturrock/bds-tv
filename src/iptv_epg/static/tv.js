@@ -521,7 +521,6 @@ function renderChannels() {
       + '<div>' + logo + '</div>'
       + '<div>'
       + '<div class="' + nameClass + '"><span>' + escapeHtml(channel.name) + '</span></div>'
-      + '<div class="tv-channel-meta">' + escapeHtml(channel.tvg_id || channel.group_name || "") + '</div>'
       + '</div>'
       + '<div class="tv-programmes">'
       + (programmes.length
