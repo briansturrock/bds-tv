@@ -192,11 +192,16 @@ body {
 }
 
 .tv-time-axis {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   height: 34px;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   align-items: center;
   margin: 0 14px 8px 462px;
+  padding-right: 6px;
+  background: var(--bg);
   color: var(--muted);
   font-size: 15px;
 }

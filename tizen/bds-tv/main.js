@@ -1,4 +1,4 @@
-var TV_SHELL_VERSION = "0.1.22";
+var TV_SHELL_VERSION = "0.1.23";
 var DEFAULT_SERVER = "http://192.168.0.185:8088";
 var SERVER_KEY = "bdsTvServerUrl";
 var GUIDE_WINDOW_HOURS = 2;
@@ -200,9 +200,14 @@ function scrollFocusedIntoView(selector, containerId) {
 
   var itemRect = focused.getBoundingClientRect();
   var containerRect = container.getBoundingClientRect();
+  var topBoundary = containerRect.top;
+  var stickyAxis = containerId === "tv-guide" ? container.querySelector(".tv-time-axis") : null;
+  if (stickyAxis) {
+    topBoundary += stickyAxis.getBoundingClientRect().height + 8;
+  }
 
-  if (itemRect.top < containerRect.top) {
-    container.scrollTop -= containerRect.top - itemRect.top;
+  if (itemRect.top < topBoundary) {
+    container.scrollTop -= topBoundary - itemRect.top;
   } else if (itemRect.bottom > containerRect.bottom) {
     container.scrollTop += itemRect.bottom - containerRect.bottom;
   }
@@ -567,12 +572,14 @@ function activateFocused() {
   }
 
   if (tvState.focusedPane === "groups") {
+    var guideEl = $("tv-guide");
     tvState.activeGroupIndex = tvState.focusedGroupIndex;
     tvState.focusedChannelIndex = 0;
     tvState.focusedProgrammeIndex = 0;
     tvState.windowStart = null;
     tvState.selectedDate = todayDate();
     tvState.focusedDayIndex = Math.max(0, tvState.guideDates.map(function(item) { return item.date; }).indexOf(tvState.selectedDate));
+    if (guideEl) guideEl.scrollTop = 0;
     renderDays();
     loadActiveGroup();
     return;
