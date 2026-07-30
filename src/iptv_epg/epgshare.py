@@ -1191,6 +1191,16 @@ def serialize_element(elem: ET.Element) -> str:
     return ET.tostring(elem, encoding="unicode", short_empty_elements=True)
 
 
+def programme_dedupe_key(elem: ET.Element, output_channel_id: str) -> tuple[str, str, str, str]:
+    title = elem.findtext("title") or ""
+    return (
+        output_channel_id,
+        elem.attrib.get("start") or "",
+        elem.attrib.get("stop") or "",
+        title.strip(),
+    )
+
+
 def xmltv_time(value: datetime) -> str:
     return value.astimezone(timezone.utc).strftime("%Y%m%d%H%M%S +0000")
 
@@ -1255,6 +1265,7 @@ def generate_filtered_epgshare(job_id: str | None = None, days: int = 3) -> dict
     downloaded_sources = []
     missing_channel_ids: list[dict[str, Any]] = []
     channels_with_programmes: set[str] = set()
+    emitted_programmes: set[tuple[str, str, str, str]] = set()
 
     if job_id:
         update_job(
@@ -1332,6 +1343,11 @@ def generate_filtered_epgshare(job_id: str | None = None, days: int = 3) -> dict
                             continue
 
                         for output_channel_id in output_ids_by_guide_id.get(source_channel_id, []):
+                            programme_key = programme_dedupe_key(elem, output_channel_id)
+                            if programme_key in emitted_programmes:
+                                continue
+                            emitted_programmes.add(programme_key)
+
                             output_elem = copy.deepcopy(elem)
                             output_elem.attrib["channel"] = output_channel_id
                             out.write(serialize_element(output_elem))

@@ -33,6 +33,7 @@ Recent source-controlled milestones:
 - `0.13.13`: adds 2-hour TV guide windows, programme-level focus, and left/right time navigation to the TV app.
 - `0.13.14`: makes Back return from the programme grid to the active group before prompting to close the TV app.
 - `0.13.15`: resets the TV guide window to today/now when selecting a channel group.
+- `0.13.28`: deduplicates upstream XMLTV programme entries during BDS-TV XMLTV generation to avoid stacked guide cards.
 - `0.13.27`: separates the TV guide time row from the scrollable channel list so programmes cannot scroll underneath it.
 - `0.13.26`: pins the TV guide time row while scrolling channels and resets guide scroll on group changes.
 - `0.13.25`: adds Settings-page M3U upload/import as a safe manual recovery path.
