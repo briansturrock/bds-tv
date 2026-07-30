@@ -1,7 +1,7 @@
-var TV_SHELL_VERSION = "0.1.27";
+var TV_SHELL_VERSION = "0.1.29";
 var DEFAULT_SERVER = "http://192.168.0.185:8088";
 var SERVER_KEY = "bdsTvServerUrl";
-var GUIDE_WINDOW_HOURS = 2;
+var GUIDE_WINDOW_HOURS = 2.5;
 var GUIDE_SHIFT_HOURS = 1;
 
 var tvState = {
@@ -27,7 +27,9 @@ var tvState = {
   exitConfirmOpen: false,
   exitConfirmYes: true,
   infoScrollTimer: null,
-  infoScrollInterval: null
+  infoScrollInterval: null,
+  channelNameScrollTimer: null,
+  channelNameScrollInterval: null
 };
 
 function $(id) {
@@ -400,6 +402,50 @@ function scheduleProgrammeInfoScroll() {
   }, 1200);
 }
 
+function clearChannelNameScroll() {
+  if (tvState.channelNameScrollTimer) {
+    clearTimeout(tvState.channelNameScrollTimer);
+    tvState.channelNameScrollTimer = null;
+  }
+  if (tvState.channelNameScrollInterval) {
+    clearInterval(tvState.channelNameScrollInterval);
+    tvState.channelNameScrollInterval = null;
+  }
+}
+
+function scheduleChannelNameScroll() {
+  var nameEl = document.querySelector(".tv-channel-name.focused-title span");
+
+  clearChannelNameScroll();
+  if (!nameEl || !nameEl.parentNode) return;
+
+  nameEl.style.transform = "translateX(0px)";
+  tvState.channelNameScrollTimer = setTimeout(function() {
+    var parent = nameEl.parentNode;
+    var maxScroll = parent ? nameEl.scrollWidth - parent.clientWidth : 0;
+    if (maxScroll <= 2) return;
+
+    function scrollLeft() {
+      var offset = 0;
+      nameEl.style.transform = "translateX(0px)";
+      tvState.channelNameScrollInterval = setInterval(function() {
+        offset += 1;
+        nameEl.style.transform = "translateX(-" + offset + "px)";
+        if (offset >= maxScroll) {
+          clearInterval(tvState.channelNameScrollInterval);
+          tvState.channelNameScrollInterval = null;
+          tvState.channelNameScrollTimer = setTimeout(function() {
+            nameEl.style.transform = "translateX(0px)";
+            tvState.channelNameScrollTimer = setTimeout(scrollLeft, 1000);
+          }, 1000);
+        }
+      }, 30);
+    }
+
+    scrollLeft();
+  }, 1000);
+}
+
 function renderProgrammeInfo() {
   var infoEl = $("tv-programme-info");
   var channel = tvState.channels[tvState.focusedChannelIndex];
@@ -446,6 +492,7 @@ function renderChannels() {
   var windowStart = currentWindowStart();
   var windowEnd = currentWindowEnd();
 
+  clearChannelNameScroll();
   $("tv-group-title").textContent = (group && group.name) || "Guide";
   $("tv-group-meta").textContent = tvState.channels.length
     ? tvState.channels.length + " channels · " + formatTime(windowStart.toISOString()) + " - " + formatTime(windowEnd.toISOString())
@@ -460,27 +507,35 @@ function renderChannels() {
 
   if (axisEl) {
     axisEl.innerHTML = ''
-    + '<span>' + escapeHtml(formatTime(windowStart.toISOString())) + '</span>'
-    + '<span>' + escapeHtml(formatTime(addHours(windowStart, 0.5).toISOString())) + '</span>'
-    + '<span>' + escapeHtml(formatTime(addHours(windowStart, 1).toISOString())) + '</span>'
-    + '<span>' + escapeHtml(formatTime(addHours(windowStart, 1.5).toISOString())) + '</span>'
-    + '<span>' + escapeHtml(formatTime(windowEnd.toISOString())) + '</span>';
+    + '<span style="left:0%">' + escapeHtml(formatTime(windowStart.toISOString())) + '</span>'
+    + '<span style="left:20%">' + escapeHtml(formatTime(addHours(windowStart, 0.5).toISOString())) + '</span>'
+    + '<span style="left:40%">' + escapeHtml(formatTime(addHours(windowStart, 1).toISOString())) + '</span>'
+    + '<span style="left:60%">' + escapeHtml(formatTime(addHours(windowStart, 1.5).toISOString())) + '</span>'
+    + '<span style="left:80%">' + escapeHtml(formatTime(addHours(windowStart, 2).toISOString())) + '</span>'
+    + '<span style="left:100%">' + escapeHtml(formatTime(windowEnd.toISOString())) + '</span>';
   }
 
   for (i = 0; i < tvState.channels.length; i += 1) {
     var channel = tvState.channels[i];
     var programmes = visibleProgrammes(channel);
+    var channelClass = "tv-channel";
+    var nameClass = "tv-channel-name";
     var logo;
+
+    if (tvState.focusedPane === "programmes" && i === tvState.focusedChannelIndex) {
+      channelClass += " focused-channel";
+      nameClass += " focused-title";
+    }
 
     logo = channel.logo_url
       ? '<img class="tv-logo" src="' + escapeAttr(channel.logo_url) + '" alt="" referrerpolicy="no-referrer" onerror="this.style.visibility=&quot;hidden&quot;" />'
       : '<div class="tv-logo-fallback">TV</div>';
 
     html += ''
-      + '<div class="tv-channel" data-index="' + i + '">'
+      + '<div class="' + channelClass + '" data-index="' + i + '">'
       + '<div>' + logo + '</div>'
       + '<div>'
-      + '<div class="tv-channel-name">' + escapeHtml(channel.name) + '</div>'
+      + '<div class="' + nameClass + '"><span>' + escapeHtml(channel.name) + '</span></div>'
       + '<div class="tv-channel-meta">' + escapeHtml(channel.tvg_id || channel.group_name || "") + '</div>'
       + '</div>'
       + '<div class="tv-programmes">'
@@ -495,6 +550,7 @@ function renderChannels() {
 
   guideEl.innerHTML = html;
   renderProgrammeInfo();
+  scheduleChannelNameScroll();
   scrollFocusedIntoView(".tv-programme.focused", "tv-guide");
 }
 

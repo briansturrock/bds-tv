@@ -269,17 +269,26 @@ body {
 
 .tv-time-axis {
   height: 42px;
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  align-items: center;
-  margin: 0 38px 0 486px;
+  position: relative;
+  margin: 0 38px 0 368px;
   background: var(--bg);
   color: var(--muted);
-  font-size: 15px;
+  font-size: 14px;
+}
+
+.tv-time-axis span {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+
+.tv-time-axis span:first-child {
+  transform: translate(0, -50%);
 }
 
 .tv-time-axis span:last-child {
-  text-align: right;
+  transform: translate(-100%, -50%);
 }
 
 .tv-groups::-webkit-scrollbar,
@@ -291,22 +300,22 @@ body {
 .tv-channel {
   height: 88px;
   display: grid;
-  grid-template-columns: 110px minmax(220px, 320px) 1fr;
+  grid-template-columns: 100px minmax(145px, 205px) 1fr;
   align-items: center;
-  gap: 18px;
+  gap: 14px;
   padding: 10px 14px;
   border-bottom: 1px solid var(--line);
   border-radius: 8px;
 }
 
 .tv-logo {
-  width: 86px;
+  width: 80px;
   height: 54px;
   object-fit: contain;
 }
 
 .tv-logo-fallback {
-  width: 86px;
+  width: 80px;
   height: 54px;
   display: grid;
   place-items: center;
@@ -316,14 +325,28 @@ body {
 }
 
 .tv-channel-name {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
+}
+
+.tv-channel-name span {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.tv-channel-name.focused-title span {
+  max-width: none;
+  padding-right: 48px;
+  will-change: transform;
 }
 
 .tv-channel-meta {
   margin-top: 4px;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .tv-programmes {
@@ -339,7 +362,7 @@ body {
   top: 0;
   bottom: 0;
   min-width: 0;
-  padding: 10px 12px;
+  padding: 9px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
@@ -353,14 +376,14 @@ body {
 
 .tv-programme strong {
   display: block;
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .tv-programme span {
   display: block;
   margin-top: 5px;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .tv-programme-empty {
