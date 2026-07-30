@@ -45,6 +45,13 @@ def first_text(elem: ET.Element, name: str) -> str:
     return child.text.strip()
 
 
+def first_icon_src(elem: ET.Element) -> str:
+    child = elem.find("icon")
+    if child is None:
+        return ""
+    return (child.attrib.get("src") or "").strip()
+
+
 def selected_guide_groups() -> list[dict[str, Any]]:
     with connect() as conn:
         rows = conn.execute(
@@ -299,6 +306,7 @@ def programmes_for_tvg_ids(
                     "sub_title": first_text(elem, "sub-title"),
                     "desc": first_text(elem, "desc"),
                     "category": first_text(elem, "category"),
+                    "icon": first_icon_src(elem),
                     "start": start_utc.isoformat() if start_utc else None,
                     "stop": stop_utc.isoformat() if stop_utc else None,
                     "is_now": bool(start_utc and stop_utc and start_utc <= now <= stop_utc),
