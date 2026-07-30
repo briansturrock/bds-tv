@@ -375,8 +375,7 @@ function renderProgrammeInfo() {
     + '<div class="tv-programme-info-title">' + escapeHtml(programme.title || "Unknown") + '</div>'
     + '<div class="tv-programme-info-meta">' + escapeHtml(meta.join(" · ")) + '</div>'
     + '<div class="tv-programme-info-desc">' + escapeHtml(desc) + '</div>'
-    + '</div>'
-    + image;
+    + '</div>';
 }
 
 function renderChannels() {

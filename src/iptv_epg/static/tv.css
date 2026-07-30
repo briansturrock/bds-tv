@@ -157,9 +157,9 @@ body {
 
 .tv-programme-info {
   position: absolute;
-  left: 304px;
+  left: 300px;
   top: 28px;
-  width: calc(100vw - 1028px);
+  width: 480px;
   height: 128px;
   min-width: 0;
   display: flex;
@@ -209,9 +209,9 @@ body {
 }
 
 .tv-programme-info-image {
-  width: 168px;
+  width: 126px;
   height: 94px;
-  flex: 0 0 168px;
+  flex: 0 0 126px;
   order: -1;
   object-fit: cover;
   border-radius: 0;
@@ -222,7 +222,7 @@ body {
   position: absolute;
   right: 32px;
   top: 28px;
-  width: 636px;
+  width: 532px;
   display: block;
   text-align: right;
 }
