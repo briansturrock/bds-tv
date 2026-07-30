@@ -1,7 +1,7 @@
-var TV_SHELL_VERSION = "0.1.27";
+var TV_SHELL_VERSION = "0.1.28";
 var DEFAULT_SERVER = "http://192.168.0.185:8088";
 var SERVER_KEY = "bdsTvServerUrl";
-var GUIDE_WINDOW_HOURS = 2;
+var GUIDE_WINDOW_HOURS = 2.5;
 var GUIDE_SHIFT_HOURS = 1;
 
 var tvState = {
@@ -464,23 +464,31 @@ function renderChannels() {
     + '<span>' + escapeHtml(formatTime(addHours(windowStart, 0.5).toISOString())) + '</span>'
     + '<span>' + escapeHtml(formatTime(addHours(windowStart, 1).toISOString())) + '</span>'
     + '<span>' + escapeHtml(formatTime(addHours(windowStart, 1.5).toISOString())) + '</span>'
+    + '<span>' + escapeHtml(formatTime(addHours(windowStart, 2).toISOString())) + '</span>'
     + '<span>' + escapeHtml(formatTime(windowEnd.toISOString())) + '</span>';
   }
 
   for (i = 0; i < tvState.channels.length; i += 1) {
     var channel = tvState.channels[i];
     var programmes = visibleProgrammes(channel);
+    var channelClass = "tv-channel";
+    var nameClass = "tv-channel-name";
     var logo;
+
+    if (tvState.focusedPane === "programmes" && i === tvState.focusedChannelIndex) {
+      channelClass += " focused-channel";
+      if (String(channel.name || "").length > 20) nameClass += " scrolling";
+    }
 
     logo = channel.logo_url
       ? '<img class="tv-logo" src="' + escapeAttr(channel.logo_url) + '" alt="" referrerpolicy="no-referrer" onerror="this.style.visibility=&quot;hidden&quot;" />'
       : '<div class="tv-logo-fallback">TV</div>';
 
     html += ''
-      + '<div class="tv-channel" data-index="' + i + '">'
+      + '<div class="' + channelClass + '" data-index="' + i + '">'
       + '<div>' + logo + '</div>'
       + '<div>'
-      + '<div class="tv-channel-name">' + escapeHtml(channel.name) + '</div>'
+      + '<div class="' + nameClass + '"><span>' + escapeHtml(channel.name) + '</span></div>'
       + '<div class="tv-channel-meta">' + escapeHtml(channel.tvg_id || channel.group_name || "") + '</div>'
       + '</div>'
       + '<div class="tv-programmes">'
