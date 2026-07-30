@@ -370,7 +370,8 @@ function renderProgrammeInfo() {
   }
 
   infoEl.innerHTML = ''
-    + '<div>'
+    + image
+    + '<div class="tv-programme-info-copy">'
     + '<div class="tv-programme-info-title">' + escapeHtml(programme.title || "Unknown") + '</div>'
     + '<div class="tv-programme-info-meta">' + escapeHtml(meta.join(" · ")) + '</div>'
     + '<div class="tv-programme-info-desc">' + escapeHtml(desc) + '</div>'
