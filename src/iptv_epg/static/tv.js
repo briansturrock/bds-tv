@@ -345,6 +345,7 @@ function programmeCard(programme, channel, index, windowStart, windowEnd) {
 
 function renderChannels() {
   var guideEl = $("tv-guide");
+  var axisEl = $("tv-time-axis");
   var group = tvState.groups[tvState.activeGroupIndex];
   var html = "";
   var i;
@@ -357,18 +358,19 @@ function renderChannels() {
     : "No channels in this group";
 
   if (!tvState.channels.length) {
+    if (axisEl) axisEl.innerHTML = "";
     guideEl.innerHTML = '<div class="tv-empty">No selected channels.</div>';
     return;
   }
 
-  html += ''
-    + '<div class="tv-time-axis">'
+  if (axisEl) {
+    axisEl.innerHTML = ''
     + '<span>' + escapeHtml(formatTime(windowStart.toISOString())) + '</span>'
     + '<span>' + escapeHtml(formatTime(addHours(windowStart, 0.5).toISOString())) + '</span>'
     + '<span>' + escapeHtml(formatTime(addHours(windowStart, 1).toISOString())) + '</span>'
     + '<span>' + escapeHtml(formatTime(addHours(windowStart, 1.5).toISOString())) + '</span>'
-    + '<span>' + escapeHtml(formatTime(windowEnd.toISOString())) + '</span>'
-    + '</div>';
+    + '<span>' + escapeHtml(formatTime(windowEnd.toISOString())) + '</span>';
+  }
 
   for (i = 0; i < tvState.channels.length; i += 1) {
     var channel = tvState.channels[i];

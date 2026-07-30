@@ -132,7 +132,7 @@ body {
   height: 100vh;
   overflow: hidden;
   display: grid;
-  grid-template-rows: 94px minmax(0, calc(100vh - 94px));
+  grid-template-rows: 94px 42px minmax(0, calc(100vh - 136px));
 }
 
 .tv-header {
@@ -184,23 +184,19 @@ body {
 }
 
 .tv-guide {
-  height: calc(100vh - 94px);
+  height: calc(100vh - 136px);
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 18px 24px 24px;
+  padding: 0 24px 24px;
 }
 
 .tv-time-axis {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  height: 34px;
+  height: 42px;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   align-items: center;
-  margin: 0 14px 8px 462px;
-  padding-right: 6px;
+  margin: 0 38px 0 486px;
   background: var(--bg);
   color: var(--muted);
   font-size: 15px;

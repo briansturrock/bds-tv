@@ -4,14 +4,14 @@
   <meta charset="utf-8" />
   <title>bds-tv</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="/static/favicon.png?v=0.13.26" type="image/png" />
-  <link rel="stylesheet" href="/static/tv.css?v=0.13.26" />
+  <link rel="icon" href="/static/favicon.png?v=0.13.27" type="image/png" />
+  <link rel="stylesheet" href="/static/tv.css?v=0.13.27" />
 </head>
 <body>
   <main class="tv-app">
     <aside class="tv-sidebar">
       <div class="tv-brand">
-        <h1>bds-tv <span id="tv-shell-version">TV shell 0.1.23</span></h1>
+        <h1>bds-tv <span id="tv-shell-version">TV shell 0.1.24</span></h1>
         <div id="tv-status">Loading guide...</div>
         <div id="tv-last-key" class="tv-key-debug">Last key: none</div>
       </div>
@@ -30,6 +30,7 @@
         </div>
       </header>
 
+      <div id="tv-time-axis" class="tv-time-axis" aria-hidden="true"></div>
       <div id="tv-guide" class="tv-guide" aria-label="Channels"></div>
     </section>
   </main>
@@ -61,6 +62,6 @@
     </div>
   </section>
 
-  <script src="/static/tv.js?v=0.13.26"></script>
+  <script src="/static/tv.js?v=0.13.27"></script>
 </body>
 </html>

@@ -11,4 +11,4 @@ The app is intentionally server-backed:
 
 The default server URL is set in `main.js`.
 
-Version `0.1.23` keeps the TV guide time row pinned while scrolling channel programmes.
+Version `0.1.24` separates the TV guide time row from the scrollable channel list.
