@@ -269,17 +269,26 @@ body {
 
 .tv-time-axis {
   height: 42px;
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  align-items: center;
+  position: relative;
   margin: 0 38px 0 368px;
   background: var(--bg);
   color: var(--muted);
   font-size: 14px;
 }
 
+.tv-time-axis span {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+
+.tv-time-axis span:first-child {
+  transform: translate(0, -50%);
+}
+
 .tv-time-axis span:last-child {
-  text-align: right;
+  transform: translate(-100%, -50%);
 }
 
 .tv-groups::-webkit-scrollbar,
@@ -328,19 +337,10 @@ body {
   vertical-align: bottom;
 }
 
-.tv-channel-name.scrolling span {
+.tv-channel-name.focused-title span {
   max-width: none;
   padding-right: 48px;
-  animation: tv-channel-title-scroll 8s linear 1s infinite alternate;
-}
-
-@keyframes tv-channel-title-scroll {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-42%);
-  }
+  will-change: transform;
 }
 
 .tv-channel-meta {
