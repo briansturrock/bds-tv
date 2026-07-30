@@ -11,7 +11,7 @@
   <main class="tv-app">
     <aside class="tv-sidebar">
       <div class="tv-brand">
-        <h1>bds-tv <span id="tv-shell-version">TV shell 0.1.24</span></h1>
+        <h1>bds-tv <span id="tv-shell-version">TV shell 0.1.27</span></h1>
         <div id="tv-status">Loading guide...</div>
         <div id="tv-last-key" class="tv-key-debug">Last key: none</div>
       </div>
@@ -20,10 +20,13 @@
 
     <section class="tv-main">
       <header class="tv-header">
-        <div>
+        <div class="tv-header-group">
           <h2 id="tv-group-title">Guide</h2>
           <p id="tv-group-meta">Select a group</p>
         </div>
+        <section id="tv-programme-info" class="tv-programme-info" aria-label="Programme information">
+          <div class="tv-programme-info-empty">Select a programme for details.</div>
+        </section>
         <div class="tv-header-actions">
           <div id="tv-days" class="tv-days" aria-label="Guide days"></div>
           <div class="tv-clock" id="tv-clock"></div>

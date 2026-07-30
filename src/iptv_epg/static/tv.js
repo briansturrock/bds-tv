@@ -20,7 +20,9 @@ var tvState = {
   contextChannel: null,
   contextProgramme: null,
   exitConfirmOpen: false,
-  exitConfirmYes: true
+  exitConfirmYes: true,
+  infoScrollTimer: null,
+  infoScrollInterval: null
 };
 
 function $(id) {
@@ -343,6 +345,83 @@ function programmeCard(programme, channel, index, windowStart, windowEnd) {
     + '</div>';
 }
 
+function clearProgrammeInfoScroll() {
+  if (tvState.infoScrollTimer) {
+    clearTimeout(tvState.infoScrollTimer);
+    tvState.infoScrollTimer = null;
+  }
+  if (tvState.infoScrollInterval) {
+    clearInterval(tvState.infoScrollInterval);
+    tvState.infoScrollInterval = null;
+  }
+}
+
+function scheduleProgrammeInfoScroll() {
+  var descEl = document.querySelector(".tv-programme-info-desc");
+
+  clearProgrammeInfoScroll();
+  if (!descEl) return;
+
+  tvState.infoScrollTimer = setTimeout(function() {
+    var maxScroll = descEl.scrollHeight - descEl.clientHeight;
+    if (maxScroll <= 2) return;
+
+    function scrollDown() {
+      descEl.scrollTop = 0;
+      tvState.infoScrollInterval = setInterval(function() {
+        descEl.scrollTop += 1;
+        if (descEl.scrollTop >= maxScroll) {
+          clearInterval(tvState.infoScrollInterval);
+          tvState.infoScrollInterval = null;
+          tvState.infoScrollTimer = setTimeout(function() {
+            descEl.scrollTop = 0;
+            tvState.infoScrollTimer = setTimeout(scrollDown, 1000);
+          }, 1000);
+        }
+      }, 45);
+    }
+
+    scrollDown();
+  }, 1200);
+}
+
+function renderProgrammeInfo() {
+  var infoEl = $("tv-programme-info");
+  var channel = tvState.channels[tvState.focusedChannelIndex];
+  var programme = tvState.focusedPane === "programmes" ? focusedProgramme() : null;
+  var meta = [];
+  var desc;
+  var image = "";
+
+  if (!infoEl) return;
+  clearProgrammeInfoScroll();
+
+  if (!channel || !programme) {
+    infoEl.innerHTML = '<div class="tv-programme-info-empty">Select a programme for details.</div>';
+    return;
+  }
+
+  if (programme.start || programme.stop) {
+    meta.push(formatTime(programme.start) + " - " + formatTime(programme.stop));
+  }
+  if (programme.category) meta.push(programme.category);
+  if (channel.name) meta.push(channel.name);
+
+  desc = programme.desc || "No programme information available.";
+  if (programme.icon) {
+    image = '<img class="tv-programme-info-image" src="' + escapeAttr(programme.icon) + '" alt="" referrerpolicy="no-referrer" onerror="this.style.display=&quot;none&quot;" />';
+  }
+
+  infoEl.innerHTML = ''
+    + image
+    + '<div class="tv-programme-info-copy">'
+    + '<div class="tv-programme-info-title">' + escapeHtml(programme.title || "Unknown") + '</div>'
+    + '<div class="tv-programme-info-meta">' + escapeHtml(meta.join(" · ")) + '</div>'
+    + '<div class="tv-programme-info-desc">' + escapeHtml(desc) + '</div>'
+    + '</div>';
+  scheduleProgrammeInfoScroll();
+}
+
 function renderChannels() {
   var guideEl = $("tv-guide");
   var axisEl = $("tv-time-axis");
@@ -360,6 +439,7 @@ function renderChannels() {
   if (!tvState.channels.length) {
     if (axisEl) axisEl.innerHTML = "";
     guideEl.innerHTML = '<div class="tv-empty">No selected channels.</div>';
+    renderProgrammeInfo();
     return;
   }
 
@@ -399,6 +479,7 @@ function renderChannels() {
   }
 
   guideEl.innerHTML = html;
+  renderProgrammeInfo();
   scrollFocusedIntoView(".tv-programme.focused", "tv-guide");
 }
 

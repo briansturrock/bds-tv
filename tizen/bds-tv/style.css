@@ -132,15 +132,12 @@ body {
   height: 100vh;
   overflow: hidden;
   display: grid;
-  grid-template-rows: 94px 42px minmax(0, calc(100vh - 136px));
+  grid-template-rows: 184px 42px minmax(0, calc(100vh - 226px));
 }
 
 .tv-header {
-  height: 94px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 32px;
+  position: relative;
+  height: 184px;
   border-bottom: 1px solid var(--line);
   background: #121820;
 }
@@ -149,16 +146,95 @@ body {
   font-size: 30px;
 }
 
+.tv-header-group {
+  position: absolute;
+  left: 32px;
+  top: 38px;
+  width: 240px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tv-programme-info {
+  position: absolute;
+  left: 300px;
+  top: 28px;
+  width: 625px;
+  height: 128px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 16px 20px;
+  border: 0;
+  border-radius: 0;
+  background: rgba(127, 127, 127, 0.54);
+  overflow: hidden;
+}
+
+.tv-programme-info-empty {
+  color: #e5ecf5;
+  font-size: 18px;
+}
+
+.tv-programme-info-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.tv-programme-info-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 19px;
+  font-weight: 800;
+}
+
+.tv-programme-info-meta {
+  margin-top: 5px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.tv-programme-info-desc {
+  margin-top: 8px;
+  height: 50px;
+  overflow: hidden;
+  color: #d5dee9;
+  font-size: 15px;
+  line-height: 21px;
+}
+
+.tv-programme-info-image {
+  width: 126px;
+  height: 94px;
+  flex: 0 0 126px;
+  order: -1;
+  margin-right: 32px;
+  object-fit: cover;
+  border-radius: 0;
+  background: var(--panel);
+}
+
 .tv-header-actions {
-  min-width: 420px;
-  display: grid;
-  justify-items: end;
-  gap: 8px;
+  position: absolute;
+  right: 32px;
+  top: 28px;
+  width: 532px;
+  display: block;
+  text-align: right;
 }
 
 .tv-days {
-  display: flex;
+  display: inline-flex;
   gap: 8px;
+}
+
+.tv-clock {
+  margin-top: 12px;
 }
 
 .tv-day {
@@ -184,7 +260,7 @@ body {
 }
 
 .tv-guide {
-  height: calc(100vh - 136px);
+  height: calc(100vh - 226px);
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
