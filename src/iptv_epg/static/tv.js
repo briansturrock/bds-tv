@@ -343,6 +343,41 @@ function programmeCard(programme, channel, index, windowStart, windowEnd) {
     + '</div>';
 }
 
+function renderProgrammeInfo() {
+  var infoEl = $("tv-programme-info");
+  var channel = tvState.channels[tvState.focusedChannelIndex];
+  var programme = tvState.focusedPane === "programmes" ? focusedProgramme() : null;
+  var meta = [];
+  var desc;
+  var image = "";
+
+  if (!infoEl) return;
+
+  if (!channel || !programme) {
+    infoEl.innerHTML = '<div class="tv-programme-info-empty">Select a programme for details.</div>';
+    return;
+  }
+
+  if (programme.start || programme.stop) {
+    meta.push(formatTime(programme.start) + " - " + formatTime(programme.stop));
+  }
+  if (programme.category) meta.push(programme.category);
+  if (channel.name) meta.push(channel.name);
+
+  desc = programme.desc || "No programme information available.";
+  if (programme.icon) {
+    image = '<img class="tv-programme-info-image" src="' + escapeAttr(programme.icon) + '" alt="" referrerpolicy="no-referrer" onerror="this.style.display=&quot;none&quot;" />';
+  }
+
+  infoEl.innerHTML = ''
+    + '<div>'
+    + '<div class="tv-programme-info-title">' + escapeHtml(programme.title || "Unknown") + '</div>'
+    + '<div class="tv-programme-info-meta">' + escapeHtml(meta.join(" · ")) + '</div>'
+    + '<div class="tv-programme-info-desc">' + escapeHtml(desc) + '</div>'
+    + '</div>'
+    + image;
+}
+
 function renderChannels() {
   var guideEl = $("tv-guide");
   var axisEl = $("tv-time-axis");
@@ -360,6 +395,7 @@ function renderChannels() {
   if (!tvState.channels.length) {
     if (axisEl) axisEl.innerHTML = "";
     guideEl.innerHTML = '<div class="tv-empty">No selected channels.</div>';
+    renderProgrammeInfo();
     return;
   }
 
@@ -399,6 +435,7 @@ function renderChannels() {
   }
 
   guideEl.innerHTML = html;
+  renderProgrammeInfo();
   scrollFocusedIntoView(".tv-programme.focused", "tv-guide");
 }
 
