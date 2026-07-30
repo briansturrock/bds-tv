@@ -265,7 +265,7 @@ def parse_all_sources_text(text: str) -> list[EpgshareEntry]:
 
 def download_all_sources_text() -> str:
     headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; bds-tv/0.12)",
+        "User-Agent": "Mozilla/5.0 (compatible; bds-tv/1.0.0)",
         "Accept": "text/plain,*/*",
     }
     response = requests.get(EPGSHARE_ALL_SOURCES_URL, timeout=(20, 240), headers=headers)
@@ -1117,7 +1117,7 @@ def programme_in_window(elem: ET.Element, window_start: datetime, window_end: da
 
 def download_to_tempfile(url: str) -> Path:
     headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; bds-tv/0.12)",
+        "User-Agent": "Mozilla/5.0 (compatible; bds-tv/1.0.0)",
         "Accept": "application/gzip,application/xml,text/xml,*/*",
     }
 

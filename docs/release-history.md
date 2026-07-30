@@ -11,6 +11,7 @@ This project began as opaque Docker image tar builds and was then rebuilt as a s
 
 Recent source-controlled milestones:
 
+- `1.0.0`: first stable bds-tv baseline across the web app and Samsung/Tizen TV shell, including curated M3U/XMLTV generation, scheduler, HDHR, DLNA, VPN killswitch, diagnostics, TV app packaging/deploy, and TV guide/playback support.
 - `0.9.0`: scheduler introduction.
 - `0.9.1` - `0.9.5`: guide streaming, Docker/version fixes, QoL improvements, EPG matching fixes.
 - `0.10.x`: HDHR emulation, XMLTV guide support, parser hardening, unknown EPG placeholders, channel limits, stream safety, buffered remux, HDHR group exclusions.

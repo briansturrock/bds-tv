@@ -11,4 +11,4 @@ The app is intentionally server-backed:
 
 The default server URL is set in `main.js`.
 
-Version `0.1.24` separates the TV guide time row from the scrollable channel list.
+Version `1.0.0` is the first stable TV shell baseline, with remote navigation, guide browsing, programme information, and bds-tv proxied playback.
