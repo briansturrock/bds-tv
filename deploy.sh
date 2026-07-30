@@ -2,7 +2,8 @@
 set -e
 
 cd /docker/bds-tv/repo
-git pull origin main
+branch="$(git branch --show-current)"
+git pull origin "$branch"
 docker compose -p bds_tv build
 docker stop bds-tv 2>/dev/null || true
 docker rm bds-tv 2>/dev/null || true
