@@ -4,9 +4,9 @@
   <meta charset="utf-8" />
   <title>bds-tv</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="/static/favicon.png?v=1.1.0-sonarr.5" type="image/png" />
-  <link rel="icon" href="/static/favicon.ico?v=1.1.0-sonarr.5" sizes="any" />
-  <link rel="stylesheet" href="/static/app.css?v=1.1.0-sonarr.5" />
+  <link rel="icon" href="/static/favicon.png?v=1.1.0-sonarr.6" type="image/png" />
+  <link rel="icon" href="/static/favicon.ico?v=1.1.0-sonarr.6" sizes="any" />
+  <link rel="stylesheet" href="/static/app.css?v=1.1.0-sonarr.6" />
 </head>
 <body>
   <header class="app-header">
@@ -33,56 +33,69 @@
     <section id="tab-settings" class="tab-panel active">
       <div class="card">
         <h2>Settings</h2>
-        <label for="m3u-url">M3U playlist URL</label>
-        <textarea id="m3u-url" rows="3" spellcheck="false" placeholder="Paste upstream M3U URL"></textarea>
-        <div class="settings-grid">
-          <label>
-            Provider stream limit
-            <input id="provider-stream-limit" type="number" min="1" max="16" step="1" />
-          </label>
-          <label>
-            Home country ISO code
-            <input id="killswitch-country" class="country-code-input" type="text" maxlength="2" spellcheck="false" placeholder="GB" />
-          </label>
-          <label class="toggle-row killswitch-toggle">
-            <input id="killswitch-enabled" type="checkbox" />
-            <span>Enable streaming killswitch</span>
-          </label>
-        </div>
-        <div id="killswitch-status" class="muted">Killswitch status not loaded yet.</div>
-        <div class="button-row">
-          <button id="settings-stop-streams" type="button">Stop active streams</button>
-        </div>
-        <hr />
-        <h3>Sonarr</h3>
-        <div class="settings-grid">
-          <label>
-            Sonarr URL
-            <input id="sonarr-base-url" type="url" spellcheck="false" placeholder="http://192.168.0.80:8989" />
-          </label>
-          <label>
-            Sonarr API key
-            <input id="sonarr-api-key" type="password" spellcheck="false" autocomplete="off" />
-          </label>
-          <label>
-            Default quality profile
-            <select id="sonarr-quality-profile">
-              <option value="">Save/Test Sonarr connection first</option>
-            </select>
-          </label>
-        </div>
-        <div class="button-row">
-          <button id="sonarr-test" type="button">Save/Test Sonarr connection</button>
-        </div>
-        <div id="sonarr-message" class="info-bar">Sonarr not tested yet.</div>
-        <div class="button-row">
-          <button id="save-settings">Save settings</button>
-          <button id="fetch-m3u">Fetch M3U / rebuild index</button>
-        </div>
-        <div class="upload-row">
-          <input id="upload-m3u-file" type="file" accept=".m3u,.m3u8,audio/x-mpegurl,application/vnd.apple.mpegurl" />
-          <button id="upload-m3u">Upload M3U / rebuild index</button>
-        </div>
+
+        <section class="settings-section">
+          <h3>IPTV provider</h3>
+          <label for="m3u-url">M3U playlist URL</label>
+          <textarea id="m3u-url" rows="3" spellcheck="false" placeholder="Paste upstream M3U URL"></textarea>
+          <div class="settings-grid">
+            <label>
+              Provider stream limit
+              <input id="provider-stream-limit" type="number" min="1" max="16" step="1" />
+            </label>
+          </div>
+          <div class="button-row">
+            <button id="save-settings">Save settings</button>
+            <button id="fetch-m3u">Fetch M3U / rebuild index</button>
+          </div>
+          <div class="upload-row">
+            <input id="upload-m3u-file" type="file" accept=".m3u,.m3u8,audio/x-mpegurl,application/vnd.apple.mpegurl" />
+            <button id="upload-m3u">Upload M3U / rebuild index</button>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h3>Killswitch</h3>
+          <div class="settings-grid">
+            <label>
+              Home country ISO code
+              <input id="killswitch-country" class="country-code-input" type="text" maxlength="2" spellcheck="false" placeholder="GB" />
+            </label>
+            <label class="toggle-row killswitch-toggle">
+              <input id="killswitch-enabled" type="checkbox" />
+              <span>Enable streaming killswitch</span>
+            </label>
+          </div>
+          <div id="killswitch-status" class="muted">Killswitch status not loaded yet.</div>
+          <div class="button-row">
+            <button id="settings-stop-streams" type="button">Stop active streams</button>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h3>Sonarr</h3>
+          <div class="settings-grid">
+            <label>
+              Sonarr URL
+              <input id="sonarr-base-url" type="url" spellcheck="false" placeholder="http://192.168.0.80:8989" />
+            </label>
+            <label>
+              Sonarr API key
+              <input id="sonarr-api-key" type="password" spellcheck="false" autocomplete="off" />
+            </label>
+            <label>
+              Default quality profile
+              <select id="sonarr-quality-profile">
+                <option value="">Save/Test Sonarr connection first</option>
+              </select>
+            </label>
+          </div>
+          <div class="button-row">
+            <button id="sonarr-test" type="button">Save/Test Sonarr connection</button>
+          </div>
+          <div id="sonarr-message" class="info-bar">Sonarr not tested yet.</div>
+        </section>
+
         <div id="settings-message" class="info-bar">Ready.</div>
       </div>
 
@@ -562,6 +575,6 @@
 
   </main>
 
-  <script src="/static/app.js?v=1.1.0-sonarr.5"></script>
+  <script src="/static/app.js?v=1.1.0-sonarr.6"></script>
 </body>
 </html>
