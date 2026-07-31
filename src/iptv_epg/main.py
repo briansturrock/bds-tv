@@ -12,6 +12,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
@@ -184,6 +185,37 @@ def sonarr_connection_status(base_url: str, api_key: str) -> dict[str, str | boo
     }
 
 
+def sonarr_api_get(path: str, params: dict[str, str] | None = None) -> object:
+    base_url = normalise_sonarr_base_url(get_setting("sonarr_base_url", ""))
+    api_key = get_setting("sonarr_api_key", "")
+    if not base_url:
+        raise HTTPException(status_code=400, detail="Sonarr URL is not configured")
+    if not api_key:
+        raise HTTPException(status_code=400, detail="Sonarr API key is not configured")
+
+    query = f"?{urlencode(params)}" if params else ""
+    request = Request(
+        f"{base_url}{path}{query}",
+        headers={"X-Api-Key": api_key, "Accept": "application/json"},
+    )
+
+    try:
+        with urlopen(request, timeout=20) as response:
+            import json
+
+            return json.loads(response.read().decode("utf-8") or "null")
+    except HTTPError as exc:
+        if exc.code in {401, 403}:
+            raise HTTPException(status_code=exc.code, detail="Sonarr rejected the API key") from exc
+        raise HTTPException(status_code=exc.code, detail=f"Sonarr returned HTTP {exc.code}") from exc
+    except URLError as exc:
+        raise HTTPException(status_code=502, detail=f"Could not connect to Sonarr: {exc.reason}") from exc
+    except TimeoutError as exc:
+        raise HTTPException(status_code=504, detail="Timed out connecting to Sonarr") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Sonarr request failed: {exc}") from exc
+
+
 @app.on_event("startup")
 def startup() -> None:
     ensure_runtime_dirs()
@@ -265,6 +297,17 @@ def api_test_sonarr(payload: SonarrTestIn) -> dict[str, str | bool]:
     base_url = normalise_sonarr_base_url(payload.sonarr_base_url) or get_setting("sonarr_base_url", "")
     api_key = (payload.sonarr_api_key or "").strip() or get_setting("sonarr_api_key", "")
     return sonarr_connection_status(base_url, api_key)
+
+
+@app.get("/api/sonarr/series/lookup")
+def api_sonarr_series_lookup(term: str = Query(..., min_length=1)) -> dict[str, object]:
+    clean_term = term.strip()
+    if not clean_term:
+        raise HTTPException(status_code=400, detail="Search term is required")
+    results = sonarr_api_get("/api/v3/series/lookup", {"term": clean_term})
+    if not isinstance(results, list):
+        raise HTTPException(status_code=502, detail="Unexpected Sonarr lookup response")
+    return {"ok": True, "term": clean_term, "results": results, "result_count": len(results)}
 
 
 def run_m3u_fetch_job(job_id: str, url: str) -> None:

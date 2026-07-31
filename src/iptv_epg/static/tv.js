@@ -19,6 +19,10 @@ var tvState = {
   contextOpen: false,
   contextChannel: null,
   contextProgramme: null,
+  contextChoiceIndex: 0,
+  sonarrOpen: false,
+  sonarrResults: [],
+  sonarrFocusedIndex: 0,
   exitConfirmOpen: false,
   exitConfirmYes: true,
   infoScrollTimer: null,
@@ -730,11 +734,13 @@ function showContextMenu(channel, programme) {
   tvState.contextOpen = true;
   tvState.contextChannel = channel;
   tvState.contextProgramme = programme;
+  tvState.contextChoiceIndex = 0;
   $("tv-context-title").textContent = programme.title || "Programme";
   $("tv-context-subtitle").textContent = channel.name || "Channel";
   shell.classList.remove("hidden");
   shell.style.display = "block";
   shell.setAttribute("aria-hidden", "false");
+  renderContextChoices();
   setStatus("Programme actions open.");
 }
 
@@ -755,6 +761,119 @@ function startContextStream() {
   }
   hideContextMenu();
   playChannel(channel);
+}
+
+function renderContextChoices() {
+  var start = $("tv-context-start");
+  var match = $("tv-context-match");
+  if (start) start.className = "tv-context-choice" + (tvState.contextChoiceIndex === 0 ? " focused" : "");
+  if (match) match.className = "tv-context-choice" + (tvState.contextChoiceIndex === 1 ? " focused" : "");
+}
+
+function posterForSeries(series) {
+  var images = series && series.images ? series.images : [];
+  var i;
+  for (i = 0; i < images.length; i += 1) {
+    if (String(images[i].coverType || "").toLowerCase() === "poster" && images[i].remoteUrl) {
+      return images[i].remoteUrl;
+    }
+  }
+  return (series && series.remotePoster) || "";
+}
+
+function renderSonarrResults() {
+  var resultsEl = $("tv-sonarr-results");
+  var html = "";
+  var i;
+
+  if (!resultsEl) return;
+  if (!tvState.sonarrResults.length) {
+    resultsEl.innerHTML = '<div class="tv-sonarr-empty">No Sonarr matches returned.</div>';
+    return;
+  }
+
+  for (i = 0; i < tvState.sonarrResults.length; i += 1) {
+    var series = tvState.sonarrResults[i] || {};
+    var title = series.title || "Unknown";
+    var year = series.year ? " (" + series.year + ")" : "";
+    var poster = posterForSeries(series);
+    var tags = [];
+    var className = "tv-sonarr-result";
+    if (i === tvState.sonarrFocusedIndex) className += " focused";
+    if (series.network) tags.push(series.network);
+    if (series.genres && series.genres.length) tags = tags.concat(series.genres.slice(0, 2));
+    if (series.seasonCount != null) tags.push(series.seasonCount + " season" + (series.seasonCount === 1 ? "" : "s"));
+    if (series.status) tags.push(series.status);
+
+    html += ''
+      + '<div class="' + className + '">'
+      + (poster
+        ? '<img class="tv-sonarr-poster" src="' + escapeAttr(poster) + '" alt="" referrerpolicy="no-referrer" onerror="this.style.visibility=&quot;hidden&quot;" />'
+        : '<div class="tv-sonarr-poster tv-sonarr-poster-empty">TV</div>')
+      + '<div class="tv-sonarr-copy">'
+      + '<h3>' + escapeHtml(title + year) + '</h3>'
+      + '<div class="tv-sonarr-tags">' + escapeHtml(tags.join(" · ")) + '</div>'
+      + '<p>' + escapeHtml(series.overview || "No overview available.") + '</p>'
+      + '</div>'
+      + '</div>';
+  }
+
+  resultsEl.innerHTML = html;
+}
+
+function showSonarrResults(term, results) {
+  var shell = $("tv-sonarr-shell");
+  tvState.sonarrOpen = true;
+  tvState.sonarrResults = results || [];
+  tvState.sonarrFocusedIndex = 0;
+  $("tv-sonarr-title").textContent = 'Sonarr matches for "' + term + '"';
+  $("tv-sonarr-status").textContent = tvState.sonarrResults.length
+    ? tvState.sonarrResults.length + " possible matches. Select closes for now."
+    : "No matches returned by Sonarr.";
+  renderSonarrResults();
+  shell.classList.remove("hidden");
+  shell.style.display = "block";
+  shell.setAttribute("aria-hidden", "false");
+  setStatus("Sonarr matches open.");
+}
+
+function hideSonarrResults() {
+  var shell = $("tv-sonarr-shell");
+  tvState.sonarrOpen = false;
+  tvState.sonarrResults = [];
+  tvState.sonarrFocusedIndex = 0;
+  shell.classList.add("hidden");
+  shell.style.display = "none";
+  shell.setAttribute("aria-hidden", "true");
+}
+
+function matchContextShow() {
+  var programme = tvState.contextProgramme;
+  var title = programme ? String(programme.title || "").trim() : "";
+  if (!title) {
+    hideContextMenu();
+    showSonarrResults("Unknown", []);
+    $("tv-sonarr-status").textContent = "No programme title was available to search.";
+    return;
+  }
+
+  hideContextMenu();
+  setStatus("Searching Sonarr for " + title + "...");
+  api("/api/sonarr/series/lookup?term=" + encodeURIComponent(title), function(err, body) {
+    if (err) {
+      showSonarrResults(title, []);
+      $("tv-sonarr-status").textContent = "Sonarr lookup failed: " + err.message;
+      return;
+    }
+    showSonarrResults(title, (body && body.results) || []);
+  });
+}
+
+function moveSonarrFocus(delta) {
+  if (!tvState.sonarrResults.length) return;
+  tvState.sonarrFocusedIndex = Math.max(0, Math.min(tvState.sonarrResults.length - 1, tvState.sonarrFocusedIndex + delta));
+  renderSonarrResults();
+  scrollFocusedIntoView(".tv-sonarr-result.focused", "tv-sonarr-results");
 }
 
 function playChannel(channel) {
@@ -867,6 +986,12 @@ function handleBack() {
     return;
   }
 
+  if (tvState.sonarrOpen) {
+    hideSonarrResults();
+    setStatus("Sonarr matches closed.");
+    return;
+  }
+
   if (tvState.exitConfirmOpen) {
     hideExitConfirm();
     setStatus("Close cancelled.");
@@ -939,9 +1064,27 @@ function handleKey(event) {
     return;
   }
 
-  if (tvState.contextOpen) {
+  if (tvState.sonarrOpen) {
+    if (normalisedKey === "ArrowUp") moveSonarrFocus(-1);
+    if (normalisedKey === "ArrowDown") moveSonarrFocus(1);
     if (normalisedKey === "Enter") {
-      startContextStream();
+      var selectedSeries = tvState.sonarrResults[tvState.sonarrFocusedIndex];
+      setStatus(selectedSeries ? "Selected " + selectedSeries.title + "." : "No Sonarr match selected.");
+    }
+    return;
+  }
+
+  if (tvState.contextOpen) {
+    if (normalisedKey === "ArrowUp" || normalisedKey === "ArrowDown") {
+      tvState.contextChoiceIndex = tvState.contextChoiceIndex === 0 ? 1 : 0;
+      renderContextChoices();
+    }
+    if (normalisedKey === "Enter") {
+      if (tvState.contextChoiceIndex === 0) {
+        startContextStream();
+      } else {
+        matchContextShow();
+      }
     }
     return;
   }
@@ -990,6 +1133,7 @@ window.addEventListener("keydown", handleKey, true);
 $("tv-exit-yes").addEventListener("click", exitApp);
 $("tv-exit-no").addEventListener("click", hideExitConfirm);
 $("tv-context-start").addEventListener("click", startContextStream);
+$("tv-context-match").addEventListener("click", matchContextShow);
 window.addEventListener("message", handleShellMessage);
 setInterval(updateClock, 15000);
 updateClock();
