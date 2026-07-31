@@ -84,6 +84,55 @@ function api(path, callback) {
   xhr.send();
 }
 
+function apiPost(path, payload, callback) {
+  setStatus("Sending " + path);
+
+  var xhr = new XMLHttpRequest();
+  var finished = false;
+  var timer = setTimeout(function() {
+    if (finished) return;
+    finished = true;
+    try {
+      xhr.abort();
+    } catch (_err) {
+      // Ignore abort errors on older TV runtimes.
+    }
+    callback(new Error("Timed out sending " + path));
+  }, 20000);
+
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState !== 4 || finished) return;
+    finished = true;
+    clearTimeout(timer);
+
+    var body = null;
+    try {
+      body = JSON.parse(xhr.responseText || "{}");
+    } catch (err) {
+      callback(new Error("Invalid JSON from " + path));
+      return;
+    }
+
+    if (xhr.status < 200 || xhr.status >= 300) {
+      callback(new Error((body && body.detail) || xhr.statusText || ("HTTP " + xhr.status)));
+      return;
+    }
+
+    callback(null, body);
+  };
+
+  xhr.onerror = function() {
+    if (finished) return;
+    finished = true;
+    clearTimeout(timer);
+    callback(new Error("Network error sending " + path));
+  };
+
+  xhr.open("POST", path, true);
+  xhr.setRequestHeader("Content-Type", "application/json");
+  xhr.send(JSON.stringify(payload || {}));
+}
+
 function escapeHtml(value) {
   return String(value == null ? "" : value)
     .replace(/&/g, "&amp;")
@@ -828,13 +877,38 @@ function showSonarrResults(term, results) {
   tvState.sonarrFocusedIndex = 0;
   $("tv-sonarr-title").textContent = 'Sonarr matches for "' + term + '"';
   $("tv-sonarr-status").textContent = tvState.sonarrResults.length
-    ? tvState.sonarrResults.length + " possible matches. Select closes for now."
+    ? tvState.sonarrResults.length + " possible matches. Select one to continue."
     : "No matches returned by Sonarr.";
   renderSonarrResults();
   shell.classList.remove("hidden");
   shell.style.display = "block";
   shell.setAttribute("aria-hidden", "false");
   setStatus("Sonarr matches open.");
+}
+
+function showSonarrDiagnostic(result, error) {
+  var shell = $("tv-sonarr-shell");
+  var resultsEl = $("tv-sonarr-results");
+  var title = result && result.title ? result.title : "Unknown";
+  var year = result && result.year ? " (" + result.year + ")" : "";
+  var action = result && result.created ? "Created show" : "Show already exists";
+  tvState.sonarrOpen = true;
+  tvState.sonarrResults = [];
+  tvState.sonarrFocusedIndex = 0;
+  $("tv-sonarr-title").textContent = error ? "Sonarr download setup failed" : "Show ready in Sonarr";
+  $("tv-sonarr-status").textContent = error ? error : action + ": " + title + year;
+  resultsEl.innerHTML = error
+    ? '<div class="tv-sonarr-diagnostic"><strong>Unable to prepare show</strong><span>' + escapeHtml(error) + '</span></div>'
+    : '<div class="tv-sonarr-diagnostic">'
+      + '<strong>' + escapeHtml(action + ": " + title + year) + '</strong>'
+      + '<span>Sonarr ID: ' + escapeHtml(result.series_id || "unknown") + '</span>'
+      + '<span>TVDB ID: ' + escapeHtml(result.tvdb_id || "unknown") + '</span>'
+      + '<span>Recording options will go here.</span>'
+      + '</div>';
+  shell.classList.remove("hidden");
+  shell.style.display = "block";
+  shell.setAttribute("aria-hidden", "false");
+  setStatus(error ? "Sonarr setup failed." : "Show ready in Sonarr.");
 }
 
 function hideSonarrResults() {
@@ -874,6 +948,24 @@ function moveSonarrFocus(delta) {
   tvState.sonarrFocusedIndex = Math.max(0, Math.min(tvState.sonarrResults.length - 1, tvState.sonarrFocusedIndex + delta));
   renderSonarrResults();
   scrollFocusedIntoView(".tv-sonarr-result.focused", "tv-sonarr-results");
+}
+
+function resolveSelectedSonarrSeries() {
+  var selectedSeries = tvState.sonarrResults[tvState.sonarrFocusedIndex];
+  if (!selectedSeries) {
+    setStatus("No Sonarr match selected.");
+    return;
+  }
+
+  $("tv-sonarr-status").textContent = "Preparing " + (selectedSeries.title || "show") + " in Sonarr...";
+  setStatus("Preparing Sonarr show...");
+  apiPost("/api/sonarr/series/resolve", selectedSeries, function(err, body) {
+    if (err) {
+      showSonarrDiagnostic(null, err.message);
+      return;
+    }
+    showSonarrDiagnostic(body, null);
+  });
 }
 
 function playChannel(channel) {
@@ -1068,8 +1160,7 @@ function handleKey(event) {
     if (normalisedKey === "ArrowUp") moveSonarrFocus(-1);
     if (normalisedKey === "ArrowDown") moveSonarrFocus(1);
     if (normalisedKey === "Enter") {
-      var selectedSeries = tvState.sonarrResults[tvState.sonarrFocusedIndex];
-      setStatus(selectedSeries ? "Selected " + selectedSeries.title + "." : "No Sonarr match selected.");
+      resolveSelectedSonarrSeries();
     }
     return;
   }

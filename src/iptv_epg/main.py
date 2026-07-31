@@ -195,7 +195,12 @@ def sonarr_connection_status(base_url: str, api_key: str) -> dict[str, str | boo
     }
 
 
-def sonarr_api_get(path: str, params: dict[str, str] | None = None) -> object:
+def sonarr_api_request(
+    method: str,
+    path: str,
+    params: dict[str, str] | None = None,
+    body: object | None = None,
+) -> object:
     base_url = normalise_sonarr_base_url(get_setting("sonarr_base_url", ""))
     api_key = get_setting("sonarr_api_key", "")
     if not base_url:
@@ -203,16 +208,22 @@ def sonarr_api_get(path: str, params: dict[str, str] | None = None) -> object:
     if not api_key:
         raise HTTPException(status_code=400, detail="Sonarr API key is not configured")
 
+    import json
+
     query = f"?{urlencode(params)}" if params else ""
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    headers = {"X-Api-Key": api_key, "Accept": "application/json"}
+    if body is not None:
+        headers["Content-Type"] = "application/json"
     request = Request(
         f"{base_url}{path}{query}",
-        headers={"X-Api-Key": api_key, "Accept": "application/json"},
+        data=data,
+        headers=headers,
+        method=method.upper(),
     )
 
     try:
         with urlopen(request, timeout=20) as response:
-            import json
-
             return json.loads(response.read().decode("utf-8") or "null")
     except HTTPError as exc:
         if exc.code in {401, 403}:
@@ -224,6 +235,14 @@ def sonarr_api_get(path: str, params: dict[str, str] | None = None) -> object:
         raise HTTPException(status_code=504, detail="Timed out connecting to Sonarr") from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Sonarr request failed: {exc}") from exc
+
+
+def sonarr_api_get(path: str, params: dict[str, str] | None = None) -> object:
+    return sonarr_api_request("GET", path, params=params)
+
+
+def sonarr_api_post(path: str, body: object) -> object:
+    return sonarr_api_request("POST", path, body=body)
 
 
 @app.on_event("startup")
@@ -322,6 +341,76 @@ def api_sonarr_series_lookup(term: str = Query(..., min_length=1)) -> dict[str, 
     if not isinstance(results, list):
         raise HTTPException(status_code=502, detail="Unexpected Sonarr lookup response")
     return {"ok": True, "term": clean_term, "results": results, "result_count": len(results)}
+
+
+@app.post("/api/sonarr/series/resolve")
+def api_sonarr_series_resolve(payload: dict[str, object]) -> dict[str, object]:
+    try:
+        tvdb_id = int(payload.get("tvdbId") or 0)
+    except (TypeError, ValueError):
+        tvdb_id = 0
+    if tvdb_id <= 0:
+        raise HTTPException(status_code=400, detail="Selected Sonarr result does not include a tvdbId")
+
+    title = str(payload.get("title") or "Unknown").strip() or "Unknown"
+    year = payload.get("year")
+    existing = sonarr_api_get("/api/v3/series")
+    if not isinstance(existing, list):
+        raise HTTPException(status_code=502, detail="Unexpected Sonarr series response")
+
+    for series in existing:
+        if not isinstance(series, dict):
+            continue
+        try:
+            existing_tvdb_id = int(series.get("tvdbId") or 0)
+        except (TypeError, ValueError):
+            existing_tvdb_id = 0
+        if existing_tvdb_id == tvdb_id:
+            return {
+                "ok": True,
+                "created": False,
+                "series_id": series.get("id"),
+                "title": series.get("title") or title,
+                "year": series.get("year") or year,
+                "tvdb_id": tvdb_id,
+                "message": "Show already exists in Sonarr.",
+            }
+
+    settings = settings_payload()
+    if not settings.sonarr_quality_profile_id:
+        raise HTTPException(status_code=400, detail="Sonarr quality profile is not configured")
+    if not settings.sonarr_root_folder_path:
+        raise HTTPException(status_code=400, detail="Sonarr root folder is not configured")
+
+    add_payload = dict(payload)
+    add_payload.update(
+        {
+            "qualityProfileId": settings.sonarr_quality_profile_id,
+            "rootFolderPath": settings.sonarr_root_folder_path,
+            "monitored": False,
+            "seasonFolder": False,
+            "seriesType": "standard",
+            "tags": [],
+            "addOptions": {
+                "monitor": "none",
+                "searchForMissingEpisodes": False,
+                "searchForCutoffUnmetEpisodes": False,
+            },
+        }
+    )
+    created = sonarr_api_post("/api/v3/series", add_payload)
+    if not isinstance(created, dict):
+        raise HTTPException(status_code=502, detail="Unexpected Sonarr add series response")
+
+    return {
+        "ok": True,
+        "created": True,
+        "series_id": created.get("id"),
+        "title": created.get("title") or title,
+        "year": created.get("year") or year,
+        "tvdb_id": tvdb_id,
+        "message": "Show created in Sonarr.",
+    }
 
 
 @app.get("/api/sonarr/quality-profiles")

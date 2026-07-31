@@ -614,6 +614,26 @@ body {
   font-size: 20px;
 }
 
+.tv-sonarr-diagnostic {
+  display: grid;
+  gap: 12px;
+  padding: 26px;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: #d5dee9;
+  font-size: 20px;
+}
+
+.tv-sonarr-diagnostic strong {
+  color: var(--text);
+  font-size: 26px;
+}
+
+.tv-sonarr-diagnostic span {
+  display: block;
+}
+
 .tv-exit-shell {
   position: fixed;
   left: 0;
