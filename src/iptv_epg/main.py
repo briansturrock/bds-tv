@@ -86,6 +86,7 @@ class SettingsIn(BaseModel):
     killswitch_home_country_code: str | None = None
     sonarr_base_url: str | None = None
     sonarr_api_key: str | None = None
+    sonarr_quality_profile_id: int | None = None
 
 
 class SettingsOut(BaseModel):
@@ -96,6 +97,7 @@ class SettingsOut(BaseModel):
     killswitch_status: dict | None = None
     sonarr_base_url: str = ""
     sonarr_api_key: str = ""
+    sonarr_quality_profile_id: int | None = None
 
 
 class SonarrTestIn(BaseModel):
@@ -131,6 +133,10 @@ def settings_payload(force_refresh_ip: bool = False) -> SettingsOut:
         provider_stream_limit = int(get_setting("hdhr_max_upstream_streams", "1") or "1")
     except ValueError:
         provider_stream_limit = 1
+    try:
+        quality_profile_id = int(get_setting("sonarr_quality_profile_id", "") or "0") or None
+    except ValueError:
+        quality_profile_id = None
     return SettingsOut(
         m3u_url=get_setting("m3u_url"),
         provider_stream_limit=max(1, min(provider_stream_limit, 16)),
@@ -139,6 +145,7 @@ def settings_payload(force_refresh_ip: bool = False) -> SettingsOut:
         killswitch_status=stream_killswitch_status(force_refresh_ip),
         sonarr_base_url=get_setting("sonarr_base_url", ""),
         sonarr_api_key=get_setting("sonarr_api_key", ""),
+        sonarr_quality_profile_id=quality_profile_id,
     )
 
 
@@ -287,6 +294,8 @@ def api_set_settings(payload: SettingsIn) -> SettingsOut:
         set_setting("sonarr_base_url", normalise_sonarr_base_url(payload.sonarr_base_url))
     if payload.sonarr_api_key is not None:
         set_setting("sonarr_api_key", payload.sonarr_api_key.strip())
+    if payload.sonarr_quality_profile_id is not None:
+        set_setting("sonarr_quality_profile_id", str(max(0, payload.sonarr_quality_profile_id)))
     set_setting("hdhr_max_upstream_streams", str(max(1, min(payload.provider_stream_limit, 16))))
     save_killswitch_settings(payload.killswitch_enabled, payload.killswitch_home_country_code)
     return settings_payload(force_refresh_ip=True)
@@ -308,6 +317,27 @@ def api_sonarr_series_lookup(term: str = Query(..., min_length=1)) -> dict[str, 
     if not isinstance(results, list):
         raise HTTPException(status_code=502, detail="Unexpected Sonarr lookup response")
     return {"ok": True, "term": clean_term, "results": results, "result_count": len(results)}
+
+
+@app.get("/api/sonarr/quality-profiles")
+def api_sonarr_quality_profiles() -> dict[str, object]:
+    results = sonarr_api_get("/api/v3/qualityprofile")
+    if not isinstance(results, list):
+        raise HTTPException(status_code=502, detail="Unexpected Sonarr quality profile response")
+    profiles = [
+        {
+            "id": item.get("id"),
+            "name": item.get("name") or f"Profile {item.get('id')}",
+        }
+        for item in results
+        if isinstance(item, dict) and item.get("id") is not None
+    ]
+    return {
+        "ok": True,
+        "profiles": profiles,
+        "profile_count": len(profiles),
+        "selected_profile_id": settings_payload().sonarr_quality_profile_id,
+    }
 
 
 def run_m3u_fetch_job(job_id: str, url: str) -> None:

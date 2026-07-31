@@ -96,7 +96,9 @@ async function loadSettings(refreshIp = false) {
   $("killswitch-enabled").checked = !!settings.killswitch_enabled;
   $("sonarr-base-url").value = settings.sonarr_base_url || "";
   $("sonarr-api-key").value = settings.sonarr_api_key || "";
+  setSonarrQualityProfileValue(settings.sonarr_quality_profile_id || "");
   renderKillswitchStatus(settings.killswitch_status || {});
+  return settings;
 }
 
 function settingsPayloadFromForm() {
@@ -107,6 +109,7 @@ function settingsPayloadFromForm() {
     killswitch_home_country_code: $("killswitch-country").value.trim().toUpperCase(),
     sonarr_base_url: $("sonarr-base-url").value.trim(),
     sonarr_api_key: $("sonarr-api-key").value.trim(),
+    sonarr_quality_profile_id: Number($("sonarr-quality-profile").value || 0),
   };
 }
 
@@ -325,11 +328,47 @@ async function testSonarrConnection() {
   setMessage("sonarr-message", body.message || "Connected to Sonarr.");
 }
 
+function renderSonarrQualityProfiles(profiles, selectedId) {
+  const select = $("sonarr-quality-profile");
+  const safeProfiles = profiles || [];
+  select.innerHTML = safeProfiles.length
+    ? '<option value="">Select a default profile</option>'
+    : '<option value="">No profiles loaded</option>';
+  safeProfiles.forEach((profile) => {
+    const option = document.createElement("option");
+    option.value = String(profile.id);
+    option.textContent = profile.name || `Profile ${profile.id}`;
+    select.appendChild(option);
+  });
+  setSonarrQualityProfileValue(selectedId || "");
+}
+
+async function loadSonarrQualityProfiles() {
+  setMessage("sonarr-message", "Loading Sonarr quality profiles...");
+  const body = await api("/api/sonarr/quality-profiles");
+  renderSonarrQualityProfiles(body.profiles || [], body.selected_profile_id || $("sonarr-quality-profile").value);
+  setMessage("sonarr-message", `Loaded ${body.profile_count || 0} Sonarr quality profiles.`);
+  return body;
+}
+
+function setSonarrQualityProfileValue(profileId) {
+  const select = $("sonarr-quality-profile");
+  const value = profileId ? String(profileId) : "";
+  if (value && !Array.from(select.options).some((option) => option.value === value)) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = `Saved profile ${value}`;
+    select.appendChild(option);
+  }
+  select.value = value;
+}
+
 async function saveAndTestSonarrConnection() {
   setMessage("sonarr-message", "Saving Sonarr settings...");
   await saveSettings();
   setMessage("sonarr-message", "Sonarr settings saved. Testing connection...");
   await testSonarrConnection();
+  await loadSonarrQualityProfiles();
 }
 
 function setDlnaForm(settings) {
@@ -696,6 +735,7 @@ async function saveSettings() {
   $("provider-stream-limit").value = result.provider_stream_limit || 1;
   $("killswitch-country").value = result.killswitch_home_country_code || "";
   $("killswitch-enabled").checked = !!result.killswitch_enabled;
+  setSonarrQualityProfileValue(result.sonarr_quality_profile_id || "");
   renderKillswitchStatus(result.killswitch_status || {});
   setMessage("settings-message", "Settings saved.");
   return result;
@@ -1248,8 +1288,11 @@ async function init() {
   }
 
   try {
-    await loadSettings(true);
+    const settings = await loadSettings(true);
     await loadStatus();
+    if (settings.sonarr_base_url && settings.sonarr_api_key) {
+      loadSonarrQualityProfiles().catch((err) => setMessage("sonarr-message", `Could not load Sonarr profiles: ${err.message}`, true));
+    }
     loadPublicIp();
     setMessage("settings-message", "Ready.");
   } catch (err) {
