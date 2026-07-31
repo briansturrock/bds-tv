@@ -52,6 +52,84 @@ def first_icon_src(elem: ET.Element) -> str:
     return (child.attrib.get("src") or "").strip()
 
 
+def parse_xmltv_ns_episode(value: str) -> tuple[int | None, int | None]:
+    match = re.match(r"^\s*(\d*)\.(\d*)\.(?:\d*)?(?:/\d*)?\s*$", value)
+    if not match:
+        return None, None
+
+    raw_season, raw_episode = match.groups()
+    season = int(raw_season) + 1 if raw_season else None
+    episode = int(raw_episode) + 1 if raw_episode else None
+    return season, episode
+
+
+def parse_onscreen_episode(value: str) -> tuple[int | None, int | None]:
+    value = value.strip()
+    if not value:
+        return None, None
+
+    season_episode = re.search(
+        r"\bS(?:eason)?\s*(\d+)\s*(?:E|Ep|Episode)\s*(\d+)\b",
+        value,
+        flags=re.IGNORECASE,
+    )
+    if season_episode:
+        return int(season_episode.group(1)), int(season_episode.group(2))
+
+    episode_only = re.search(r"\b(?:E|Ep|Episode)\s*(\d+)\b", value, flags=re.IGNORECASE)
+    if episode_only:
+        return None, int(episode_only.group(1))
+
+    return None, None
+
+
+def episode_label(season: int | None, episode: int | None) -> str:
+    if season is not None and episode is not None:
+        return f"S{season} E{episode}"
+    if episode is not None:
+        return f"E{episode}"
+    return ""
+
+
+def episode_metadata(elem: ET.Element) -> dict[str, Any]:
+    fallback_raw = ""
+    fallback_system = ""
+
+    for child in elem.findall("episode-num"):
+        raw = (child.text or "").strip()
+        system = (child.attrib.get("system") or "").strip()
+        if not raw:
+            continue
+
+        if not fallback_raw:
+            fallback_raw = raw
+            fallback_system = system
+
+        season: int | None
+        episode: int | None
+        if system.lower() == "xmltv_ns":
+            season, episode = parse_xmltv_ns_episode(raw)
+        else:
+            season, episode = parse_onscreen_episode(raw)
+
+        if season is not None or episode is not None:
+            return {
+                "season": season,
+                "episode": episode,
+                "episode_raw": raw,
+                "episode_system": system,
+                "episode_label": episode_label(season, episode),
+            }
+
+    return {
+        "season": None,
+        "episode": None,
+        "episode_raw": fallback_raw,
+        "episode_system": fallback_system,
+        "episode_label": "",
+    }
+
+
 def selected_guide_groups() -> list[dict[str, Any]]:
     with connect() as conn:
         rows = conn.execute(
@@ -307,6 +385,7 @@ def programmes_for_tvg_ids(
                     "desc": first_text(elem, "desc"),
                     "category": first_text(elem, "category"),
                     "icon": first_icon_src(elem),
+                    **episode_metadata(elem),
                     "start": start_utc.isoformat() if start_utc else None,
                     "stop": stop_utc.isoformat() if stop_utc else None,
                     "is_now": bool(start_utc and stop_utc and start_utc <= now <= stop_utc),

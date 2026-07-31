@@ -2,4 +2,4 @@ __all__ = ["__version__"]
 
 import os
 
-__version__ = os.getenv("IPTV_EPG_VERSION", "1.0.0")
+__version__ = os.getenv("IPTV_EPG_VERSION", "1.0.1")
