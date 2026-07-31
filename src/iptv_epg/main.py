@@ -87,6 +87,7 @@ class SettingsIn(BaseModel):
     sonarr_base_url: str | None = None
     sonarr_api_key: str | None = None
     sonarr_quality_profile_id: int | None = None
+    sonarr_root_folder_path: str | None = None
 
 
 class SettingsOut(BaseModel):
@@ -98,6 +99,7 @@ class SettingsOut(BaseModel):
     sonarr_base_url: str = ""
     sonarr_api_key: str = ""
     sonarr_quality_profile_id: int | None = None
+    sonarr_root_folder_path: str = ""
 
 
 class SonarrTestIn(BaseModel):
@@ -146,6 +148,7 @@ def settings_payload(force_refresh_ip: bool = False) -> SettingsOut:
         sonarr_base_url=get_setting("sonarr_base_url", ""),
         sonarr_api_key=get_setting("sonarr_api_key", ""),
         sonarr_quality_profile_id=quality_profile_id,
+        sonarr_root_folder_path=get_setting("sonarr_root_folder_path", ""),
     )
 
 
@@ -296,6 +299,8 @@ def api_set_settings(payload: SettingsIn) -> SettingsOut:
         set_setting("sonarr_api_key", payload.sonarr_api_key.strip())
     if payload.sonarr_quality_profile_id is not None:
         set_setting("sonarr_quality_profile_id", str(max(0, payload.sonarr_quality_profile_id)))
+    if payload.sonarr_root_folder_path is not None:
+        set_setting("sonarr_root_folder_path", payload.sonarr_root_folder_path.strip())
     set_setting("hdhr_max_upstream_streams", str(max(1, min(payload.provider_stream_limit, 16))))
     save_killswitch_settings(payload.killswitch_enabled, payload.killswitch_home_country_code)
     return settings_payload(force_refresh_ip=True)
@@ -337,6 +342,28 @@ def api_sonarr_quality_profiles() -> dict[str, object]:
         "profiles": profiles,
         "profile_count": len(profiles),
         "selected_profile_id": settings_payload().sonarr_quality_profile_id,
+    }
+
+
+@app.get("/api/sonarr/root-folders")
+def api_sonarr_root_folders() -> dict[str, object]:
+    results = sonarr_api_get("/api/v3/rootfolder")
+    if not isinstance(results, list):
+        raise HTTPException(status_code=502, detail="Unexpected Sonarr root folder response")
+    folders = [
+        {
+            "id": item.get("id"),
+            "path": item.get("path") or "",
+            "free_space": item.get("freeSpace"),
+        }
+        for item in results
+        if isinstance(item, dict) and item.get("path")
+    ]
+    return {
+        "ok": True,
+        "root_folders": folders,
+        "root_folder_count": len(folders),
+        "selected_root_folder_path": settings_payload().sonarr_root_folder_path,
     }
 
 

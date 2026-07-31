@@ -4,9 +4,9 @@
   <meta charset="utf-8" />
   <title>bds-tv</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="/static/favicon.png?v=1.1.0-sonarr.6" type="image/png" />
-  <link rel="icon" href="/static/favicon.ico?v=1.1.0-sonarr.6" sizes="any" />
-  <link rel="stylesheet" href="/static/app.css?v=1.1.0-sonarr.6" />
+  <link rel="icon" href="/static/favicon.png?v=1.1.0-sonarr.7" type="image/png" />
+  <link rel="icon" href="/static/favicon.ico?v=1.1.0-sonarr.7" sizes="any" />
+  <link rel="stylesheet" href="/static/app.css?v=1.1.0-sonarr.7" />
 </head>
 <body>
   <header class="app-header">
@@ -86,6 +86,12 @@
             <label>
               Default quality profile
               <select id="sonarr-quality-profile">
+                <option value="">Save/Test Sonarr connection first</option>
+              </select>
+            </label>
+            <label>
+              Default root folder
+              <select id="sonarr-root-folder">
                 <option value="">Save/Test Sonarr connection first</option>
               </select>
             </label>
@@ -575,6 +581,6 @@
 
   </main>
 
-  <script src="/static/app.js?v=1.1.0-sonarr.6"></script>
+  <script src="/static/app.js?v=1.1.0-sonarr.7"></script>
 </body>
 </html>

@@ -97,6 +97,7 @@ async function loadSettings(refreshIp = false) {
   $("sonarr-base-url").value = settings.sonarr_base_url || "";
   $("sonarr-api-key").value = settings.sonarr_api_key || "";
   setSonarrQualityProfileValue(settings.sonarr_quality_profile_id || "");
+  setSonarrRootFolderValue(settings.sonarr_root_folder_path || "");
   renderKillswitchStatus(settings.killswitch_status || {});
   return settings;
 }
@@ -110,6 +111,7 @@ function settingsPayloadFromForm() {
     sonarr_base_url: $("sonarr-base-url").value.trim(),
     sonarr_api_key: $("sonarr-api-key").value.trim(),
     sonarr_quality_profile_id: Number($("sonarr-quality-profile").value || 0),
+    sonarr_root_folder_path: $("sonarr-root-folder").value,
   };
 }
 
@@ -343,11 +345,34 @@ function renderSonarrQualityProfiles(profiles, selectedId) {
   setSonarrQualityProfileValue(selectedId || "");
 }
 
+function renderSonarrRootFolders(rootFolders, selectedPath) {
+  const select = $("sonarr-root-folder");
+  const safeFolders = rootFolders || [];
+  select.innerHTML = safeFolders.length
+    ? '<option value="">Select a default root folder</option>'
+    : '<option value="">No root folders loaded</option>';
+  safeFolders.forEach((folder) => {
+    const option = document.createElement("option");
+    option.value = folder.path;
+    option.textContent = folder.path;
+    select.appendChild(option);
+  });
+  setSonarrRootFolderValue(selectedPath || "");
+}
+
 async function loadSonarrQualityProfiles() {
   setMessage("sonarr-message", "Loading Sonarr quality profiles...");
   const body = await api("/api/sonarr/quality-profiles");
   renderSonarrQualityProfiles(body.profiles || [], body.selected_profile_id || $("sonarr-quality-profile").value);
   setMessage("sonarr-message", `Loaded ${body.profile_count || 0} Sonarr quality profiles.`);
+  return body;
+}
+
+async function loadSonarrRootFolders() {
+  setMessage("sonarr-message", "Loading Sonarr root folders...");
+  const body = await api("/api/sonarr/root-folders");
+  renderSonarrRootFolders(body.root_folders || [], body.selected_root_folder_path || $("sonarr-root-folder").value);
+  setMessage("sonarr-message", `Loaded ${body.root_folder_count || 0} Sonarr root folders.`);
   return body;
 }
 
@@ -363,12 +388,25 @@ function setSonarrQualityProfileValue(profileId) {
   select.value = value;
 }
 
+function setSonarrRootFolderValue(path) {
+  const select = $("sonarr-root-folder");
+  const value = path || "";
+  if (value && !Array.from(select.options).some((option) => option.value === value)) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = `Saved folder ${value}`;
+    select.appendChild(option);
+  }
+  select.value = value;
+}
+
 async function saveAndTestSonarrConnection() {
   setMessage("sonarr-message", "Saving Sonarr settings...");
   await saveSettings();
   setMessage("sonarr-message", "Sonarr settings saved. Testing connection...");
   await testSonarrConnection();
   await loadSonarrQualityProfiles();
+  await loadSonarrRootFolders();
 }
 
 function setDlnaForm(settings) {
@@ -736,6 +774,7 @@ async function saveSettings() {
   $("killswitch-country").value = result.killswitch_home_country_code || "";
   $("killswitch-enabled").checked = !!result.killswitch_enabled;
   setSonarrQualityProfileValue(result.sonarr_quality_profile_id || "");
+  setSonarrRootFolderValue(result.sonarr_root_folder_path || "");
   renderKillswitchStatus(result.killswitch_status || {});
   setMessage("settings-message", "Settings saved.");
   return result;
@@ -1292,6 +1331,7 @@ async function init() {
     await loadStatus();
     if (settings.sonarr_base_url && settings.sonarr_api_key) {
       loadSonarrQualityProfiles().catch((err) => setMessage("sonarr-message", `Could not load Sonarr profiles: ${err.message}`, true));
+      loadSonarrRootFolders().catch((err) => setMessage("sonarr-message", `Could not load Sonarr root folders: ${err.message}`, true));
     }
     loadPublicIp();
     setMessage("settings-message", "Ready.");
