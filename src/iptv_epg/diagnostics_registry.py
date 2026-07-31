@@ -36,6 +36,7 @@ DIAGNOSTIC_ENDPOINTS: list[dict[str, Any]] = [
 
     endpoint(category="Settings", name="Get settings", method="GET", path="/api/settings", description="Returns saved application settings.", safe_auto_run=True),
     endpoint(category="Settings", name="Save settings", method="POST", path="/api/settings", description="Updates application settings.", sample_body={"m3u_url": "PASTE_M3U_URL_HERE"}),
+    endpoint(category="Settings", name="Test Sonarr connection", method="POST", path="/api/settings/sonarr/test", description="Tests the saved or supplied Sonarr URL/API key against Sonarr v4's /api/v3/system/status endpoint.", sample_body={"sonarr_base_url": "http://192.168.0.80:8989", "sonarr_api_key": "PASTE_API_KEY_HERE"}, expected_statuses=[200, 400, 401, 403, 502, 504]),
 
     endpoint(category="Jobs", name="List jobs", method="GET", path="/api/jobs", description="Lists recent backend jobs.", safe_auto_run=True),
     endpoint(category="Jobs", name="Get job by ID", method="GET", path="/api/jobs/{job_id}", sample_path="/api/jobs/PASTE_JOB_ID_HERE", description="Gets a single backend job.", expected_statuses=[200, 404]),
@@ -82,7 +83,7 @@ DIAGNOSTIC_ENDPOINTS: list[dict[str, Any]] = [
     endpoint(category="HDHR", name="Generate HDHR proxy M3U", method="POST", path="/api/hdhr/generate-m3u", description="Generates an optional proxy M3U with local stream URLs."),
     endpoint(category="HDHR", name="HDHR status", method="GET", path="/api/hdhr/status", description="Returns active HDHR proxy streams.", safe_auto_run=True),
     endpoint(category="HDHR", name="HDHR catalogue", method="GET", path="/api/hdhr/catalogue", description="Returns the selected channel catalogue with DLNA-ready group containers.", safe_auto_run=True),
-    endpoint(category="HDHR", name="Stop HDHR streams", method="POST", path="/api/hdhr/streams/stop", description="Stops all active HDHR proxy streams."),
+    endpoint(category="HDHR", name="Stop active streams", method="POST", path="/api/hdhr/streams/stop", description="Stops all active shared proxy streams, including HDHR, DLNA, and TV app streams."),
     endpoint(category="HDHR", name="HDHR discover.json", method="GET", path="/discover.json", description="Returns HDHomeRun discovery metadata.", safe_auto_run=True),
     endpoint(category="HDHR", name="HDHR lineup.json", method="GET", path="/lineup.json", description="Returns selected channels as an HDHomeRun lineup.", safe_auto_run=True),
     endpoint(category="HDHR", name="HDHR lineup status", method="GET", path="/lineup_status.json", description="Returns HDHomeRun lineup scan status.", safe_auto_run=True),

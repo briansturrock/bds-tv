@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import signal
 import shutil
 import subprocess
@@ -82,6 +83,8 @@ class SettingsIn(BaseModel):
     provider_stream_limit: int = Field(default=1, ge=1, le=16)
     killswitch_enabled: bool = False
     killswitch_home_country_code: str | None = None
+    sonarr_base_url: str | None = None
+    sonarr_api_key: str | None = None
 
 
 class SettingsOut(BaseModel):
@@ -90,6 +93,13 @@ class SettingsOut(BaseModel):
     killswitch_enabled: bool = False
     killswitch_home_country_code: str = ""
     killswitch_status: dict | None = None
+    sonarr_base_url: str = ""
+    sonarr_api_key: str = ""
+
+
+class SonarrTestIn(BaseModel):
+    sonarr_base_url: str | None = None
+    sonarr_api_key: str | None = None
 
 
 class ChannelSelectionIn(BaseModel):
@@ -126,7 +136,52 @@ def settings_payload(force_refresh_ip: bool = False) -> SettingsOut:
         killswitch_enabled=bool(killswitch["enabled"]),
         killswitch_home_country_code=killswitch["home_country_code"],
         killswitch_status=stream_killswitch_status(force_refresh_ip),
+        sonarr_base_url=get_setting("sonarr_base_url", ""),
+        sonarr_api_key=get_setting("sonarr_api_key", ""),
     )
+
+
+def normalise_sonarr_base_url(value: str | None) -> str:
+    base_url = (value or "").strip().rstrip("/")
+    if base_url and not re.match(r"^https?://", base_url, flags=re.IGNORECASE):
+        base_url = f"http://{base_url}"
+    return base_url
+
+
+def sonarr_connection_status(base_url: str, api_key: str) -> dict[str, str | bool]:
+    if not base_url:
+        raise HTTPException(status_code=400, detail="Sonarr URL is required")
+    if not api_key:
+        raise HTTPException(status_code=400, detail="Sonarr API key is required")
+
+    url = f"{base_url}/api/v3/system/status"
+    request = Request(url, headers={"X-Api-Key": api_key, "Accept": "application/json"})
+
+    try:
+        with urlopen(request, timeout=10) as response:
+            import json
+
+            body = json.loads(response.read().decode("utf-8") or "{}")
+    except HTTPError as exc:
+        if exc.code in {401, 403}:
+            raise HTTPException(status_code=exc.code, detail="Sonarr rejected the API key") from exc
+        raise HTTPException(status_code=exc.code, detail=f"Sonarr returned HTTP {exc.code}") from exc
+    except URLError as exc:
+        raise HTTPException(status_code=502, detail=f"Could not connect to Sonarr: {exc.reason}") from exc
+    except TimeoutError as exc:
+        raise HTTPException(status_code=504, detail="Timed out connecting to Sonarr") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Sonarr test failed: {exc}") from exc
+
+    version = str(body.get("version") or "")
+    app_name = str(body.get("appName") or body.get("instanceName") or "Sonarr")
+    return {
+        "ok": True,
+        "base_url": base_url,
+        "app_name": app_name,
+        "version": version,
+        "message": f"Connected to {app_name}{(' ' + version) if version else ''}",
+    }
 
 
 @app.on_event("startup")
@@ -196,9 +251,20 @@ def api_get_settings(refresh_ip: bool = Query(False)) -> SettingsOut:
 def api_set_settings(payload: SettingsIn) -> SettingsOut:
     if payload.m3u_url is not None:
         set_setting("m3u_url", payload.m3u_url.strip())
+    if payload.sonarr_base_url is not None:
+        set_setting("sonarr_base_url", normalise_sonarr_base_url(payload.sonarr_base_url))
+    if payload.sonarr_api_key is not None:
+        set_setting("sonarr_api_key", payload.sonarr_api_key.strip())
     set_setting("hdhr_max_upstream_streams", str(max(1, min(payload.provider_stream_limit, 16))))
     save_killswitch_settings(payload.killswitch_enabled, payload.killswitch_home_country_code)
     return settings_payload(force_refresh_ip=True)
+
+
+@app.post("/api/settings/sonarr/test")
+def api_test_sonarr(payload: SonarrTestIn) -> dict[str, str | bool]:
+    base_url = normalise_sonarr_base_url(payload.sonarr_base_url) or get_setting("sonarr_base_url", "")
+    api_key = (payload.sonarr_api_key or "").strip() or get_setting("sonarr_api_key", "")
+    return sonarr_connection_status(base_url, api_key)
 
 
 def run_m3u_fetch_job(job_id: str, url: str) -> None:

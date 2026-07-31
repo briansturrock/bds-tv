@@ -4,9 +4,9 @@
   <meta charset="utf-8" />
   <title>bds-tv</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="/static/favicon.png?v=1.0.0" type="image/png" />
-  <link rel="icon" href="/static/favicon.ico?v=1.0.0" sizes="any" />
-  <link rel="stylesheet" href="/static/app.css?v=1.0.0" />
+  <link rel="icon" href="/static/favicon.png?v=1.1.0-sonarr.2" type="image/png" />
+  <link rel="icon" href="/static/favicon.ico?v=1.1.0-sonarr.2" sizes="any" />
+  <link rel="stylesheet" href="/static/app.css?v=1.1.0-sonarr.2" />
 </head>
 <body>
   <header class="app-header">
@@ -50,6 +50,25 @@
           </label>
         </div>
         <div id="killswitch-status" class="muted">Killswitch status not loaded yet.</div>
+        <div class="button-row">
+          <button id="settings-stop-streams" type="button">Stop active streams</button>
+        </div>
+        <hr />
+        <h3>Sonarr</h3>
+        <div class="settings-grid">
+          <label>
+            Sonarr URL
+            <input id="sonarr-base-url" type="url" spellcheck="false" placeholder="http://192.168.0.80:8989" />
+          </label>
+          <label>
+            Sonarr API key
+            <input id="sonarr-api-key" type="password" spellcheck="false" autocomplete="off" />
+          </label>
+        </div>
+        <div class="button-row">
+          <button id="sonarr-test" type="button">Test Sonarr connection</button>
+        </div>
+        <div id="sonarr-message" class="info-bar">Sonarr not tested yet.</div>
         <div class="button-row">
           <button id="save-settings">Save settings</button>
           <button id="fetch-m3u">Fetch M3U / rebuild index</button>
@@ -312,7 +331,6 @@
           <div class="button-row">
             <button id="hdhr-save">Save HDHR settings</button>
             <button id="hdhr-generate-m3u">Generate proxy M3U</button>
-            <button id="hdhr-stop-streams">Stop active streams</button>
           </div>
           <div id="hdhr-message" class="info-bar">HDHR settings not loaded yet.</div>
         </div>
@@ -538,6 +556,6 @@
 
   </main>
 
-  <script src="/static/app.js?v=1.0.0"></script>
+  <script src="/static/app.js?v=1.1.0-sonarr.2"></script>
 </body>
 </html>

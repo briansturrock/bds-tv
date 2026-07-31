@@ -94,6 +94,8 @@ async function loadSettings(refreshIp = false) {
   $("provider-stream-limit").value = settings.provider_stream_limit || 1;
   $("killswitch-country").value = settings.killswitch_home_country_code || "";
   $("killswitch-enabled").checked = !!settings.killswitch_enabled;
+  $("sonarr-base-url").value = settings.sonarr_base_url || "";
+  $("sonarr-api-key").value = settings.sonarr_api_key || "";
   renderKillswitchStatus(settings.killswitch_status || {});
 }
 
@@ -103,6 +105,8 @@ function settingsPayloadFromForm() {
     provider_stream_limit: Number($("provider-stream-limit").value || 1),
     killswitch_enabled: $("killswitch-enabled").checked,
     killswitch_home_country_code: $("killswitch-country").value.trim().toUpperCase(),
+    sonarr_base_url: $("sonarr-base-url").value.trim(),
+    sonarr_api_key: $("sonarr-api-key").value.trim(),
   };
 }
 
@@ -302,11 +306,23 @@ async function generateHdhrM3u() {
   await loadHdhr();
 }
 
-async function stopHdhrStreams() {
+async function stopActiveStreams(messageId = "settings-message") {
   const body = await api("/api/hdhr/streams/stop", { method: "POST" });
   renderActiveStreams(body.status || {});
-  renderJson("hdhr-json", body);
-  setMessage("hdhr-message", "Stopped active HDHR streams.");
+  if ($("hdhr-json")) renderJson("hdhr-json", body);
+  setMessage(messageId, "Stopped active streams.");
+}
+
+async function testSonarrConnection() {
+  setMessage("sonarr-message", "Testing Sonarr connection...");
+  const body = await api("/api/settings/sonarr/test", {
+    method: "POST",
+    body: JSON.stringify({
+      sonarr_base_url: $("sonarr-base-url").value.trim(),
+      sonarr_api_key: $("sonarr-api-key").value.trim(),
+    }),
+  });
+  setMessage("sonarr-message", body.message || "Connected to Sonarr.");
 }
 
 function setDlnaForm(settings) {
@@ -1138,6 +1154,12 @@ function wireEvents() {
   $("upload-m3u").addEventListener("click", () => {
     startUploadM3u().catch((err) => setMessage("settings-message", `Upload failed: ${err.message}`, true));
   });
+  $("settings-stop-streams").addEventListener("click", () => {
+    stopActiveStreams("settings-message").catch((err) => setMessage("settings-message", `Stop failed: ${err.message}`, true));
+  });
+  $("sonarr-test").addEventListener("click", () => {
+    testSonarrConnection().catch((err) => setMessage("sonarr-message", `Sonarr test failed: ${err.message}`, true));
+  });
   $("killswitch-country").addEventListener("input", (event) => {
     event.target.value = event.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2);
   });
@@ -1163,9 +1185,6 @@ function wireEvents() {
     generateHdhrM3u().catch((err) => setMessage("hdhr-message", `Generate failed: ${err.message}`, true));
   });
 
-  $("hdhr-stop-streams").addEventListener("click", () => {
-    stopHdhrStreams().catch((err) => setMessage("hdhr-message", `Stop failed: ${err.message}`, true));
-  });
   $("hdhr-group-filter").addEventListener("input", (event) => {
     hdhrState.groupFilter = event.target.value;
     renderHdhrGroups();
