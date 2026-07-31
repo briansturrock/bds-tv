@@ -292,6 +292,32 @@ def sonarr_episodes_for_series(series_id: int) -> list[dict[str, object]]:
     return [episode for episode in episodes if isinstance(episode, dict)]
 
 
+def sonarr_episodes_waiting_for_match(
+    series_id: int,
+    season: int,
+    episode_number: int,
+    attempts: int = 8,
+    delay_seconds: float = 1.0,
+) -> tuple[list[dict[str, object]], dict[str, object] | None]:
+    episodes: list[dict[str, object]] = []
+    matched: dict[str, object] | None = None
+    for attempt in range(attempts):
+        episodes = sonarr_episodes_for_series(series_id)
+        matches = [
+            item
+            for item in episodes
+            if int_value(item.get("seasonNumber")) == season
+            and int_value(item.get("episodeNumber")) == episode_number
+            and int_value(item.get("id")) is not None
+        ]
+        if matches:
+            matched = sorted(matches, key=sonarr_episode_sort_key)[0]
+            break
+        if attempt < attempts - 1:
+            time.sleep(delay_seconds)
+    return episodes, matched
+
+
 def selected_episode_parts(programme: object) -> tuple[int, int]:
     if not isinstance(programme, dict):
         raise HTTPException(status_code=400, detail="Programme details were not supplied")
@@ -468,18 +494,10 @@ def api_sonarr_series_download_options(payload: dict[str, object]) -> dict[str, 
     season, episode_number = selected_episode_parts(payload.get("programme"))
 
     series = sonarr_series_by_id(series_id)
-    episodes = sonarr_episodes_for_series(series_id)
-    matched = [
-        item
-        for item in episodes
-        if int_value(item.get("seasonNumber")) == season
-        and int_value(item.get("episodeNumber")) == episode_number
-        and int_value(item.get("id")) is not None
-    ]
-    if not matched:
+    _episodes, matched_episode = sonarr_episodes_waiting_for_match(series_id, season, episode_number)
+    if not matched_episode:
         raise HTTPException(status_code=404, detail=f"Sonarr does not have S{season} E{episode_number} for this show")
 
-    matched_episode = sorted(matched, key=sonarr_episode_sort_key)[0]
     return {
         "ok": True,
         "series_id": series_id,
@@ -521,14 +539,78 @@ def api_sonarr_series_download(payload: dict[str, object]) -> dict[str, object]:
         raise HTTPException(status_code=400, detail="Sonarr series id is required")
     if action not in {"episode", "subsequent", "season_onward"}:
         raise HTTPException(status_code=400, detail="Unknown download option")
+    season, episode_number = selected_episode_parts(payload.get("programme"))
 
+    labels = {
+        "episode": "Download this episode",
+        "subsequent": "Download this and subsequent episodes",
+        "season_onward": "Download this season and subsequent episodes",
+    }
+    job_id = str(uuid.uuid4())
+    create_job(job_id, "sonarr_download", f"Queued Sonarr action: {labels[action]}")
+    executor.submit(run_sonarr_download_job, job_id, dict(payload))
+
+    return {
+        "ok": True,
+        "accepted": True,
+        "job_id": job_id,
+        "series_id": series_id,
+        "title": payload.get("title") or "Unknown",
+        "year": payload.get("year"),
+        "action": action,
+        "action_label": labels[action],
+        "selected_season": season,
+        "selected_episode": episode_number,
+        "message": "Sonarr download action accepted.",
+    }
+
+
+def run_sonarr_download_job(job_id: str, payload: dict[str, object]) -> None:
+    try:
+        result = perform_sonarr_download(payload)
+        update_job(
+            job_id,
+            status="complete",
+            message=(
+                f"{result['action_label']} sent to Sonarr "
+                f"({result['monitored_episode_count']} episodes monitored)"
+            ),
+            progress_current=3,
+            progress_total=3,
+            finish=True,
+        )
+    except HTTPException as exc:
+        update_job(
+            job_id,
+            status="failed",
+            message="Sonarr download action failed",
+            error=str(exc.detail),
+            finish=True,
+        )
+    except Exception as exc:
+        update_job(
+            job_id,
+            status="failed",
+            message="Sonarr download action failed",
+            error=str(exc),
+            finish=True,
+        )
+
+
+def perform_sonarr_download(payload: dict[str, object]) -> dict[str, object]:
+    series_id = int_value(payload.get("series_id"))
+    action = str(payload.get("action") or "").strip()
+    if not series_id:
+        raise HTTPException(status_code=400, detail="Sonarr series id is required")
+    if action not in {"episode", "subsequent", "season_onward"}:
+        raise HTTPException(status_code=400, detail="Unknown download option")
     season, episode_number = selected_episode_parts(payload.get("programme"))
     series = sonarr_series_by_id(series_id)
-    episodes = sorted(sonarr_episodes_for_series(series_id), key=sonarr_episode_sort_key)
+    episodes, matched_episode = sonarr_episodes_waiting_for_match(series_id, season, episode_number)
+    episodes = sorted(episodes, key=sonarr_episode_sort_key)
     target_ids: list[int] = []
     all_ids: list[int] = []
     target_seasons: set[int] = set()
-    matched_episode: dict[str, object] | None = None
 
     for item in episodes:
         episode_id = int_value(item.get("id"))
@@ -538,8 +620,6 @@ def api_sonarr_series_download(payload: dict[str, object]) -> dict[str, object]:
             continue
         all_ids.append(episode_id)
         is_target_episode = item_season == season and item_episode == episode_number
-        if is_target_episode:
-            matched_episode = item
         if action == "episode":
             should_monitor = is_target_episode
         elif action == "subsequent":
@@ -571,11 +651,6 @@ def api_sonarr_series_download(payload: dict[str, object]) -> dict[str, object]:
     sonarr_api_put("/api/v3/episode/monitor", {"episodeIds": target_ids, "monitored": True})
     command = sonarr_api_post("/api/v3/command", {"name": "EpisodeSearch", "episodeIds": target_ids})
 
-    labels = {
-        "episode": "Download this episode",
-        "subsequent": "Download this and subsequent episodes",
-        "season_onward": "Download this season and subsequent episodes",
-    }
     return {
         "ok": True,
         "series_id": series_id,

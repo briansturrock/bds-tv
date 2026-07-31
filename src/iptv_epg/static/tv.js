@@ -956,6 +956,13 @@ function showSonarrDiagnostic(result, error) {
   $("tv-sonarr-status").textContent = error ? error : (result.action_label || "Download request") + ": " + title + year;
   resultsEl.innerHTML = error
     ? '<div class="tv-sonarr-diagnostic"><strong>Unable to update Sonarr</strong><span>' + escapeHtml(error) + '</span></div>'
+    : result.accepted
+      ? '<div class="tv-sonarr-diagnostic">'
+        + '<strong>' + escapeHtml(result.action_label || "Download request accepted") + '</strong>'
+        + '<span>Selected: S' + escapeHtml(result.selected_season || "?") + ' E' + escapeHtml(result.selected_episode || "?") + '</span>'
+        + '<span>bds-tv will update Sonarr monitoring and start the search.</span>'
+        + '<span>Job ID: ' + escapeHtml(result.job_id || "unknown") + '</span>'
+        + '</div>'
     : '<div class="tv-sonarr-diagnostic">'
       + '<strong>' + escapeHtml(result.action_label || "Download request sent") + '</strong>'
       + '<span>Selected: S' + escapeHtml(result.selected_season || "?") + ' E' + escapeHtml(result.selected_episode || "?") + '</span>'
