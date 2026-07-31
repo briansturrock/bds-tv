@@ -149,6 +149,21 @@ select {
   align-items: end;
 }
 
+.settings-section {
+  padding-top: 12px;
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.settings-section:first-of-type {
+  border-top: 0;
+  margin-top: 0;
+}
+
+.settings-section h3 {
+  margin: 0 0 10px;
+}
+
 .country-code-input {
   text-transform: uppercase;
 }

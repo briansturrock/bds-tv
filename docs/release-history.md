@@ -11,6 +11,8 @@ This project began as opaque Docker image tar builds and was then rebuilt as a s
 
 Recent source-controlled milestones:
 
+- `1.1.0-sonarr.2`: adds Sonarr connection settings, a Sonarr status test, and moves the global stop-streams action to Settings.
+- `1.1.0-sonarr.1`: starts the Sonarr integration feature branch from the stable `1.0.1` guide metadata baseline.
 - `1.0.1`: enriches the shared `/api/guide` programme payload with parsed season/episode metadata for future recording integration.
 - `1.0.0`: first stable bds-tv baseline across the web app and Samsung/Tizen TV shell, including curated M3U/XMLTV generation, scheduler, HDHR, DLNA, VPN killswitch, diagnostics, TV app packaging/deploy, and TV guide/playback support.
 - `0.9.0`: scheduler introduction.
