@@ -433,14 +433,14 @@ function scheduleProgrammeInfoScroll() {
           tvState.infoScrollInterval = null;
           tvState.infoScrollTimer = setTimeout(function() {
             descEl.scrollTop = 0;
-            tvState.infoScrollTimer = setTimeout(scrollDown, 1000);
-          }, 1000);
+            tvState.infoScrollTimer = setTimeout(scrollDown, 2500);
+          }, 2000);
         }
-      }, 45);
+      }, 90);
     }
 
     scrollDown();
-  }, 1200);
+  }, 3000);
 }
 
 function clearChannelNameScroll() {

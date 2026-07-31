@@ -1,4 +1,4 @@
-var TV_SHELL_VERSION = "1.1.0-sonarr.10";
+var TV_SHELL_VERSION = "1.1.0-sonarr.11";
 var DEFAULT_SERVER = "http://192.168.0.185:8088";
 var SERVER_KEY = "bdsTvServerUrl";
 var GUIDE_WINDOW_HOURS = 2.5;
@@ -449,14 +449,14 @@ function scheduleProgrammeInfoScroll() {
           tvState.infoScrollInterval = null;
           tvState.infoScrollTimer = setTimeout(function() {
             descEl.scrollTop = 0;
-            tvState.infoScrollTimer = setTimeout(scrollDown, 1000);
-          }, 1000);
+            tvState.infoScrollTimer = setTimeout(scrollDown, 2500);
+          }, 2000);
         }
-      }, 45);
+      }, 90);
     }
 
     scrollDown();
-  }, 1200);
+  }, 3000);
 }
 
 function clearChannelNameScroll() {
