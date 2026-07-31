@@ -1,4 +1,4 @@
-var TV_SHELL_VERSION = "1.1.0-sonarr.8";
+var TV_SHELL_VERSION = "1.1.0-sonarr.9";
 var DEFAULT_SERVER = "http://192.168.0.185:8088";
 var SERVER_KEY = "bdsTvServerUrl";
 var GUIDE_WINDOW_HOURS = 2.5;
@@ -24,8 +24,11 @@ var tvState = {
   contextProgramme: null,
   contextChoiceIndex: 0,
   sonarrOpen: false,
+  sonarrMode: "results",
   sonarrResults: [],
   sonarrFocusedIndex: 0,
+  sonarrPrepared: null,
+  sonarrActionIndex: 0,
   playbackOpen: false,
   playbackMode: "",
   exitConfirmOpen: false,
@@ -894,8 +897,11 @@ function renderSonarrResults() {
 function showSonarrResults(term, results) {
   var shell = $("tv-sonarr-shell");
   tvState.sonarrOpen = true;
+  tvState.sonarrMode = "results";
   tvState.sonarrResults = results || [];
   tvState.sonarrFocusedIndex = 0;
+  tvState.sonarrPrepared = null;
+  tvState.sonarrActionIndex = 0;
   $("tv-sonarr-title").textContent = 'Sonarr matches for "' + term + '"';
   $("tv-sonarr-status").textContent = tvState.sonarrResults.length
     ? tvState.sonarrResults.length + " possible matches. Select one to continue."
@@ -907,36 +913,91 @@ function showSonarrResults(term, results) {
   setStatus("Sonarr matches open.");
 }
 
+function renderSonarrActions() {
+  var resultsEl = $("tv-sonarr-results");
+  var prepared = tvState.sonarrPrepared || {};
+  var options = prepared.options || [];
+  var html = "";
+  var i;
+
+  if (!resultsEl) return;
+  if (!options.length) {
+    resultsEl.innerHTML = '<div class="tv-sonarr-empty">No download options are available.</div>';
+    return;
+  }
+
+  for (i = 0; i < options.length; i += 1) {
+    var option = options[i] || {};
+    var className = "tv-sonarr-action";
+    if (i === tvState.sonarrActionIndex) className += " focused";
+    html += ''
+      + '<div class="' + className + '">'
+      + '<strong>' + escapeHtml(option.label || "Download option") + '</strong>'
+      + '<span>' + escapeHtml(option.description || "") + '</span>'
+      + '</div>';
+  }
+  resultsEl.innerHTML = html;
+}
+
+function showSonarrActions(prepared) {
+  var shell = $("tv-sonarr-shell");
+  var episode = prepared && prepared.matched_episode ? prepared.matched_episode : {};
+  var title = prepared && prepared.title ? prepared.title : "Unknown";
+  var year = prepared && prepared.year ? " (" + prepared.year + ")" : "";
+  var label = episode.seasonNumber != null && episode.episodeNumber != null
+    ? "S" + episode.seasonNumber + " E" + episode.episodeNumber
+    : "Selected episode";
+  tvState.sonarrOpen = true;
+  tvState.sonarrMode = "actions";
+  tvState.sonarrResults = [];
+  tvState.sonarrFocusedIndex = 0;
+  tvState.sonarrPrepared = prepared || null;
+  tvState.sonarrActionIndex = 0;
+  $("tv-sonarr-title").textContent = "Download " + title + year;
+  $("tv-sonarr-status").textContent = label + ". Choose what bds-tv should ask Sonarr to monitor and search.";
+  renderSonarrActions();
+  shell.classList.remove("hidden");
+  shell.style.display = "block";
+  shell.setAttribute("aria-hidden", "false");
+  setStatus("Sonarr download options open.");
+}
+
 function showSonarrDiagnostic(result, error) {
   var shell = $("tv-sonarr-shell");
   var resultsEl = $("tv-sonarr-results");
   var title = result && result.title ? result.title : "Unknown";
   var year = result && result.year ? " (" + result.year + ")" : "";
-  var action = result && result.created ? "Created show" : "Show already exists";
   tvState.sonarrOpen = true;
+  tvState.sonarrMode = "diagnostic";
   tvState.sonarrResults = [];
   tvState.sonarrFocusedIndex = 0;
-  $("tv-sonarr-title").textContent = error ? "Sonarr download setup failed" : "Show ready in Sonarr";
-  $("tv-sonarr-status").textContent = error ? error : action + ": " + title + year;
+  tvState.sonarrPrepared = null;
+  tvState.sonarrActionIndex = 0;
+  $("tv-sonarr-title").textContent = error ? "Sonarr download failed" : "Download sent to Sonarr";
+  $("tv-sonarr-status").textContent = error ? error : (result.action_label || "Download request") + ": " + title + year;
   resultsEl.innerHTML = error
-    ? '<div class="tv-sonarr-diagnostic"><strong>Unable to prepare show</strong><span>' + escapeHtml(error) + '</span></div>'
+    ? '<div class="tv-sonarr-diagnostic"><strong>Unable to update Sonarr</strong><span>' + escapeHtml(error) + '</span></div>'
     : '<div class="tv-sonarr-diagnostic">'
-      + '<strong>' + escapeHtml(action + ": " + title + year) + '</strong>'
-      + '<span>Sonarr ID: ' + escapeHtml(result.series_id || "unknown") + '</span>'
-      + '<span>TVDB ID: ' + escapeHtml(result.tvdb_id || "unknown") + '</span>'
-      + '<span>Recording options will go here.</span>'
+      + '<strong>' + escapeHtml(result.action_label || "Download request sent") + '</strong>'
+      + '<span>Selected: S' + escapeHtml(result.selected_season || "?") + ' E' + escapeHtml(result.selected_episode || "?") + '</span>'
+      + '<span>Monitored episodes: ' + escapeHtml(result.monitored_episode_count || 0) + '</span>'
+      + '<span>Monitored seasons: ' + escapeHtml(result.monitored_season_count || 0) + '</span>'
+      + '<span>Series monitored: ' + escapeHtml(result.series_monitored ? "yes" : "no") + '</span>'
       + '</div>';
   shell.classList.remove("hidden");
   shell.style.display = "block";
   shell.setAttribute("aria-hidden", "false");
-  setStatus(error ? "Sonarr setup failed." : "Show ready in Sonarr.");
+  setStatus(error ? "Sonarr update failed." : "Download sent to Sonarr.");
 }
 
 function hideSonarrResults() {
   var shell = $("tv-sonarr-shell");
   tvState.sonarrOpen = false;
+  tvState.sonarrMode = "results";
   tvState.sonarrResults = [];
   tvState.sonarrFocusedIndex = 0;
+  tvState.sonarrPrepared = null;
+  tvState.sonarrActionIndex = 0;
   shell.classList.add("hidden");
   shell.style.display = "none";
   shell.setAttribute("aria-hidden", "true");
@@ -971,16 +1032,67 @@ function moveSonarrFocus(delta) {
   scrollFocusedIntoView(".tv-sonarr-result.focused", "tv-sonarr-results");
 }
 
+function moveSonarrAction(delta) {
+  var prepared = tvState.sonarrPrepared || {};
+  var options = prepared.options || [];
+  if (!options.length) return;
+  tvState.sonarrActionIndex = Math.max(0, Math.min(options.length - 1, tvState.sonarrActionIndex + delta));
+  renderSonarrActions();
+  scrollFocusedIntoView(".tv-sonarr-action.focused", "tv-sonarr-results");
+}
+
 function resolveSelectedSonarrSeries() {
   var selectedSeries = tvState.sonarrResults[tvState.sonarrFocusedIndex];
+  var programme = tvState.contextProgramme;
   if (!selectedSeries) {
     setStatus("No Sonarr match selected.");
+    return;
+  }
+  if (!programme || programme.season == null || programme.episode == null) {
+    showSonarrDiagnostic(null, "This programme does not include a season and episode number.");
     return;
   }
 
   $("tv-sonarr-status").textContent = "Preparing " + (selectedSeries.title || "show") + " in Sonarr...";
   setStatus("Preparing Sonarr show...");
   apiPost("/api/sonarr/series/resolve", selectedSeries, function(err, body) {
+    if (err) {
+      showSonarrDiagnostic(null, err.message);
+      return;
+    }
+    apiPost("/api/sonarr/series/download-options", {
+      series_id: body.series_id,
+      title: body.title,
+      year: body.year,
+      programme: programme
+    }, function(optionsErr, optionsBody) {
+      if (optionsErr) {
+        showSonarrDiagnostic(null, optionsErr.message);
+        return;
+      }
+      showSonarrActions(optionsBody);
+    });
+  });
+}
+
+function applySelectedSonarrAction() {
+  var prepared = tvState.sonarrPrepared || {};
+  var options = prepared.options || [];
+  var option = options[tvState.sonarrActionIndex];
+  if (!option) {
+    setStatus("No download option selected.");
+    return;
+  }
+
+  $("tv-sonarr-status").textContent = "Sending " + (option.label || "download option") + " to Sonarr...";
+  setStatus("Updating Sonarr monitoring...");
+  apiPost("/api/sonarr/series/download", {
+    series_id: prepared.series_id,
+    title: prepared.title,
+    year: prepared.year,
+    programme: prepared.programme,
+    action: option.id
+  }, function(err, body) {
     if (err) {
       showSonarrDiagnostic(null, err.message);
       return;
@@ -1249,10 +1361,26 @@ function handleKey(event) {
   }
 
   if (tvState.sonarrOpen) {
-    if (normalisedKey === "ArrowUp") moveSonarrFocus(-1);
-    if (normalisedKey === "ArrowDown") moveSonarrFocus(1);
+    if (normalisedKey === "ArrowUp") {
+      if (tvState.sonarrMode === "actions") {
+        moveSonarrAction(-1);
+      } else {
+        moveSonarrFocus(-1);
+      }
+    }
+    if (normalisedKey === "ArrowDown") {
+      if (tvState.sonarrMode === "actions") {
+        moveSonarrAction(1);
+      } else {
+        moveSonarrFocus(1);
+      }
+    }
     if (normalisedKey === "Enter") {
-      resolveSelectedSonarrSeries();
+      if (tvState.sonarrMode === "actions") {
+        applySelectedSonarrAction();
+      } else if (tvState.sonarrMode === "results") {
+        resolveSelectedSonarrSeries();
+      }
     }
     return;
   }
