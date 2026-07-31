@@ -1,4 +1,4 @@
-var TV_SHELL_VERSION = "1.1.0-sonarr.11";
+var TV_SHELL_VERSION = "1.1.0";
 var DEFAULT_SERVER = "http://192.168.0.185:8088";
 var SERVER_KEY = "bdsTvServerUrl";
 var GUIDE_WINDOW_HOURS = 2.5;
