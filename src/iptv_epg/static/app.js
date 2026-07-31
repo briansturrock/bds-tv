@@ -325,6 +325,13 @@ async function testSonarrConnection() {
   setMessage("sonarr-message", body.message || "Connected to Sonarr.");
 }
 
+async function saveAndTestSonarrConnection() {
+  setMessage("sonarr-message", "Saving Sonarr settings...");
+  await saveSettings();
+  setMessage("sonarr-message", "Sonarr settings saved. Testing connection...");
+  await testSonarrConnection();
+}
+
 function setDlnaForm(settings) {
   $("dlna-enabled").checked = settings.enabled !== false;
   $("dlna-device-name").value = settings.device_name || "bds-tv DLNA";
@@ -1158,7 +1165,7 @@ function wireEvents() {
     stopActiveStreams("settings-message").catch((err) => setMessage("settings-message", `Stop failed: ${err.message}`, true));
   });
   $("sonarr-test").addEventListener("click", () => {
-    testSonarrConnection().catch((err) => setMessage("sonarr-message", `Sonarr test failed: ${err.message}`, true));
+    saveAndTestSonarrConnection().catch((err) => setMessage("sonarr-message", `Sonarr save/test failed: ${err.message}`, true));
   });
   $("killswitch-country").addEventListener("input", (event) => {
     event.target.value = event.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2);
